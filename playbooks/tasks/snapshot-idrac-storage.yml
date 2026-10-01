@@ -1,0 +1,68 @@
+---
+- name: Select the next advertised storage resource
+  ansible.builtin.set_fact:
+    idrac_storage_path: "{{ idrac_storage_pending[0] }}"
+  no_log: true
+
+- name: Require a local Redfish storage or drive path
+  ansible.builtin.assert:
+    that:
+      - idrac_storage_path is string
+      - idrac_storage_path is match('^/redfish/v1/(Systems|Chassis)/[A-Za-z0-9_.:-]+/(Storage|Drives)(/[A-Za-z0-9_.:-]+)*/?$')
+      - "'..' not in idrac_storage_path.split('/')"
+      - "'.' not in idrac_storage_path.split('/')"
+    fail_msg: The advertised storage link is outside the allowed local Redfish paths.
+  no_log: true
+
+- name: Read the advertised storage resource using verified HTTPS
+  ansible.builtin.uri:
+    url: "https://{{ ansible_host }}{{ idrac_storage_path }}"
+    method: GET
+    url_username: "{{ vault_devices[inventory_hostname].username }}"
+    url_password: "{{ vault_devices[inventory_hostname].password }}"
+    force_basic_auth: true
+    validate_certs: true
+    ca_path: "{{ idrac_ca_path }}"
+    ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+    follow_redirects: none
+    use_proxy: false
+    return_content: true
+    status_code: [200, 404, 501]
+    timeout: 30
+  register: idrac_storage_read
+  until: >-
+    idrac_storage_read.status | default(0) != -1 or
+    'timed out' not in (idrac_storage_read.msg | default('') | lower)
+  retries: 2
+  delay: 5
+  no_log: true
+  diff: false
+
+- name: Save the storage response without request credentials
+  ansible.builtin.set_fact:
+    idrac_storage_resources: >-
+      {{ idrac_storage_resources | combine({idrac_storage_path: {
+        'http_status': idrac_storage_read.status,
+        'body': idrac_storage_read.json | default({})}}) }}
+    idrac_storage_body: "{{ idrac_storage_read.json | default({}) if idrac_storage_read.status == 200 else {} }}"
+  no_log: true
+
+- name: Queue advertised members, drives and volumes once each
+  ansible.builtin.set_fact:
+    idrac_storage_pending: >-
+      {%- set links = namespace(paths=idrac_storage_pending[1:]) -%}
+      {%- for link in (idrac_storage_body.Members | default([])) +
+                     (idrac_storage_body.Drives | default([])) +
+                     ([idrac_storage_body.Volumes] if idrac_storage_body.Volumes is defined else []) -%}
+      {%- if '@odata.id' in link -%}
+      {%- set links.paths = links.paths + [link['@odata.id']] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ links.paths | unique | reject('in', idrac_storage_resources) | list }}
+  no_log: true
+
+- name: Continue bounded storage discovery
+  ansible.builtin.include_tasks: snapshot-idrac-storage.yml
+  when:
+    - idrac_storage_pending | length > 0
+    - idrac_storage_resources | length < 64

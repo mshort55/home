@@ -13,8 +13,8 @@
         path: /redfish/v1/Managers/iDRAC.Embedded.1
       - name: system
         path: /redfish/v1/Systems/System.Embedded.1
-      - name: controller
-        path: /redfish/v1/Systems/System.Embedded.1/Storage/Controllers/RAID.Integrated.1-1
+      - name: bios
+        path: /redfish/v1/Systems/System.Embedded.1/Bios
       - name: chassis
         path: /redfish/v1/Chassis/System.Embedded.1
       - name: power
@@ -80,6 +80,27 @@
              {'path': item.item.path, 'http_status': item.status,
               'body': item.json | default({})}}) }}
       loop: "{{ idrac_reads.results }}"
+      no_log: true
+
+    - name: Start discovery at the advertised storage collection
+      ansible.builtin.set_fact:
+        idrac_storage_pending: "{{ [idrac_observations.system.body.Storage['@odata.id']] if idrac_observations.system.body.Storage is defined and '@odata.id' in idrac_observations.system.body.Storage else [] }}"
+        idrac_storage_resources: {}
+      no_log: true
+
+    - name: Discover up to 64 storage resources
+      ansible.builtin.include_tasks: tasks/snapshot-idrac-storage.yml
+      when: idrac_storage_pending | length > 0
+
+    - name: Record storage discovery and its limits
+      ansible.builtin.set_fact:
+        idrac_observations: >-
+          {{ idrac_observations | combine({'storage_discovery': {
+            'root_advertised': idrac_observations.system.body.Storage is defined,
+            'resources': idrac_storage_resources,
+            'unread_paths': idrac_storage_pending,
+            'resource_limit': 64,
+            'pagination_followed': false}}) }}
       no_log: true
 
     - name: Create the private backup parent directory

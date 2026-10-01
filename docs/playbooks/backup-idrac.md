@@ -2,38 +2,21 @@
 
 Playbook: [backup-idrac.yml](../../playbooks/backup-idrac.yml).
 
-Export an XML Server Configuration Profile (SCP) from the existing iDRAC8 to a prepared NFS share. This submits the advertised Redfish **export** action, polls its task, then validates the file through the laptop's shared filesystem. It does not import settings, upload firmware or reset the server or iDRAC.
+Export an XML Server Configuration Profile (SCP) directly over verified HTTPS into a new private backup directory. The playbook submits the advertised Redfish export action once, receives the XML from its task endpoint, checks the final task status, and validates the profile. It does not import configuration, install firmware, or reboot anything.
 
-## Prerequisites
+## Prerequisites and run
 
-Use the same `idracs` inventory, independently verified TLS certificate and existing Vault administrator credentials as [snapshot-idrac.yml](snapshot-idrac.md). Lifecycle Controller must be enabled. The old firmware requires a network share for this export; local Redfish file streaming is unavailable on this version.
+Use the same `idracs` inventory, independently verified TLS certificate, and existing Vault credentials as [snapshot-idrac.yml](snapshot-idrac.md). Lifecycle Controller must be enabled. Local export must be advertised by the manager resource; Dell documents this feature for iDRAC7/8 firmware 2.50.50.50 and later. The current server runs 2.86.86.86.
 
-Prepare a dedicated run directory under this repository's `backups/`, containing an empty `export/` directory. Both directories must have mode 0700. Share only `export/` over NFS, restrict it to the iDRAC address, and map writes to the local backup owner's UID/GID. Keep the share available until task completion and file validation. NFS carries the configuration over the LAN without transport encryption; use the trusted administration network and remove the temporary export afterward.
-
-The Mac host and Ubuntu administration environment must see the same backup files. The NFS path is the **Mac's exported path**; the backup directory variable is the **Ubuntu path**. A share on another computer needs a different file retrieval workflow and is not supported by this playbook.
-
-Put the following non-secret but private values in a mode-0600, ignored file such as `private/idrac-nfs.json`:
-
-```json
-{
-  "idrac_nfs_server": "192.0.2.20",
-  "idrac_nfs_share": "/System/Volumes/Data/Users/example/Repos/home/backups/idrac01-scp-example/export",
-  "idrac_backup_directory": "/Repos/home/backups/idrac01-scp-example"
-}
-```
-
-For macOS, preserve any existing `/etc/exports`, validate the proposed file with `sudo nfsd -F <candidate> checkexports`, then add the restricted export and use `sudo nfsd start` and `sudo nfsd update`. `showmount -e localhost` should advertise the exact directory and iDRAC address without an offline marker. A stopped daemon cannot verify export permissions; the real export must still establish write access. Preserve the service's original enablement setting. Do not export the entire repository or existing backups.
-
-## Run
-
-From `/Repos/home`, after the share is prepared:
+From `/Repos/home`:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/backup-idrac.yml \
-  -e @private/idrac-nfs.json
+.venv/bin/ansible-playbook playbooks/backup-idrac.yml
 ```
 
-Vault prompts locally. Offline validation:
+Vault prompts locally. No NFS share, disk image, or extra variable file is needed. The existing playbook now uses direct export; its earlier NFS implementation remains in Git history. Existing backups are retained.
+
+Offline syntax validation:
 
 ```bash
 ANSIBLE_ASK_VAULT_PASS=False .venv/bin/ansible-playbook \
@@ -41,33 +24,28 @@ ANSIBLE_ASK_VAULT_PASS=False .venv/bin/ansible-playbook \
   -e vault_file=/dev/null --syntax-check
 ```
 
-Check mode is rejected before network access. One invocation handles one prepared export per host; each host needs its own destination. The workflow refuses to overwrite an existing export or resubmit when `export-request.json` already exists. The POST is never automatically retried. If submission times out, inspect iDRAC's task state before deciding whether another export is needed.
-
 ## Files and verification
 
-The run directory contains:
+Each invocation allocates a unique mode-0700 directory under `backups/idrac01-scp-<timestamp>-<suffix>/`. Files have mode 0600:
 
-- `export/server-configuration.xml`: the original SCP, restricted to mode 0600.
-- `export-request.json`: submission intent, then the accepted response and task location, excluding supplied credentials and Ansible request arguments.
-- `export-task.json`: the last polling response, including an unsuccessful or timed-out task when available.
-- `manifest.yml`: written only after successful task completion and file verification; records the SHA-256, size, firmware and export settings.
+- `server-configuration.xml`: the downloaded profile, saved before another task GET can consume or replace the download response.
+- `export-request.json`: submission intent, then the accepted response and task location.
+- `export-download.json`: the last download response for private diagnosis; on success this includes a second copy of the sensitive XML.
+- `export-task.json`: the final task response, including failed completion when available.
+- `manifest.yml`: completion record written only after successful task status and XML verification; includes SHA-256, size, firmware, and export options.
 
-The request selects `Target: ALL`, `ExportUse: Default`, and `IncludeInExport: IncludePasswordHashValues`. Sensitive HTTP responses and XML validation output are suppressed. Credentials stay in Vault; treat the exported password hashes as secrets. Do not enable verbose secret-bearing output or paste the XML into chat.
+The request selects `Target: ALL`, `ExportUse: Default`, and `IncludeInExport: IncludePasswordHashValues`. Treat all artifacts as secrets. Supplied credentials and Ansible request arguments are excluded from records; sensitive task output and diffs are suppressed. Do not paste the XML into chat.
 
-Polling uses at most 61 requests, separated by ten seconds, with a thirty-second timeout per request. Unexpected HTTP failures stop polling. The task must report `Completed` and either `OK` or the legacy firmware's `Ok`. Task URLs must be relative to the expected task collection or use the exact authenticated HTTPS origin; redirects are disabled.
+Both polling phases allow at most 61 GETs with ten seconds between attempts and a thirty-second socket timeout per request. HTTP errors stop polling. A failed terminal task stops the run; completion requires `Completed` and `OK` or `Ok`. Task URLs must use the expected task path on the exact authenticated HTTPS origin. Redirects and proxies are disabled; certificate and hostname verification remain enabled.
 
-The local verifier rejects symlinks, malformed/oversized XML, an unexpected root, a service tag that differs from Redfish `SKU`, and missing iDRAC/BIOS/RAID components or configuration attributes. It verifies the file mode and hashes the validated bytes. These checks establish a configuration artifact for the expected server, **not a tested restoration**. The default SCP format leaves some attributes commented out; any future restore needs review. The SCP is not a disk image and does not replace the separately saved Enterprise license.
+The export POST is never automatically retried. If submission or download fails, inspect the private records and the iDRAC task before rerunning. A fresh invocation creates a separate export, not a resume of the previous task. Incomplete directories remain available for diagnosis. Check mode fails before network access.
 
-If a task fails, inspect the private task record for the export error. Resolve share access without disabling TLS validation or widening the NFS host restriction. Leave incomplete artifacts in place for diagnosis; do not delete the request marker and blindly rerun.
+The XML verifier rejects symlinks, malformed or oversized XML, DTDs, an unexpected root, a service tag differing from Redfish `SKU`, and missing iDRAC/BIOS/RAID components or configuration attributes. It checks file permissions and records a hash of the validated bytes.
 
-After success, remove only the temporary line added to `/etc/exports` and reload with `sudo nfsd update`. If NFS was originally stopped and no other share needs it, run `sudo nfsd stop`. Preserve unrelated entries and the original enabled/disabled setting. Retain the backup files after removing the share.
+This is a configuration recovery artifact, **not a tested restoration or disk image**. Default exports leave some settings commented out; review the profile before any future import. Keep the separately saved Enterprise license XML.
 
-## Verification record
+## Verification
 
-Syntax validation passed with the pinned ansible-core environment. A temporary authenticated HTTPS fixture passed successful export, checksum/permission verification, service-tag mismatch rejection, foreign task-origin rejection, failed-task rejection, check mode without network access, and repeat-run rejection before device access. Supplied credentials did not appear in logs or artifacts. The fixture was removed.
+The previous NFS export succeeded and its permanent recovery files remain available. Direct export syntax validation and a temporary authenticated HTTPS fixture cover a pending task followed by XML and successful completion, saved-file checksum and permissions, service-tag mismatch, foreign task URL, failed task, and check-mode rejection before network access. The fixture also checks a single export POST per run and suppression of supplied credentials. The owner's live run on iDRAC 2.86.86.86 subsequently completed successfully. The saved XML contains 15 components; its service tag, checksum, private directory/file permissions, and final task status were independently verified. Restoration remains untested.
 
-Live testing subsequently succeeded using a small HFS+ disk image on the Mac NFS host. The original host-filesystem destination allowed mount/access/create/remove but the export stopped after a capacity query with SYS045; the small HFS+ destination returned SYS043 and produced the XML. This establishes a working alternative without isolating whether filesystem type or capacity caused the earlier failure. The successful response used `TaskStatus: Ok`, exposing an overly strict `OK` comparison. Replaying that response reproduced the assertion failure before the correction; the corrected assertion accepts Completed/Ok and Completed/OK and rejects Critical, Warning and non-completed states. The successful XML passed the actual playbook verifier, including service-tag matching and core components. It was copied out of the mounted image, verified again, and recorded in a completion manifest whose `file` points to the permanent copy. Restoration remains untested.
-
-After firmware 2.50.50.50 or later, prefer a separately implemented local-streaming SCP workflow, avoiding the legacy network-share requirement. This NFS playbook does not automatically switch transports. [Dell local-file streaming support, section 2.4](https://downloads.dell.com/manuals/common/dell-emc-restful-server-config-idrac-api.pdf).
-
-References: [Dell iDRAC8 2.40 Redfish guide](https://dl.dell.com/topicspdf/idrac7-8-lifecycle-controller-v2.40.40.40_api-guide_en-us.pdf), [Dell SCP export types](https://infohub.delltechnologies.com/en-us/l/server-configuration-profiles-reference-guide/export-type-clone-and-replace-2/), [Apple nfsd manual](https://raw.githubusercontent.com/apple-oss-distributions/nfs/main/nfsd/nfsd.8), [Apple exports manual](https://raw.githubusercontent.com/apple-oss-distributions/nfs/main/nfsd/exports.5).
+Reference: [Dell RESTful Server Configuration, section 2.4: local SCP export](https://downloads.dell.com/manuals/common/dell-emc-restful-server-config-idrac-api.pdf).
