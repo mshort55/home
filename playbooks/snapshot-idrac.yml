@@ -15,12 +15,20 @@
         path: /redfish/v1/Systems/System.Embedded.1
       - name: controller
         path: /redfish/v1/Systems/System.Embedded.1/Storage/Controllers/RAID.Integrated.1-1
+      - name: chassis
+        path: /redfish/v1/Chassis/System.Embedded.1
+      - name: power
+        path: /redfish/v1/Chassis/System.Embedded.1/Power
+      - name: thermal
+        path: /redfish/v1/Chassis/System.Embedded.1/Thermal
       - name: virtual_media
         path: /redfish/v1/Managers/iDRAC.Embedded.1/VirtualMedia/CD
       - name: jobs
         path: /redfish/v1/Managers/iDRAC.Embedded.1/Jobs
       - name: tasks
         path: /redfish/v1/TaskService/Tasks
+      - name: lifecycle_log_entries
+        path: /redfish/v1/Managers/iDRAC.Embedded.1/Logs/Lclog
   vars_files:
     - "{{ vault_file }}"
 
@@ -47,6 +55,11 @@
         timeout: 30
       loop: "{{ idrac_resources }}"
       register: idrac_reads
+      until: >-
+        idrac_reads.status | default(0) != -1 or
+        'timed out' not in (idrac_reads.msg | default('') | lower)
+      retries: 2
+      delay: 5
       no_log: true
       diff: false
 
@@ -127,4 +140,4 @@
         msg:
           - "Snapshot saved: {{ snapshot_directory.path }}"
           - "iDRAC: {{ idrac_observations.manager.body.FirmwareVersion }}; BIOS: {{ idrac_observations.system.body.BiosVersion | default('unavailable') }}"
-          - "This is a state snapshot. Configuration/license export and RAID initialization confirmation remain separate prerequisites."
+          - "This is a state snapshot. Recovery backups, job readiness and RAID initialization require separate verification."

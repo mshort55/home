@@ -12,7 +12,7 @@ Prepare a dedicated run directory under this repository's `backups/`, containing
 
 The Mac host and Ubuntu administration environment must see the same backup files. The NFS path is the **Mac's exported path**; the backup directory variable is the **Ubuntu path**. A share on another computer needs a different file retrieval workflow and is not supported by this playbook.
 
-Put the following non-secret but private values in a mode-0600, ignored file such as `.cache/idrac-scp.private.json`:
+Put the following non-secret but private values in a mode-0600, ignored file such as `private/idrac-nfs.json`:
 
 ```json
 {
@@ -30,7 +30,7 @@ From `/Repos/home`, after the share is prepared:
 
 ```bash
 .venv/bin/ansible-playbook playbooks/backup-idrac.yml \
-  -e @.cache/idrac-scp.private.json
+  -e @private/idrac-nfs.json
 ```
 
 Vault prompts locally. Offline validation:
