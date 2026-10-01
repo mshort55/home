@@ -57,5 +57,6 @@ There is no automatic apply on Git push. Configuration-changing operations, init
 | FortiGate configuration backup | [FortiGate backup](docs/playbooks/backup-fortigate.md) |
 | iDRAC state snapshot | [iDRAC snapshot](docs/playbooks/snapshot-idrac.md) |
 | iDRAC configuration backup | [iDRAC SCP backup](docs/playbooks/backup-idrac.md) |
+| iDRAC UEFI boot maintenance | [Set UEFI through Redfish](docs/playbooks/set-idrac-uefi.md) |
 
 No reusable roles have been introduced yet. Add their documentation to this index when they are implemented.
