@@ -1,0 +1,223 @@
+---
+- name: Export an iDRAC Server Configuration Profile to NFS
+  hosts: idracs
+  connection: local
+  gather_facts: false
+  become: false
+  serial: 1
+  vars:
+    vault_file: "{{ playbook_dir }}/../secrets/vault.yml"
+    scp_action_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ExportSystemConfiguration
+    scp_filename: server-configuration.xml
+  vars_files:
+    - "{{ vault_file }}"
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30
+
+  tasks:
+    - name: Require a normal run and an explicitly prepared NFS destination
+      ansible.builtin.assert:
+        that:
+          - not ansible_check_mode
+          - idrac_nfs_server is defined
+          - idrac_nfs_share is defined
+          - idrac_backup_directory is defined
+        fail_msg: Supply the private NFS variables; use --syntax-check for offline validation.
+
+    - name: Validate the local backup directory before device access
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - |
+            import pathlib, stat, sys
+            root = pathlib.Path(sys.argv[1]).resolve(strict=True)
+            run = pathlib.Path(sys.argv[2]).resolve(strict=True)
+            share = run / 'export'
+            assert run != root and run.is_relative_to(root), 'Backup must be below backups/'
+            assert share.is_dir() and not share.is_symlink(), 'Missing local export directory'
+            assert stat.S_IMODE(run.stat().st_mode) == 0o700, 'Backup directory must be private'
+            assert stat.S_IMODE(share.stat().st_mode) == 0o700, 'Export directory must be private'
+            assert not (share / sys.argv[3]).exists(), 'Export already exists; do not overwrite'
+            assert not (run / 'export-request.json').exists(), 'An export was already requested; inspect its task before retrying'
+          - "{{ playbook_dir }}/../backups"
+          - "{{ idrac_backup_directory }}"
+          - "{{ scp_filename }}"
+      changed_when: false
+
+    - name: Read the advertised export action and system identity
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}{{ item }}"
+        status_code: 200
+      loop:
+        - /redfish/v1/Managers/iDRAC.Embedded.1
+        - /redfish/v1/Systems/System.Embedded.1
+      register: scp_identity
+      no_log: true
+
+    - name: Require the expected export action and service tag
+      ansible.builtin.assert:
+        that:
+          - scp_identity.results[0].json.Actions.Oem['OemManager.v1_0_0#OemManager.ExportSystemConfiguration'].target == scp_action_path
+          - scp_identity.results[1].json.SKU | length > 0
+      no_log: true
+
+    - name: Record export intent before submitting a non-retried request
+      ansible.builtin.copy:
+        dest: "{{ idrac_backup_directory }}/export-request.json"
+        mode: '0600'
+        content: "{{ {'status': 'submission_pending', 'file': scp_filename, 'action': scp_action_path} | to_nice_json }}\n"
+      diff: false
+
+    - name: Request the configuration export once
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}{{ scp_action_path }}"
+        method: POST
+        body_format: json
+        body:
+          ExportFormat: XML
+          ExportUse: Default
+          IncludeInExport: IncludePasswordHashValues
+          ShareParameters:
+            IPAddress: "{{ idrac_nfs_server }}"
+            ShareName: "{{ idrac_nfs_share }}"
+            FileName: "{{ scp_filename }}"
+            ShareType: NFS
+            Target: ALL
+        status_code: 202
+      register: scp_submission
+      changed_when: true
+      no_log: true
+
+    - name: Save the submission response for recovery after an interrupted run
+      ansible.builtin.copy:
+        dest: "{{ idrac_backup_directory }}/export-request.json"
+        mode: '0600'
+        content: >-
+          {{ {'status': 'accepted', 'location': scp_submission.location | default(''),
+              'body': scp_submission.json | default({}), 'file': scp_filename} | to_nice_json }}
+      no_log: true
+      diff: false
+
+    - name: Require a task URL on the authenticated iDRAC origin
+      ansible.builtin.assert:
+        that:
+          - scp_submission.location is defined
+          - >-
+            scp_submission.location is match('^(https://' ~ (ansible_host | regex_escape) ~ ')?/redfish/v1/TaskService/Tasks/[A-Za-z0-9_.-]+$')
+        fail_msg: The export returned an unexpected task URL; inspect the private submission record.
+      no_log: true
+
+    - name: Normalize the verified task URL
+      ansible.builtin.set_fact:
+        scp_task_url: "{{ scp_submission.location if scp_submission.location.startswith('https://') else 'https://' ~ ansible_host ~ scp_submission.location }}"
+      no_log: true
+
+    - name: Observe the export task
+      block:
+        - name: Poll task completion with a bounded wait
+          ansible.builtin.uri:
+            url: "{{ scp_task_url }}"
+            status_code: [200, 202]
+          register: scp_task
+          until: >-
+            scp_task.status | default(0) not in [200, 202] or
+            (scp_task.json | default({})).get('TaskState', '') in
+            ['Completed', 'Exception', 'Killed', 'Cancelled', 'Interrupted', 'Suspended']
+          retries: 60
+          delay: 10
+          no_log: true
+      always:
+        - name: Save the last task response without request credentials
+          ansible.builtin.copy:
+            dest: "{{ idrac_backup_directory }}/export-task.json"
+            mode: '0600'
+            content: >-
+              {{ {'http_status': scp_task.status | default(0),
+                  'body': scp_task.json | default({})} | to_nice_json }}
+          no_log: true
+          diff: false
+
+    - name: Require successful task completion
+      ansible.builtin.assert:
+        that:
+          - scp_task.json.TaskState == 'Completed'
+          - scp_task.json.TaskStatus in ['OK', 'Ok']
+        fail_msg: Export did not complete cleanly; inspect the private export-task.json before retrying.
+
+    - name: Wait for the exported file to appear through the shared filesystem
+      ansible.builtin.wait_for:
+        path: "{{ idrac_backup_directory }}/export/{{ scp_filename }}"
+        state: present
+        timeout: 30
+
+    - name: Validate the SCP identity and structure and restrict its permissions
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - |
+            import hashlib, json, os, pathlib, stat, sys
+            import xml.etree.ElementTree as ET
+            p = pathlib.Path(sys.argv[1])
+            fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, 'rb') as f:
+                assert stat.S_ISREG(os.fstat(f.fileno()).st_mode), 'SCP must be a regular file'
+                os.fchmod(f.fileno(), 0o600)
+                data = f.read(16 * 1024 * 1024 + 1)
+                assert 0 < len(data) <= 16 * 1024 * 1024, 'Unexpected SCP size'
+                assert b'<!DOCTYPE' not in data.upper(), 'Unexpected XML DTD'
+                root = ET.fromstring(data)
+                assert root.tag == 'SystemConfiguration', 'Not an SCP XML file'
+                assert root.get('ServiceTag') == sys.stdin.read().strip(), 'Service tag mismatch'
+                components = root.findall('Component')
+                assert components and all(c.get('FQDD') for c in components), 'Missing component IDs'
+                ids = [c.get('FQDD').lower() for c in components]
+                assert all(any(i.startswith(prefix) for i in ids) for prefix in ['idrac.', 'bios.', 'raid.']), 'Missing core components'
+                assert root.findall('.//Attribute'), 'No configuration attributes'
+                assert stat.S_IMODE(os.fstat(f.fileno()).st_mode) == 0o600
+            print(json.dumps({'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
+                              'components': len(components), 'service_tag_matches': True}))
+          - "{{ idrac_backup_directory }}/export/{{ scp_filename }}"
+        stdin: "{{ scp_identity.results[1].json.SKU }}"
+      register: scp_validation
+      changed_when: true
+      no_log: true
+
+    - name: Write the verified configuration backup record
+      ansible.builtin.copy:
+        dest: "{{ idrac_backup_directory }}/manifest.yml"
+        mode: '0600'
+        content: |
+          status: complete
+          artifact_type: server_configuration_profile
+          collected_at_utc: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+          inventory_host: {{ inventory_hostname | to_json }}
+          source_host: {{ ansible_host | to_json }}
+          firmware: {{ scp_identity.results[0].json.FirmwareVersion | to_json }}
+          export_use: Default
+          include_in_export: IncludePasswordHashValues
+          target: ALL
+          configuration_changed_on_device: false
+          restoration_tested: false
+          license_included: false
+          file: "export/{{ scp_filename }}"
+          verification: {{ scp_validation.stdout | from_json | to_json }}
+      diff: false
+
+    - name: Report the configuration backup location
+      ansible.builtin.debug:
+        msg:
+          - "Verified SCP backup: {{ idrac_backup_directory }}/export/{{ scp_filename }}"
+          - "Remove the temporary NFS export now. Keep the separately saved license XML."
+          - "Restoration is untested; review the profile before any future import."

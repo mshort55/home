@@ -29,3 +29,5 @@ vault*.yaml
 *.pfx
 *.cfg
 !ansible.cfg
+
+.DS_Store
