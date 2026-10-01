@@ -1,0 +1,2 @@
+ansible-core==2.20.9
+paramiko==4.0.0

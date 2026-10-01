@@ -1,0 +1,31 @@
+# Local environment and downloaded dependencies
+.venv/
+.collections/
+.ansible/
+.cache/
+__pycache__/
+*.pyc
+*.retry
+*.log
+
+# Real inventory, credentials and generated artifacts
+*.private.*
+private/
+secrets/
+rendered/
+backups/
+.env
+.env.*
+!.env.example
+.vault-pass*
+*vault_password*
+vault*.yml
+vault*.yaml
+.ssh/
+*.unf
+*.key
+*.pem
+*.p12
+*.pfx
+*.cfg
+!ansible.cfg
