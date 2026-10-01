@@ -4,6 +4,13 @@ all:
       hosts:
         switch01:
           ansible_host: 10.77.55.1
+          # Synthetic port assignments; replace these in your private inventory.
+          switch_ports:
+            - {role: idrac, name: GigabitEthernet1/0/16, description: IDRAC, access_vlan: 1, enabled: true}
+            - {role: fortinet, name: GigabitEthernet1/0/18, description: FORTINET-LAN, access_vlan: 1, enabled: true}
+            - {role: ap1, name: GigabitEthernet1/0/20, description: AP1, access_vlan: 1, enabled: true}
+            - {role: ap2, name: GigabitEthernet1/0/22, description: AP2, access_vlan: 1, enabled: true}
+            - {role: home_wired, name: GigabitEthernet1/0/24, description: HOME-WIRED, access_vlan: 1, enabled: true}
       vars:
         ansible_connection: ansible.netcommon.network_cli
         ansible_network_os: cisco.ios.ios

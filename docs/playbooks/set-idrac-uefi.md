@@ -25,6 +25,6 @@ ANSIBLE_ASK_VAULT_PASS=False .venv/bin/ansible-playbook \
   -e vault_file=/dev/null --syntax-check
 ```
 
-Validation uses a temporary authenticated HTTPS fixture running the actual playbook: successful PATCH/job/restart/read-back; already-UEFI no-op; pending BIOS and active-job refusal before writes; foreign job URL and failed scheduling refusal before restart; incorrect final BIOS value rejected; check mode without requests; private record permissions and credential suppression. Live application awaits the owner's Vault-unlocked run.
+Validation uses a temporary authenticated HTTPS fixture running the actual playbook: successful PATCH/job/restart/read-back; already-UEFI no-op; pending BIOS and active-job refusal before writes; foreign job URL and failed scheduling refusal before restart; incorrect final BIOS value rejected; check mode without requests; private record permissions and credential suppression. The owner's live run subsequently completed successfully: the BIOS job reported Completed and both the maintenance read-back and an independent full snapshot confirmed BootMode Uefi. Processor virtualization remained enabled and storage health remained OK.
 
 References: [Dell BIOS setting example](https://infohub.delltechnologies.com/en-nz/l/dell-poweredge-getting-started-with-redfish-ansible-modules/changing-a-bios-setting/), [Dell iDRAC8 job API](https://www.dell.com/support/manuals/en-nz/precision-r7910-workstation/idrac8_redfishapiguide_2.70.70.70/delljob?guid=guid-79d11cfa-c737-45b1-ab5e-f46f10508ca7&lang=en-us).

@@ -1,0 +1,125 @@
+---
+- name: Back up the switch before applying port configuration
+  ansible.builtin.import_playbook: backup-switch.yml
+  when: not ansible_check_mode
+
+- name: Configure inventory-owned switch ports
+  hosts: cisco_switches
+  gather_facts: false
+  become: true
+  become_method: enable
+  serial: 1
+  vars:
+    vault_file: "{{ playbook_dir }}/../secrets/vault.yml"
+  vars_files:
+    - "{{ vault_file }}"
+  tasks:
+    - name: Require defined port configuration and valid scope
+      ansible.builtin.assert:
+        that:
+          - switch_ports is defined
+          - switch_ports | length > 0
+          - switch_ports | map(attribute='role') | unique | length == switch_ports | length
+          - switch_ports | map(attribute='name') | unique | length == switch_ports | length
+          - switch_port_roles | default(switch_ports | map(attribute='role') | list) | difference(switch_ports | map(attribute='role') | list) | length == 0
+
+    - name: Select managed ports
+      ansible.builtin.set_fact:
+        selected_ports: "{{ switch_ports | selectattr('role', 'in', switch_port_roles | default(switch_ports | map(attribute='role') | list)) | list }}"
+
+    - name: Validate access-port inputs
+      ansible.builtin.assert:
+        that:
+          - selected_ports | length > 0
+          - item.name is match('^GigabitEthernet[0-9]+/[0-9]+/[0-9]+$')
+          - item.description is match('^[A-Za-z0-9 _.-]{1,80}$')
+          - item.access_vlan is integer
+          - item.access_vlan >= 1 and item.access_vlan <= 4094
+          - item.enabled is boolean
+      loop: "{{ selected_ports }}"
+      loop_control:
+        label: "{{ item.role }}"
+
+    - name: Refuse to persist unrelated unsaved configuration
+      ansible.builtin.assert:
+        that: running_body == startup_body
+        fail_msg: Running and startup differ beyond certificate storage; review those changes before applying and saving ports.
+      vars:
+        running_body: "{{ switch_export.stdout[1] | regex_search('(?ms)^version .*') | regex_replace('(?ms)^crypto pki certificate chain .*?(?=^!)', '') }}"
+        startup_body: "{{ switch_export.stdout[2] | regex_search('(?ms)^version .*') | regex_replace('(?ms)^crypto pki certificate chain .*?(?=^!)', '') }}"
+      when: not ansible_check_mode
+      no_log: true
+
+    - name: Read existing interface and layer two configuration
+      cisco.ios.ios_facts:
+        gather_subset: [min]
+        gather_network_resources: [interfaces, l2_interfaces, vlans]
+      no_log: true
+
+    - name: Require existing layer two ports without voice or trunk configuration
+      ansible.builtin.assert:
+        that:
+          - item.name in (ansible_network_resources.interfaces | map(attribute='name') | list)
+          - item.access_vlan in (ansible_network_resources.vlans | map(attribute='vlan_id') | list)
+          - existing_l2 | length == 1
+          - existing_l2[0].mode | default('access') == 'access'
+          - existing_l2[0].trunk is not defined
+          - existing_l2[0].voice is not defined
+        fail_msg: This access-port workflow refuses routed, trunk or voice ports; review the existing configuration.
+      vars:
+        existing_l2: "{{ ansible_network_resources.l2_interfaces | selectattr('name', 'equalto', item.name) | list }}"
+      loop: "{{ selected_ports }}"
+      no_log: true
+
+    - name: Build resource-module inputs
+      ansible.builtin.set_fact:
+        port_interfaces: "{{ (port_interfaces | default([])) + [{'name': item.name, 'description': item.description, 'enabled': item.enabled}] }}"
+        port_l2: "{{ (port_l2 | default([])) + [{'name': item.name, 'mode': 'access', 'access': {'vlan': item.access_vlan}}] }}"
+      loop: "{{ selected_ports }}"
+      loop_control:
+        label: "{{ item.role }}"
+
+    - name: Apply access VLAN and mode to selected ports
+      cisco.ios.ios_l2_interfaces:
+        config: "{{ port_l2 }}"
+        state: merged
+      register: port_l2_result
+
+    - name: Apply descriptions and administrative state to selected ports
+      cisco.ios.ios_interfaces:
+        config: "{{ port_interfaces }}"
+        state: merged
+      register: port_interface_result
+
+    - name: Verify and persist the applied configuration
+      when: not ansible_check_mode
+      block:
+        - name: Read back interface configuration
+          cisco.ios.ios_facts:
+            gather_subset: [min]
+            gather_network_resources: [interfaces, l2_interfaces, vlans]
+          no_log: true
+
+        - name: Verify each managed port
+          ansible.builtin.assert:
+            that:
+              - actual_interface.description == item.description
+              - actual_interface.enabled | default(true) == item.enabled
+              - actual_l2.mode == 'access'
+              - actual_l2.access.vlan | default(1) == item.access_vlan
+          vars:
+            actual_interface: "{{ ansible_network_resources.interfaces | selectattr('name', 'equalto', item.name) | first }}"
+            actual_l2: "{{ ansible_network_resources.l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
+          loop: "{{ selected_ports }}"
+          loop_control:
+            label: "{{ item.role }}"
+
+        - name: Save verified port changes to startup
+          cisco.ios.ios_config:
+            save_when: always
+          when: port_l2_result.changed or port_interface_result.changed
+          no_log: true
+
+    - name: Report configured scope
+      ansible.builtin.debug:
+        msg: "{{ 'Previewed' if ansible_check_mode else 'Verified and saved' }} port roles: {{ selected_ports | map(attribute='role') | join(', ') }}. Physical cable moves and endpoint reachability are checked separately."
