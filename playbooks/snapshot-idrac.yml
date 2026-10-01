@@ -1,0 +1,130 @@
+---
+- name: Save an iDRAC state snapshot
+  hosts: idracs
+  connection: local
+  gather_facts: false
+  become: false
+  serial: 1
+  vars:
+    backup_root: "{{ playbook_dir }}/../backups"
+    vault_file: "{{ playbook_dir }}/../secrets/vault.yml"
+    idrac_resources:
+      - name: manager
+        path: /redfish/v1/Managers/iDRAC.Embedded.1
+      - name: system
+        path: /redfish/v1/Systems/System.Embedded.1
+      - name: controller
+        path: /redfish/v1/Systems/System.Embedded.1/Storage/Controllers/RAID.Integrated.1-1
+      - name: virtual_media
+        path: /redfish/v1/Managers/iDRAC.Embedded.1/VirtualMedia/CD
+      - name: jobs
+        path: /redfish/v1/Managers/iDRAC.Embedded.1/Jobs
+      - name: tasks
+        path: /redfish/v1/TaskService/Tasks
+  vars_files:
+    - "{{ vault_file }}"
+
+  tasks:
+    - name: Require a real snapshot run
+      ansible.builtin.assert:
+        that: not ansible_check_mode
+        fail_msg: Use --syntax-check for offline validation; snapshot collection requires a normal run.
+
+    - name: Read current state using verified HTTPS
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}{{ item.path }}"
+        method: GET
+        url_username: "{{ vault_devices[inventory_hostname].username }}"
+        url_password: "{{ vault_devices[inventory_hostname].password }}"
+        force_basic_auth: true
+        validate_certs: true
+        ca_path: "{{ idrac_ca_path }}"
+        ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+        follow_redirects: none
+        use_proxy: false
+        return_content: true
+        status_code: "{{ [200] if item.name in ['manager', 'system'] else [200, 404, 501] }}"
+        timeout: 30
+      loop: "{{ idrac_resources }}"
+      register: idrac_reads
+      no_log: true
+      diff: false
+
+    - name: Require manager and system identification responses
+      ansible.builtin.assert:
+        that:
+          - idrac_reads.results[0].status == 200
+          - idrac_reads.results[0].json.FirmwareVersion is defined
+          - idrac_reads.results[1].status == 200
+          - idrac_reads.results[1].json.Model is defined
+        fail_msg: Expected iDRAC identification resources were unavailable; no state snapshot was written.
+      no_log: true
+
+    - name: Collect resource bodies without credentials or request arguments
+      ansible.builtin.set_fact:
+        idrac_observations: >-
+          {{ idrac_observations | default({}) | combine({item.item.name:
+             {'path': item.item.path, 'http_status': item.status,
+              'body': item.json | default({})}}) }}
+      loop: "{{ idrac_reads.results }}"
+      no_log: true
+
+    - name: Create the private backup parent directory
+      ansible.builtin.file:
+        path: "{{ backup_root }}"
+        state: directory
+        mode: '0700'
+
+    - name: Allocate a unique state snapshot directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ backup_root }}"
+        prefix: "{{ inventory_hostname }}-snapshot-{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-"
+      register: snapshot_directory
+
+    - name: Save private observations
+      ansible.builtin.copy:
+        content: "{{ idrac_observations | to_nice_json }}\n"
+        dest: "{{ snapshot_directory.path }}/observations.json"
+        mode: '0600'
+      no_log: true
+      diff: false
+
+    - name: Calculate the snapshot checksum and size
+      ansible.builtin.stat:
+        path: "{{ snapshot_directory.path }}/observations.json"
+        checksum_algorithm: sha256
+      register: snapshot_file
+
+    - name: Verify snapshot permissions and integrity
+      ansible.builtin.assert:
+        that:
+          - snapshot_file.stat.isreg
+          - snapshot_file.stat.mode == '0600'
+          - snapshot_file.stat.checksum == ((idrac_observations | to_nice_json ~ '\n') | hash('sha256'))
+      no_log: true
+
+    - name: Write the snapshot completion record
+      ansible.builtin.copy:
+        dest: "{{ snapshot_directory.path }}/manifest.yml"
+        mode: '0600'
+        content: |
+          status: complete
+          artifact_type: state_snapshot
+          collected_at_utc: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+          inventory_host: {{ inventory_hostname | to_json }}
+          source_host: {{ ansible_host | to_json }}
+          configuration_changed_on_device: false
+          recovery_backup: false
+          files:
+            observations.json:
+              bytes: {{ snapshot_file.stat.size }}
+              sha256: "{{ snapshot_file.stat.checksum }}"
+      diff: false
+
+    - name: Report the snapshot location and firmware versions
+      ansible.builtin.debug:
+        msg:
+          - "Snapshot saved: {{ snapshot_directory.path }}"
+          - "iDRAC: {{ idrac_observations.manager.body.FirmwareVersion }}; BIOS: {{ idrac_observations.system.body.BiosVersion | default('unavailable') }}"
+          - "This is a state snapshot. Configuration/license export and RAID initialization confirmation remain separate prerequisites."

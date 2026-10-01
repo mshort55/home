@@ -15,3 +15,29 @@ all:
         ansible_user: "{{ vault_devices[inventory_hostname].username }}"
         ansible_password: "{{ vault_devices[inventory_hostname].ssh_password }}"
         ansible_become_password: "{{ vault_devices[inventory_hostname].enable_password }}"
+    fortigates:
+      hosts:
+        fortigate01:
+          # Must resolve to the device and match its verified TLS certificate.
+          ansible_host: firewall.example.test
+      vars:
+        ansible_connection: ansible.netcommon.httpapi
+        ansible_network_os: fortinet.fortios.fortios
+        ansible_httpapi_use_ssl: true
+        ansible_httpapi_validate_certs: true
+        ansible_httpapi_port: 443
+        ansible_httpapi_use_proxy: false
+        ansible_httpapi_ca_path: "{{ inventory_dir }}/secrets/fortigate-ca.pem"
+        ansible_persistent_log_messages: false
+        ansible_user: "{{ vault_devices[inventory_hostname].username }}"
+        ansible_password: "{{ vault_devices[inventory_hostname].password }}"
+    idracs:
+      hosts:
+        idrac01:
+          ansible_host: bmc.example.test
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        idrac_ca_path: "{{ inventory_dir }}/secrets/idrac-ca.pem"
+        # Compatibility exception for this old iDRAC8; reassess after updating it.
+        idrac_tls_ciphers: [AES128-SHA]

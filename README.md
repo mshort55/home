@@ -54,5 +54,7 @@ There is no automatic apply on Git push. Configuration-changing operations, init
 |---|---|
 | Shared credential management | [Ansible Vault CLI](docs/credentials.md) |
 | Cisco configuration backup | [Switch backup](docs/playbooks/backup-switch.md) |
+| FortiGate configuration backup | [FortiGate backup](docs/playbooks/backup-fortigate.md) |
+| iDRAC state snapshot | [iDRAC snapshot](docs/playbooks/snapshot-idrac.md) |
 
 No reusable roles have been introduced yet. Add their documentation to this index when they are implemented.
