@@ -7,18 +7,18 @@ Collect separate running and startup configuration exports over SSH without chan
 ## Inventory and credentials
 
 
-`inventory.private.yml` contains the current switch address/user, mode 0600 and Git-ignored. It contains no passwords. For another installation, copy `inventory.example.yml`, replace the example address/user, and run `chmod 600 inventory.private.yml`.
+`inventory.private.yml` contains the switch address and references to Vault credentials, mode 0600 and Git-ignored. The login username, SSH password and enable password are read from `vault_devices.switch01` in Vault. For another installation, copy `inventory.example.yml`, replace the example address, populate the matching Vault entry, and run `chmod 600 inventory.private.yml`.
 
 The switch's previously trusted key must be in the operator's `~/.ssh/known_hosts`. Host-key checking remains enabled and automatic acceptance is disabled. This switch uses Paramiko because of its legacy SSH compatibility; the choice is scoped to the Cisco inventory group. OpenSSH `-o` algorithm options do not configure this transport. Do not disable host-key checking to bypass a key mismatch. Revisit the transport when switch SSH support changes.
 
-Credentials are entered at hidden terminal prompts, not saved in inventory or command arguments. At Ansible's become-password prompt, enter the enable password, or press Enter to use the SSH password if they are the same. Ansible Vault can replace prompts later.
+Create the credential store if needed and add the switch entry using the [native Vault commands](../credentials.md). The playbook loads the encrypted `secrets/vault.yml`, and inventory references the device's username, SSH password and enable password by inventory hostname. Add `username` to an existing Vault entry before running with this inventory.
 
 ## Run a backup
 
 ```bash
 cd /Repos/home
 .venv/bin/ansible-playbook playbooks/backup-switch.yml --syntax-check
-.venv/bin/ansible-playbook playbooks/backup-switch.yml --ask-pass --ask-become-pass
+.venv/bin/ansible-playbook playbooks/backup-switch.yml
 ```
 
 The playbook reads `show privilege`, `show running-config` and `show startup-config`, requiring privilege level 15. The connection plugin also handles enable mode and session-local terminal settings. It does not enter configuration mode, save running configuration to startup, reload, restore or change switch settings. Running and startup may differ; preserve both as found.
@@ -40,7 +40,7 @@ If authentication or enable fails, stop and resolve credentials; do not retry gu
 
 ## Verification record
 
-2026-09-30: syntax validation and Python dependency checks passed. Two actual backup runs completed over SSH against the existing switch, including enable-mode privilege level 15. Each created its own folder; both sets of checksums, sizes and permissions were independently verified. The explicit check-mode rejection was tested and stopped before device collection. No switch configuration was changed.
+2026-09-30: syntax validation and Python dependency checks passed. Two actual backup runs using the original direct-password prompts completed over SSH against the existing switch, including enable-mode privilege level 15. Each created its own folder; both sets of checksums, sizes and permissions were independently verified. The explicit check-mode rejection was tested and stopped before device collection. No switch configuration was changed. The owner subsequently confirmed a successful Vault-backed switch backup; accept that live credential check as complete. Vault prompting is now enabled by default in the repo configuration.
 
 Tested environment: Python 3.12.3, ansible-core 2.20.9, Paramiko 4.0.0, cisco.ios 11.5.1, ansible.netcommon 8.7.1 and ansible.utils 6.1.1. Existing backup folders were consolidated under the repository's `backups/` directory, preserving checksums and permissions. New runs use the same layout. The path change passed syntax validation; it did not require another device collection.
 

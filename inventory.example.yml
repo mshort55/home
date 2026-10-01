@@ -4,7 +4,6 @@ all:
       hosts:
         switch01:
           ansible_host: 10.77.55.1
-          ansible_user: admin
       vars:
         ansible_connection: ansible.netcommon.network_cli
         ansible_network_os: cisco.ios.ios
@@ -13,3 +12,6 @@ all:
         ansible_paramiko_host_key_auto_add: false
         ansible_paramiko_look_for_keys: false
         ansible_persistent_log_messages: false
+        ansible_user: "{{ vault_devices[inventory_hostname].username }}"
+        ansible_password: "{{ vault_devices[inventory_hostname].ssh_password }}"
+        ansible_become_password: "{{ vault_devices[inventory_hostname].enable_password }}"

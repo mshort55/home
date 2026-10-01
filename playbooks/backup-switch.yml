@@ -7,6 +7,9 @@
   serial: 1
   vars:
     backup_root: "{{ playbook_dir }}/../backups"
+    vault_file: "{{ playbook_dir }}/../secrets/vault.yml"
+  vars_files:
+    - "{{ vault_file }}"
 
   tasks:
     - name: Require a real read-only collection run rather than check-mode output
