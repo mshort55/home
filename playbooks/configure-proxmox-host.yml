@@ -1,0 +1,235 @@
+---
+- name: Configure Proxmox package repositories and apply reviewed host updates
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  vars:
+    proxmox_host_upgrade: false
+    proxmox_host_cache_valid_time: 3600
+    package_probe: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../scripts/inspect-proxmox-packages.py') }}"
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: "{{ pve_api.api_host }}"
+      api_user: "{{ pve_api.api_user }}"
+      api_token_id: "{{ pve_api.api_token_id }}"
+      api_token_secret: "{{ pve_api.api_token_secret }}"
+      validate_certs: true
+      ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+      api_timeout: 30
+  tasks:
+    - name: Require an explicit repository channel and valid operation inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_user == 'root'
+          - proxmox_host_repository in ['enterprise', 'no-subscription']
+          - proxmox_host_upgrade is boolean
+          - proxmox_host_cache_valid_time is integer
+          - proxmox_host_cache_valid_time >= 0
+          - opnsense_vm.wan_connected is sameas true
+        fail_msg: Select the repository channel in inventory and use the accepted connected management pilot.
+
+    - name: Load the enrolled Proxmox API
+      ansible.builtin.include_tasks: tasks/load-community-api.yml
+      vars:
+        community_api_host: "{{ inventory_hostname }}"
+        community_api_var: pve_api
+
+    - name: Verify the installed node through the community API
+      community.proxmox.proxmox_node_info:
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: package_node
+
+    - name: Require the expected single online Proxmox 9 node
+      ansible.builtin.assert:
+        that:
+          - package_node.proxmox_nodes | length == 1
+          - package_node.proxmox_nodes[0].node == inventory_hostname
+          - package_node.proxmox_nodes[0].status == 'online'
+          - package_node.proxmox_nodes[0].version.version is match('^9[.]')
+          - pve_api.node == inventory_hostname
+
+    - name: Read current firewall VM hardware and power through the community API
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: "{{ item }}"
+        network: false
+      loop: [current, pending]
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: package_vm_before
+
+    - name: Require the running management gateway without pending hardware changes
+      ansible.builtin.assert:
+        that:
+          - package_vm_before.results[0].proxmox_vms | length == 1
+          - package_vm_before.results[0].proxmox_vms[0].name == opnsense_vm.name
+          - package_vm_before.results[0].proxmox_vms[0].node == inventory_hostname
+          - package_vm_before.results[0].proxmox_vms[0].status == 'running'
+          - package_vm_before.results[0].proxmox_vms[0].config == package_vm_before.results[1].proxmox_vms[0].config
+
+    - name: Inspect package health, bounded sources, storage and kernel state without writes
+      ansible.builtin.command:
+        argv: [/usr/bin/python3, -c, "{{ package_probe }}", "{{ proxmox_host_repository }}", "{{ inventory_hostname }}"]
+      register: package_before_read
+      changed_when: false
+      check_mode: false
+
+    - name: Select the validated repository plan and protected host state
+      ansible.builtin.set_fact:
+        package_before: "{{ package_before_read.stdout | from_json }}"
+
+    - name: Require the management default route through the accepted firewall
+      ansible.builtin.assert:
+        that:
+          - package_before.default_route.dev == proxmox_network.management.bridge
+          - package_before.default_route.gateway == proxmox_network.management.gateway
+
+    - name: Require repository setup before a package upgrade
+      ansible.builtin.assert:
+        that:
+          - not proxmox_host_upgrade or not package_before.repositories_changed
+        fail_msg: >-
+          Run this playbook without proxmox_host_upgrade first to configure repositories
+          and refresh indexes, then preview upgrades with
+          -e '{"proxmox_host_upgrade":true}' --check.
+
+    - name: Allocate a protected backup before changing repository files
+      ansible.builtin.tempfile:
+        state: directory
+        path: /root
+        prefix: ansible-repositories-
+      register: package_backup
+      when: not ansible_check_mode and package_before.repositories_changed
+
+    - name: Preserve existing source files with private permissions
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ package_backup.path }}/{{ item | basename }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0600'
+      loop: "{{ package_before.repository_files }}"
+      when: not ansible_check_mode and package_before.repositories_changed
+
+    - name: Report the repository recovery directory
+      ansible.builtin.debug:
+        msg: "Original repositories: {{ package_backup.path }}"
+      when: not ansible_check_mode and package_before.repositories_changed
+
+    - name: Manage the selected Proxmox and same-major Ceph repositories in deb822 format
+      ansible.builtin.deb822_repository:
+        name: "{{ item.name }}"
+        architectures: [amd64]
+        types: [deb]
+        uris: "{{ item.uri }}"
+        suites: [trixie]
+        components: "{{ item.component }}"
+        enabled: "{{ item.enabled }}"
+        signed_by: /usr/share/keyrings/proxmox-archive-keyring.gpg
+        mode: '0644'
+        install_python_debian: false
+        state: present
+      loop: "{{ package_before.repositories }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: package_repositories
+
+    - name: Refresh signed package indexes after repository changes or cache expiry
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: "{{ 0 if package_repositories.changed else proxmox_host_cache_valid_time }}"
+        update_cache_retries: 3
+        lock_timeout: 180
+        auto_install_module_deps: false
+      when: not ansible_check_mode
+
+    - name: Preview or apply host updates without removals, downgrades or automatic cleanup
+      ansible.builtin.apt:
+        upgrade: dist
+        force_apt_get: true
+        fail_on_autoremove: true
+        allow_downgrade: false
+        allow_unauthenticated: false
+        autoremove: false
+        autoclean: false
+        dpkg_options: force-confdef,force-confold
+        lock_timeout: 180
+        auto_install_module_deps: false
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+        NEEDRESTART_MODE: l
+      when: proxmox_host_upgrade
+      register: package_upgrade
+
+    - name: Recheck repositories, package health and protected host configuration
+      ansible.builtin.command:
+        argv: [/usr/bin/python3, -c, "{{ package_probe }}", "{{ proxmox_host_repository }}", "{{ inventory_hostname }}"]
+      register: package_after_read
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Select the verified package state
+      ansible.builtin.set_fact:
+        package_after: "{{ package_after_read.stdout | from_json }}"
+      when: not ansible_check_mode
+
+    - name: Verify repository convergence and preserved host networking and storage
+      ansible.builtin.assert:
+        that:
+          - not package_after.repositories_changed
+          - package_after.debian_sha256 == package_before.debian_sha256
+          - package_after.protected_sha256 == package_before.protected_sha256
+          - package_after.default_route == package_before.default_route
+          - package_after.running_kernel == package_before.running_kernel
+      when: not ansible_check_mode
+
+    - name: Verify the Proxmox services after package work
+      ansible.builtin.command:
+        argv: [systemctl, is-active, pveproxy, pvedaemon, pvestatd]
+      register: package_services
+      changed_when: false
+      retries: 12
+      delay: 5
+      until: package_services.rc == 0
+      when: not ansible_check_mode
+
+    - name: Verify trusted API availability and unchanged firewall hardware and power
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: "{{ item }}"
+        network: false
+      loop: [current, pending]
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: package_vm_after
+      retries: 12
+      delay: 5
+      until: package_vm_after is succeeded
+      when: not ansible_check_mode
+
+    - name: Require the firewall to remain running with identical current and pending hardware
+      ansible.builtin.assert:
+        that:
+          - package_vm_after.results[0].proxmox_vms[0].status == 'running'
+          - package_vm_after.results[0].proxmox_vms[0].config == package_vm_before.results[0].proxmox_vms[0].config
+          - package_vm_after.results[1].proxmox_vms[0].config == package_vm_before.results[1].proxmox_vms[0].config
+      when: not ansible_check_mode
+
+    - name: Report package operation and separately required reboot status
+      ansible.builtin.debug:
+        msg:
+          operation: "{{ 'Previewed' if ansible_check_mode else 'Verified' }} {{ 'repositories and package upgrades' if proxmox_host_upgrade else 'repositories and package indexes' }}"
+          repository_channel: "{{ proxmox_host_repository }}"
+          ceph_client_release: squid
+          package_upgrades: "{{ package_upgrade.changed | default(false) }}"
+          running_kernel: "{{ (package_before if ansible_check_mode else package_after).running_kernel }}"
+          latest_installed_kernel: "{{ (package_before if ansible_check_mode else package_after).latest_installed_kernel }}"
+          reboot_needed: "{{ (package_before if ansible_check_mode else package_after).reboot_needed }}"
+          reboot_action: Separate maintenance operation; this playbook does not reboot
+          preview_limit: Check mode uses existing package indexes; apply repository setup first for a fresh upgrade preview
