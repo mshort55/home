@@ -54,6 +54,11 @@ all:
       hosts:
         idrac01:
           ansible_host: bmc.example.test
+          idrac_expected_mac: '02:00:00:00:00:01'
+          idrac_network:
+            address: 10.77.40.10
+            netmask: 255.255.255.0
+            gateway: 10.77.40.254
       vars:
         ansible_connection: local
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
