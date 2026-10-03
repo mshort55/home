@@ -1,0 +1,94 @@
+---
+- name: Reconcile pilot firewall and DNS through the OXL API
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    policy: "{{ pilot_preview.stdout | trim | from_json }}"
+  module_defaults:
+    group/oxlorg.opnsense.all:
+      firewall: "{{ opn_api.firewall }}"
+      api_key: "{{ opn_api.api_key }}"
+      api_secret: "{{ opn_api.api_secret }}"
+      ssl_verify: true
+      ssl_ca_file: "{{ inventory_dir }}/.cache/community-api/{{ opnsense_guest }}/ca.pem"
+      api_timeout: 30
+      api_retries: 2
+  block:
+    - name: Merge the explicitly owned firewall rules
+      oxlorg.opnsense.rule:
+        match_fields: [description]
+        description: "{{ item.value.description }}"
+        sequence: "{{ item.value.sequence | int }}"
+        enabled: true
+        action: "{{ item.value.action }}"
+        quick: true
+        interface: "{{ item.value.interface.split(',') }}"
+        direction: in
+        ip_protocol: inet
+        protocol: "{{ item.value.protocol }}"
+        source_net: "{{ item.value.source_net }}"
+        destination_net: "{{ item.value.destination_net }}"
+        destination_port: "{{ item.value.destination_port }}"
+        log: "{{ item.value.log == '1' }}"
+        state_type: keep
+        reload: false
+      loop: "{{ policy.rules | dict2items }}"
+      loop_control:
+        label: "{{ item.value.description }}"
+      register: pilot_rule_changes
+
+    - name: Remove only the verified broad bootstrap rule after administration rules exist
+      oxlorg.opnsense.rule:
+        uuid: "{{ policy.bootstrap_rule }}"
+        match_fields: [uuid]
+        state: absent
+        reload: false
+      when: policy.bootstrap_rule is not none
+      register: pilot_bootstrap_change
+
+    - name: Configure the management-only Unbound listener
+      oxlorg.opnsense.unbound_general:
+        enabled: true
+        port: 53
+        interfaces: [lan]
+        outgoing_interfaces: [wan]
+        register_dhcp_leases: false
+        register_dhcp_static_mappings: false
+        register_ipv6_link_local: false
+        register_system_records: false
+        reload: false
+      register: pilot_dns_general_change
+
+    - name: Merge the named management and loopback DNS access lists
+      oxlorg.opnsense.unbound_acl:
+        name: "{{ item.name }}"
+        action: allow
+        description: "Home automation: DNS ACL {{ item.name }}"
+        networks: "{{ item.networks.split(',') }}"
+        enabled: true
+        reload: false
+      loop: "{{ policy.acls }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: pilot_dns_acl_changes
+
+    - name: Merge the owned local DNS host records
+      oxlorg.opnsense.unbound_host:
+        match_fields: [hostname, domain, record_type]
+        hostname: "{{ item.hostname }}"
+        domain: "{{ item.domain }}"
+        record_type: A
+        description: "Home automation: DNS host {{ item.hostname }}"
+        value: "{{ item.server }}"
+        enabled: true
+        reload: false
+      loop: "{{ policy.hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      register: pilot_dns_host_changes
+
+    - name: Load firewall and DNS after all saved changes or an interrupted apply
+      oxlorg.opnsense.reload:
+        target: "{{ item }}"
+      loop: [rule, unbound]
+      when: not ansible_check_mode and not pilot_policy_preview | default(false) and (pilot_reload_required or pilot_rule_changes.changed or pilot_bootstrap_change.changed | default(false) or pilot_dns_general_change.changed or pilot_dns_acl_changes.changed or pilot_dns_host_changes.changed)

@@ -10,7 +10,30 @@
     opnsense_owner_marker: "Managed by create-opnsense-vm.yml; vmid={{ opnsense_vm.vmid }}"
   vars_files:
     - ../files/opnsense/release.yml
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: "{{ pve_api.api_host }}"
+      api_user: "{{ pve_api.api_user }}"
+      api_token_id: "{{ pve_api.api_token_id }}"
+      api_token_secret: "{{ pve_api.api_token_secret }}"
+      validate_certs: true
+      ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+      api_timeout: 30
   tasks:
+    - name: Load the enrolled Proxmox API
+      ansible.builtin.include_tasks: tasks/load-community-api.yml
+      vars:
+        community_api_host: "{{ inventory_hostname }}"
+        community_api_var: pve_api
+
+    - name: Read VM allocations using the community API
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: opnsense_vm_allocations
+
     - name: Validate the bounded firewall VM allocation
       ansible.builtin.assert:
         that:
@@ -103,7 +126,6 @@
       loop:
         - [hostname, -s]
         - [pvesh, get, /nodes/localhost/storage, --output-format, json]
-        - [pvesh, get, /cluster/resources, --type, vm, --output-format, json]
         - [ip, -j, -d, address, show]
         - [ifquery, --check, vmbr0, vmbr1, vmbr2]
         - "{{ ['pvesm', 'list', opnsense_vm.disk_storage, '--vmid', opnsense_vm.vmid | string] }}"
@@ -117,10 +139,10 @@
       ansible.builtin.set_fact:
         opnsense_host_name: "{{ opnsense_host_reads.results[0].stdout }}"
         opnsense_storage: "{{ opnsense_host_reads.results[1].stdout | from_json }}"
-        opnsense_allocations: "{{ opnsense_host_reads.results[2].stdout | from_json | selectattr('vmid', 'equalto', opnsense_vm.vmid) | list }}"
-        opnsense_live_links: "{{ opnsense_host_reads.results[3].stdout | from_json }}"
-        opnsense_remote_iso: "{{ opnsense_host_reads.results[6].stdout }}"
-        opnsense_live_vlans: "{{ opnsense_host_reads.results[7].stdout | from_json }}"
+        opnsense_allocations: "{{ opnsense_vm_allocations.proxmox_vms }}"
+        opnsense_live_links: "{{ opnsense_host_reads.results[2].stdout | from_json }}"
+        opnsense_remote_iso: "{{ opnsense_host_reads.results[5].stdout }}"
+        opnsense_live_vlans: "{{ opnsense_host_reads.results[6].stdout | from_json }}"
 
     - name: Inspect the destination ISO without changing it
       ansible.builtin.stat:
@@ -144,7 +166,7 @@
           - opnsense_allocations | length <= 1
           - not opnsense_verify_only | default(false) or opnsense_allocations | length == 1
           - opnsense_allocations | length == 0 or (opnsense_allocations[0].type == 'qemu' and opnsense_allocations[0].node == opnsense_host_name)
-          - opnsense_allocations | length != 0 or opnsense_host_reads.results[5].stdout_lines | length == 1
+          - opnsense_allocations | length != 0 or opnsense_host_reads.results[4].stdout_lines | length == 1
           - opnsense_allocations | length != 0 or disk_storage[0].avail > (opnsense_vm.disk_gib + 1) * 1024 ** 3
           - opnsense_remote_iso.startswith('/')
           - opnsense_allocations | length != 0 or not opnsense_vm.wan_connected
@@ -177,7 +199,7 @@
         port_vlans: "{{ opnsense_live_vlans | selectattr('ifname', 'equalto', item.port) | list }}"
         port_vlan_ids: "{{ (port_vlans | first).vlans | map(attribute='vlan') | list }}"
 
-    - name: Build the desired VM hardware and create arguments
+    - name: Build the desired VM hardware
       ansible.builtin.set_fact:
         opnsense_expected:
           vmid: "{{ opnsense_vm.vmid }}"
@@ -198,55 +220,12 @@
           iso_volume: "{{ opnsense_iso_volume }}"
           bootstrap_iso_volume: "{{ opnsense_vm.iso_storage }}:iso/OPNsense-{{ opnsense_release.version }}-bootstrap-{{ inventory_hostname }}.iso"
           networks: {}
-        opnsense_create_argv:
-          - qm
-          - create
-          - "{{ opnsense_vm.vmid | string }}"
-          - --name
-          - "{{ opnsense_vm.name }}"
-          - --description
-          - "{{ opnsense_owner_marker }}"
-          - --bios
-          - ovmf
-          - --machine
-          - q35
-          - --ostype
-          - other
-          - --cpu
-          - host
-          - --cores
-          - "{{ opnsense_vm.cores | string }}"
-          - --sockets
-          - '1'
-          - --memory
-          - "{{ opnsense_vm.memory_mib | string }}"
-          - --balloon
-          - '0'
-          - --numa
-          - '0'
-          - --agent
-          - '0'
-          - --vga
-          - std
-          - --onboot
-          - "{{ opnsense_vm.onboot | int | string }}"
-          - --startup
-          - order=1,up=30,down=120
-          - --scsihw
-          - virtio-scsi-single
-          - --scsi0
-          - "{{ opnsense_vm.disk_storage }}:{{ opnsense_vm.disk_gib }},cache=none,iothread=1"
-          - --efidisk0
-          - "{{ opnsense_vm.disk_storage }}:0,efitype=4m,pre-enrolled-keys=0"
-          - --ide2
-          - "{{ opnsense_iso_volume }},media=cdrom"
-          - --boot
-          - order=scsi0;ide2
+        opnsense_create_networks: {}
 
     - name: Add stable individually scoped VirtIO network definitions
       ansible.builtin.set_fact:
         opnsense_expected: "{{ opnsense_expected | combine({'networks': opnsense_expected.networks | combine({item.device: network_properties})}) }}"
-        opnsense_create_argv: "{{ opnsense_create_argv + ['--' + item.device, network_argument] }}"
+        opnsense_create_networks: "{{ opnsense_create_networks | combine({item.device: network_argument}) }}"
       loop: "{{ opnsense_vm.networks }}"
       loop_control:
         label: "{{ item.device }} {{ item.role }}"
@@ -256,28 +235,31 @@
 
     - name: Select the desired WAN connection argument
       ansible.builtin.set_fact:
-        opnsense_wan_argument: "{{ opnsense_create_argv[opnsense_create_argv.index('--net0') + 1] }}"
+        opnsense_wan_argument: "{{ opnsense_create_networks.net0 }}"
 
-    - name: Read an existing VM before any file or device writes
-      ansible.builtin.command:
-        argv: "{{ ['pvesh', 'get', '/nodes/localhost/qemu/100/config', '--current', item, '--output-format', 'json'] }}"
-      loop: ['1', '0']
+    - name: Read current and pending VM configuration through the API
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: "{{ item }}"
+        network: false
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       register: opnsense_existing_vm
-      changed_when: false
-      check_mode: false
+      loop: [current, pending]
       when: opnsense_allocations | length == 1
 
     - name: Refuse pending configuration changes on an existing VM
       ansible.builtin.assert:
         that:
-          - opnsense_existing_vm.results[0].stdout | from_json == opnsense_existing_vm.results[1].stdout | from_json
+          - opnsense_existing_vm.results[0].proxmox_vms[0].config == opnsense_existing_vm.results[1].proxmox_vms[0].config
         fail_msg: Reconcile the existing VM's pending configuration before this workflow.
       when: opnsense_allocations | length == 1
 
     - name: Refuse an existing VM with conflicting ownership or hardware
       ansible.builtin.command:
         argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/../scripts/validate-opnsense-vm.py"]
-        stdin: "{{ {'config': opnsense_existing_vm.results[0].stdout | from_json, 'desired': opnsense_expected} | to_json }}"
+        stdin: "{{ {'config': opnsense_existing_vm.results[0].proxmox_vms[0].config, 'desired': opnsense_expected} | to_json }}"
       delegate_to: localhost
       vars:
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
@@ -309,14 +291,18 @@
           - not opnsense_remote_media.stat.exists or (opnsense_remote_media.stat.isreg | default(false) and not opnsense_remote_media.stat.islnk | default(false) and opnsense_remote_media.stat.checksum | default('') == opnsense_manifest.iso_sha256)
         fail_msg: The named ISO destination already contains different bytes or is not a regular file.
 
-    - name: Stage the verified ISO on Proxmox
-      ansible.builtin.copy:
+    - name: Stage the verified ISO through the community API
+      community.proxmox.proxmox_template:
+        node: "{{ pve_api.node }}"
+        storage: "{{ opnsense_vm.iso_storage }}"
+        content_type: iso
         src: "{{ opnsense_iso_cache }}/{{ opnsense_release.filename }}"
-        dest: "{{ opnsense_remote_iso }}"
-        owner: root
-        group: root
-        mode: '0644'
-      when: not opnsense_verify_only | default(false)
+        force: false
+        timeout: 600
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: not ansible_check_mode and not opnsense_verify_only | default(false)
 
     - name: Verify the staged ISO before VM creation
       ansible.builtin.stat:
@@ -334,34 +320,79 @@
 
     - name: Preview creation without allocating disks or starting the VM
       ansible.builtin.debug:
-        msg: "{{ opnsense_create_argv if opnsense_allocations | length == 0 else (['qm', 'set', '100', '--net0', opnsense_wan_argument] if opnsense_wan_change else ['Existing matching VM; no creation or media reattachment']) }}"
+        msg: "{{ {'create': opnsense_expected, 'net': opnsense_create_networks} if opnsense_allocations | length == 0 else {'WAN link change': opnsense_wan_change} }}"
       changed_when: opnsense_allocations | length == 0 or opnsense_wan_change
       when: ansible_check_mode and not opnsense_verify_only | default(false)
 
     - name: Create the VM once without starting it
-      ansible.builtin.command:
-        argv: "{{ opnsense_create_argv }}"
+      community.proxmox.proxmox_kvm:
+        node: "{{ pve_api.node }}"
+        vmid: "{{ opnsense_vm.vmid }}"
+        name: "{{ opnsense_vm.name }}"
+        description: "{{ opnsense_owner_marker }}"
+        state: present
+        update: false
+        bios: ovmf
+        machine: q35
+        ostype: other
+        cpu: host
+        cores: "{{ opnsense_vm.cores }}"
+        sockets: 1
+        memory: "{{ opnsense_vm.memory_mib }}"
+        balloon: 0
+        numa_enabled: false
+        agent: '0'
+        vga: std
+        onboot: "{{ opnsense_vm.onboot }}"
+        startup: order=1,up=30,down=120
+        scsihw: virtio-scsi-single
+        scsi:
+          scsi0: "{{ opnsense_vm.disk_storage }}:{{ opnsense_vm.disk_gib }},cache=none,iothread=1"
+        efidisk0:
+          storage: "{{ opnsense_vm.disk_storage }}"
+          efitype: 4m
+          pre_enrolled_keys: false
+          format: raw
+        ide:
+          ide2: "{{ opnsense_iso_volume }},media=cdrom"
+        boot: order=scsi0;ide2
+        net: "{{ opnsense_create_networks }}"
+        timeout: 300
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: opnsense_allocations | length == 0 and not ansible_check_mode and not opnsense_verify_only | default(false)
 
     - name: Apply only the requested WAN link transition on an existing VM
-      ansible.builtin.command:
-        argv: [qm, set, '100', --net0, "{{ opnsense_wan_argument }}"]
-      when: opnsense_wan_change and not ansible_check_mode and not opnsense_verify_only | default(false)
+      community.proxmox.proxmox_nic:
+        vmid: "{{ opnsense_vm.vmid }}"
+        interface: net0
+        model: virtio
+        mac: "{{ opnsense_vm.networks[0].mac }}"
+        bridge: "{{ opnsense_vm.networks[0].bridge }}"
+        firewall: false
+        link_down: "{{ not opnsense_vm.wan_connected }}"
+        state: present
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: opnsense_wan_change and not opnsense_verify_only | default(false)
 
     - name: Read final VM configuration and power state
-      ansible.builtin.command:
-        argv: "{{ item }}"
-      loop:
-        - [pvesh, get, /nodes/localhost/qemu/100/config, --current, '1', --output-format, json]
-        - [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: current
+        network: false
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       register: opnsense_final_reads
-      changed_when: false
       when: not ansible_check_mode
 
     - name: Verify final VM hardware
       ansible.builtin.command:
         argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/../scripts/validate-opnsense-vm.py"]
-        stdin: "{{ {'config': opnsense_final_reads.results[0].stdout | from_json, 'desired': opnsense_expected} | to_json }}"
+        stdin: "{{ {'config': opnsense_final_reads.proxmox_vms[0].config, 'desired': opnsense_expected} | to_json }}"
       delegate_to: localhost
       vars:
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
@@ -378,7 +409,7 @@
     - name: Require a newly created VM to remain stopped
       ansible.builtin.assert:
         that:
-          - (opnsense_final_reads.results[1].stdout | from_json).status == 'stopped'
+          - opnsense_final_reads.proxmox_vms[0].status == 'stopped'
       when: opnsense_allocations | length == 0 and not ansible_check_mode
 
     - name: Report the VM preparation and stable interface mapping

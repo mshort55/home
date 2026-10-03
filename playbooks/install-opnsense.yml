@@ -14,18 +14,26 @@
     opnsense_install_record: "{{ opnsense_install_record_dir }}/install.json"
     opnsense_bootstrap_volume: "{{ opnsense_expected.bootstrap_iso_volume }}"
     opnsense_guest_ssh_args: "-o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile={{ (opnsense_bootstrap_dir ~ '/known_hosts') | quote }}"
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: "{{ pve_api.api_host }}"
+      api_user: "{{ pve_api.api_user }}"
+      api_token_id: "{{ pve_api.api_token_id }}"
+      api_token_secret: "{{ pve_api.api_token_secret }}"
+      validate_certs: true
+      ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+      api_timeout: 30
   tasks:
-    - name: Require a disconnected WAN and the explicit guest inventory
+    - name: Require unchanged WAN state and the explicit guest inventory
       ansible.builtin.assert:
         that:
           - opnsense_guest in groups.get('opnsense_hosts', [])
           - hostvars[opnsense_guest].opnsense_proxmox_host == inventory_hostname
-          - not opnsense_vm.wan_connected
           - not opnsense_wan_change
           - opnsense_vm.onboot is sameas false
           - opnsense_allocations | length == 1
           - inventory_hostname is match('^[A-Za-z0-9_-]+$')
-        fail_msg: This installation entry point requires the owned VM with WAN disconnected and automatic startup disabled.
+        fail_msg: This entry point requires the owned VM and automatic startup disabled; a connected WAN is allowed only for a completed running installation.
 
     - name: Inspect private controller bootstrap files
       ansible.builtin.stat:
@@ -84,8 +92,7 @@
       ansible.builtin.command:
         argv: "{{ item }}"
       loop:
-        - [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
-        - "{{ ['pvesm', 'path', (opnsense_existing_vm.results[0].stdout | from_json).scsi0.split(',')[0]] }}"
+        - "{{ ['pvesm', 'path', (opnsense_existing_vm.results[0].proxmox_vms[0].config).scsi0.split(',')[0]] }}"
         - "{{ ['pvesm', 'path', opnsense_bootstrap_volume] }}"
       register: install_host_reads
       changed_when: false
@@ -93,10 +100,10 @@
 
     - name: Select current disk and boot state
       ansible.builtin.set_fact:
-        install_vm_state: "{{ (install_host_reads.results[0].stdout | from_json).status }}"
-        install_disk_volume: "{{ (opnsense_existing_vm.results[0].stdout | from_json).scsi0.split(',')[0] }}"
-        install_remote_iso: "{{ install_host_reads.results[2].stdout }}"
-        install_cdrom: "{{ (opnsense_existing_vm.results[0].stdout | from_json).ide2 | default('none,media=cdrom') }}"
+        install_vm_state: "{{ opnsense_existing_vm.results[0].proxmox_vms[0].status }}"
+        install_disk_volume: "{{ (opnsense_existing_vm.results[0].proxmox_vms[0].config).scsi0.split(',')[0] }}"
+        install_remote_iso: "{{ install_host_reads.results[1].stdout }}"
+        install_cdrom: "{{ (opnsense_existing_vm.results[0].proxmox_vms[0].config).ide2 | default('none,media=cdrom') }}"
 
     - name: Inspect the installation record directory and files
       ansible.builtin.stat:
@@ -142,6 +149,7 @@
           - install_previous | length == 0 or install_previous.intent == install_intent
           - install_previous | length == 0 or install_previous.phase in ['started', 'disk_written', 'complete']
           - install_previous | length > 0 or install_vm_state == 'stopped'
+          - not opnsense_vm.wan_connected or (install_previous.phase | default('') == 'complete' and install_vm_state == 'running')
           - install_cdrom.split(',')[0] in [opnsense_bootstrap_volume, 'none', opnsense_expected.iso_volume]
         fail_msg: Existing installation ownership, state or media requires inspection; no disk is replaced.
 
@@ -159,7 +167,7 @@
                 disk.seek(size - 2 * 1024 * 1024)
                 last = disk.read(2 * 1024 * 1024)
             print(json.dumps({'size': size, 'blank_ends': not any(first) and not any(last)}))
-          - "{{ install_host_reads.results[1].stdout }}"
+          - "{{ install_host_reads.results[0].stdout }}"
       register: install_blank_probe
       changed_when: false
       check_mode: false
@@ -252,18 +260,41 @@
       when: install_previous.phase | default('') != 'complete'
 
     - name: Mount bootstrap media only on the stopped guest before its first boot
-      ansible.builtin.command:
-        argv: [qm, set, '100', --ide2, "{{ opnsense_bootstrap_volume }},media=cdrom"]
+      community.proxmox.proxmox_disk:
+        vmid: "{{ opnsense_vm.vmid }}"
+        disk: ide2
+        media: cdrom
+        iso_image: "{{ opnsense_bootstrap_volume }}"
+        create: disabled
+        state: present
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: install_vm_state == 'stopped' and install_previous.phase | default('started') == 'started' and install_cdrom.split(',')[0] == opnsense_expected.iso_volume
 
     - name: Eject remaining installation media before resuming a written stopped disk
-      ansible.builtin.command:
-        argv: [qm, set, '100', --ide2, 'none,media=cdrom']
+      community.proxmox.proxmox_disk:
+        vmid: "{{ opnsense_vm.vmid }}"
+        disk: ide2
+        media: cdrom
+        iso_image: none
+        create: disabled
+        state: present
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: install_vm_state == 'stopped' and install_previous.phase | default('') in ['disk_written', 'complete'] and install_cdrom.split(',')[0] != 'none'
 
     - name: Start the owned guest if stopped
-      ansible.builtin.command:
-        argv: [qm, start, '100']
+      community.proxmox.proxmox_kvm:
+        node: "{{ pve_api.node }}"
+        vmid: "{{ opnsense_vm.vmid }}"
+        state: started
+        force: false
+        timeout: 300
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: install_vm_state == 'stopped'
 
     - name: Wait for the guest management SSH listener
@@ -327,35 +358,65 @@
       when: install_disk_write_required
 
     - name: Read power after recording the completed disk write
-      ansible.builtin.command:
-        argv: [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: current
+        network: false
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       register: install_shutdown_state
-      changed_when: false
       when: install_guest_state.state == 'live'
 
     - name: Request a clean shutdown of the installed live guest through Proxmox
-      ansible.builtin.command:
-        argv: [qm, shutdown, '100', --timeout, '300', --forceStop, '0']
-      when: install_guest_state.state == 'live' and (install_shutdown_state.stdout | from_json).status == 'running'
+      community.proxmox.proxmox_kvm:
+        node: "{{ pve_api.node }}"
+        vmid: "{{ opnsense_vm.vmid }}"
+        state: stopped
+        force: false
+        timeout: 300
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: install_guest_state.state == 'live' and install_shutdown_state.proxmox_vms[0].status == 'running'
 
     - name: Wait for the installed guest to power down cleanly
-      ansible.builtin.command:
-        argv: [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: current
+        network: false
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       register: install_halted
-      changed_when: false
       retries: 60
       delay: 5
-      until: (install_halted.stdout | from_json).status == 'stopped'
+      until: install_halted.proxmox_vms[0].status == 'stopped'
       when: install_guest_state.state == 'live'
 
     - name: Eject the installer on the halted guest
-      ansible.builtin.command:
-        argv: [qm, set, '100', --ide2, 'none,media=cdrom']
+      community.proxmox.proxmox_disk:
+        vmid: "{{ opnsense_vm.vmid }}"
+        disk: ide2
+        media: cdrom
+        iso_image: none
+        create: disabled
+        state: present
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: install_guest_state.state == 'live'
 
     - name: Boot the installed ZFS disk
-      ansible.builtin.command:
-        argv: [qm, start, '100']
+      community.proxmox.proxmox_kvm:
+        node: "{{ pve_api.node }}"
+        vmid: "{{ opnsense_vm.vmid }}"
+        state: started
+        force: false
+        timeout: 300
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: install_guest_state.state == 'live'
 
     - name: Wait for installed guest management SSH
@@ -386,29 +447,30 @@
           - (install_final_guest.stdout | trim | from_json).filesystem == 'zfs'
 
     - name: Read final VM hardware and power
-      ansible.builtin.command:
-        argv: "{{ item }}"
-      loop:
-        - [pvesh, get, /nodes/localhost/qemu/100/config, --current, '1', --output-format, json]
-        - [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: current
+        network: false
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       register: install_final_host
-      changed_when: false
 
-    - name: Verify unchanged VM hardware and the disconnected WAN
+    - name: Verify unchanged VM hardware and the requested WAN state
       ansible.builtin.command:
         argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/../scripts/validate-opnsense-vm.py"]
-        stdin: "{{ {'config': install_final_host.results[0].stdout | from_json, 'desired': opnsense_expected} | to_json }}"
+        stdin: "{{ {'config': install_final_host.proxmox_vms[0].config, 'desired': opnsense_expected} | to_json }}"
       delegate_to: localhost
       vars:
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
       register: install_final_verification
       changed_when: false
 
-    - name: Require a running installed VM with WAN disconnected
+    - name: Require a running installed VM with the requested WAN state
       ansible.builtin.assert:
         that:
           - not (install_final_verification.stdout | from_json).wan_link_change
-          - (install_final_host.results[1].stdout | from_json).status == 'running'
+          - install_final_host.proxmox_vms[0].status == 'running'
 
     - name: Record verified installation completion
       ansible.builtin.copy:
@@ -420,4 +482,4 @@
 
     - name: Report verified management access
       ansible.builtin.debug:
-        msg: "{{ opnsense_guest }} is installed on ZFS and reachable over pinned, key-only SSH at {{ install_seed.address }}. WAN remains disconnected; HOME/DEV/BMC are assigned but disabled. Firewall policy, DHCP, DNS and GUI certificate trust are configured separately."
+        msg: "{{ opnsense_guest }} is installed on ZFS and reachable over pinned, key-only SSH at {{ install_seed.address }}. WAN {{ 'retains its connected pilot state' if opnsense_vm.wan_connected else 'remains disconnected' }}; HOME/DEV/BMC are assigned but disabled. Firewall policy, DHCP, DNS and GUI certificate trust are configured separately."

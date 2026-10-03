@@ -1,0 +1,86 @@
+---
+- name: Enroll the Proxmox API through trusted root SSH
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  tasks:
+    - name: Validate the controller export destination
+      ansible.builtin.include_tasks: tasks/prepare-community-api-directory.yml
+
+    - name: Validate and enroll the scoped Proxmox automation token
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../scripts/enroll-proxmox-api.py') }}"
+          - "{{ 'plan' if ansible_check_mode else 'apply' }}"
+          - "{{ ansible_host }}"
+          - "{{ inventory_hostname }}"
+      register: api_enrollment
+      changed_when: (api_enrollment.stdout | from_json).changed
+      check_mode: false
+      no_log: true
+
+    - name: Create the private controller enrollment directory
+      ansible.builtin.file:
+        path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}"
+        state: directory
+        mode: '0700'
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: not ansible_check_mode
+
+    - name: Read the enrollment and Proxmox CA through trusted SSH
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop: [/root/.home-automation-api/credentials.json, /etc/pve/pve-root-ca.pem]
+      register: pve_exports
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Export API credentials and CA with private permissions from creation
+      ansible.builtin.copy:
+        dest: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/{{ item.name }}"
+        content: "{{ pve_exports.results[item.index].content | b64decode }}"
+        mode: '0600'
+      loop:
+        - {name: credentials.json, index: 0}
+        - {name: ca.pem, index: 1}
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      diff: false
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Protect the exported API files
+      ansible.builtin.file:
+        path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/{{ item }}"
+        mode: '0600'
+      loop: [credentials.json, ca.pem]
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: not ansible_check_mode
+
+    - name: Load the enrolled Proxmox API
+      ansible.builtin.include_tasks: tasks/load-community-api.yml
+      vars:
+        community_api_host: "{{ inventory_hostname }}"
+        community_api_var: pve_api
+      when: not ansible_check_mode
+
+    - name: Verify authentication and trusted HTTPS with the community collection
+      community.proxmox.proxmox_vm_info:
+        api_host: "{{ pve_api.api_host }}"
+        api_user: "{{ pve_api.api_user }}"
+        api_token_id: "{{ pve_api.api_token_id }}"
+        api_token_secret: "{{ pve_api.api_token_secret }}"
+        ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+        validate_certs: true
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: not ansible_check_mode

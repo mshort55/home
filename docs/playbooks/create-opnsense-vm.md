@@ -1,12 +1,12 @@
 # Create the OPNsense VM
 
-`playbooks/create-opnsense-vm.yml` stages the verified DVD ISO and creates VM 100 over trusted root SSH. It allocates one 32 GiB system disk and one EFI variable disk on LVM-thin storage, attaches installation media and leaves the new VM stopped. It does not install the guest OS, start/stop a VM or change the switch/host network configuration.
+`playbooks/create-opnsense-vm.yml` stages the verified DVD ISO and creates VM 100 through `community.proxmox` over verified HTTPS. It allocates one 32 GiB system disk and one EFI variable disk on LVM-thin storage, attaches installation media and leaves the new VM stopped. It does not install the guest OS, start/stop a VM or change the switch/host network configuration.
 
 ## Prerequisites
 
 - Run [ISO preparation](prepare-opnsense-iso.md) normally on the same controller first. VM creation requires its completion manifest and exact matching ISO bytes.
 - Apply [the guest bridge configuration](configure-proxmox-bridges.md). Management must work, both data bridges must be up on the expected MACs, and they and their physical ports must have no host addresses.
-- Provide root SSH key access with trusted host-key checking. No Proxmox API token or new Python collection is required; the playbook uses installed `qm`, `pvesh` and `pvesm` commands through SSH.
+- Run [Proxmox API enrollment](configure-proxmox-api.md) for `pve01` on this controller. Keep root SSH for physical NIC, runtime bridge, file checksum and local storage checks. Install the pinned collections and controller Python dependencies.
 - The named ISO storage must be an active directory storage with `iso` content. Disk storage must be active LVM-thin storage with `images` content. VM ID 100 must be unused or already identify this workflow's matching QEMU VM on this host. Orphaned VM-100 volumes block fresh creation.
 
 ## Inventory and hardware
@@ -44,7 +44,7 @@ ansible-playbook playbooks/create-opnsense-vm.yml --limit pve01
 ansible-playbook playbooks/create-opnsense-vm.yml --limit pve01 --check
 ```
 
-The first preview reads the host and local ISO, checks bridges/storage/ID availability, and prints bounded create arguments. It uploads no ISO and allocates no disks. A normal creation copies the ISO, checks its remote SHA-256 and size, then invokes `qm create` once. Readback validates ownership, hardware, disk ownership/size, NIC mappings, boot order and stopped state. The repeat preview should report `changed=0`.
+The first preview reads the host and local ISO, checks bridges/storage/ID availability, and reports the desired hardware and network definitions. It uploads no ISO and allocates no disks. A normal creation uploads the ISO with `proxmox_template`, checks its remote SHA-256 and size, then invokes `proxmox_kvm` once. `proxmox_vm_info` reads current and pending configuration and `proxmox_nic` applies the bounded WAN link transition. Readback validates ownership, hardware, disk ownership/size, NIC mappings, boot order and stopped state. The repeat preview should report `changed=0`.
 
 An existing matching VM is verified rather than recreated. Its disks are never reformatted, resized or replaced by this playbook. An ejected/removed DVD is accepted and not reattached. A running VM is not stopped. The named bootstrap DVD produced by the installation workflow is also accepted, without reattaching it. With `opnsense_verify_only: true`, an existing matching VM is required and all staging/creation/WAN mutations are skipped; the installation playbook uses this mode for its preflight. Conflicting hardware, an unrelated ownership marker, extra devices or pending VM configuration changes cause failure before writes. `scripts/validate-opnsense-vm.py` compares parsed properties rather than relying on their printed order.
 

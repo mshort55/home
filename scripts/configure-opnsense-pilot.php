@@ -64,29 +64,42 @@ function writePrivate(string $path, array $content): void
     }
 }
 
-function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array $desired, string $label, array &$changes): void
+function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$desired, string $label, array &$changes): void
 {
-    $before = [];
+    $field = ['filter rules'=>'description', 'DNS access lists'=>'name', 'DNS host records'=>'hostname'][$label];
+    $existing = [];
     foreach ($container->iterateItems() as $key => $node) {
-        $before[$key] = $node->getNodeContent();
-        // Filter model ordering fields are computed, volatile values, not saved settings.
-        unset($before[$key]['sort_order'], $before[$key]['prio_group']);
+        $values = $node->getNodeContent();
+        $identity = $values[$field];
+        requireCondition(!isset($existing[$identity]), 'Duplicate ' . $label . ' identity');
+        $existing[$identity] = ['uuid'=>$key, 'values'=>$values];
     }
-    foreach (array_keys($before) as $key) {
-        requireCondition(isset($desired[$key]), 'Unmanaged ' . $label . ' entry requires separate review');
+    $remapped = [];
+    foreach ($desired as $key => $values) {
+        $identity = $values[$field];
+        if (isset($existing[$identity])) {
+            $key = $existing[$identity]['uuid'];
+            $before = $existing[$identity]['values'];
+            unset($existing[$identity]);
+        } else {
+            $before = [];
+        }
+        // Compare only explicitly managed fields; collection defaults may add model fields.
+        foreach ($values as $fieldName => $value) {
+            if (($before[$fieldName] ?? '') !== $value) {
+                $changes[] = $label;
+            }
+        }
+        $remapped[$key] = $values;
+    }
+    requireCondition(count($existing) === 0, 'Unmanaged ' . $label . ' entry requires separate review');
+    $desired = $remapped;
+    // Build the candidate in memory for vendor validation; OXL performs the saves.
+    foreach ($container->iterateItems() as $key => $node) {
         $container->del($key);
     }
-    $after = [];
     foreach ($desired as $key => $values) {
-        $node = $container->add($key);
-        $node->setNodes($values);
-        $after[$key] = $node->getNodeContent();
-        unset($after[$key]['sort_order'], $after[$key]['prio_group']);
-    }
-    ksort($before);
-    ksort($after);
-    if ($before !== $after) {
-        $changes[] = $label;
+        $container->add($key)->setNodes($values);
     }
 }
 
@@ -186,13 +199,24 @@ try {
     removeValue($xml->interfaces->wan, 'blockpriv', $changes);
     removeValue($xml->interfaces->wan, 'blockbogons', $changes);
 
+    $legacyChanges = $changes;
+    // These two settings have no equivalent in the pinned OXL modules.
+    $nativeUnbound = new \OPNsense\Unbound\Unbound();
+    $beforeNative = $nativeUnbound->getNodeContent();
+    $nativeUnbound->setNodes(['forwarding'=>['enabled'=>'1'], 'acls'=>['default_action'=>'refuse']]);
+    if ($beforeNative !== $nativeUnbound->getNodeContent()) {
+        $changes[] = 'Unbound forwarding/default ACL';
+        $legacyChanges[] = 'Unbound forwarding/default ACL';
+    }
     $filter = new \OPNsense\Firewall\Filter();
+    $bootstrapRule = null;
     foreach (['snatrules', 'npt', 'onetoone'] as $section) {
         requireCondition(iterator_count($filter->$section->rule->iterateItems()) === 0, 'Unexpected NAT rule requires review');
     }
     foreach ($filter->rules->rule->iterateItems() as $key => $rule) {
         if ((string)$rule->description === 'Bootstrap MGMT to firewall') {
             requireCondition((string)$rule->interface === 'lan' && (string)$rule->source_net === 'lan' && (string)$rule->destination_net === '(self)' && (string)$rule->action === 'pass' && (string)$rule->ipprotocol === 'inet', 'Bootstrap rule conflicts');
+            $bootstrapRule = $key;
             $filter->rules->rule->del($key);
             $changes[] = 'bootstrap filter rule';
         }
@@ -231,7 +255,8 @@ try {
     if ($before !== $unbound->getNodeContent()) {
         $changes[] = 'Unbound settings';
     }
-    collection($unbound->acls->acl, [uuid('acl MGMT')=>['enabled'=>'1', 'name'=>'MGMT', 'action'=>'allow', 'networks'=>$cidr], uuid('acl loopback')=>['enabled'=>'1', 'name'=>'loopback', 'action'=>'allow', 'networks'=>'127.0.0.0/8,::1/128']], 'DNS access lists', $changes);
+    $acls = [uuid('acl MGMT')=>['enabled'=>'1', 'name'=>'MGMT', 'action'=>'allow', 'networks'=>$cidr], uuid('acl loopback')=>['enabled'=>'1', 'name'=>'loopback', 'action'=>'allow', 'networks'=>'127.0.0.0/8,::1/128']];
+    collection($unbound->acls->acl, $acls, 'DNS access lists', $changes);
     requireCondition(iterator_count($unbound->dots->dot->iterateItems()) === 0 && iterator_count($unbound->dnsbl->blocklist->iterateItems()) === 0 && iterator_count($unbound->aliases->alias->iterateItems()) === 0, 'Extra DNS forwarding, aliases or blocklist entries require review');
     $hosts = [];
     foreach ($input['dns_hosts'] as $host) {
@@ -260,8 +285,8 @@ try {
         $runtimeReady = $runtimeReady && str_contains($loadedDns, 'forward-addr: ' . $server);
     }
     $runtimeReady = $runtimeReady && str_contains($loadedDns, 'interface: ' . $address) && !str_contains($loadedDns, 'forward-first: yes');
-    $reload = count($changes) > 0 || !$runtimeReady || ($state['phase'] ?? '') !== 'complete' || ($state['digest'] ?? '') !== $digest;
-    $result = ['changed'=>count($changes) > 0, 'reload_required'=>$reload, 'changes'=>array_values(array_unique($changes)), 'management'=>$address, 'rule_count'=>count($rules), 'seed_id'=>$seed['seed_id']];
+    $reload = ($argv[3] ?? '') === 'api-change' || count($changes) > 0 || !$runtimeReady || ($state['phase'] ?? '') !== 'complete' || ($state['digest'] ?? '') !== $digest;
+    $result = ['rules'=>$rules, 'acls'=>array_values($acls), 'hosts'=>array_values($hosts), 'domain'=>(string)$xml->system->domain, 'bootstrap_rule'=>$bootstrapRule, 'changed'=>count($changes) > 0, 'reload_required'=>$reload, 'changes'=>array_values(array_unique($changes)), 'management'=>$address, 'rule_count'=>count($rules), 'seed_id'=>$seed['seed_id']];
 
     if (in_array($mode, ['verify', 'complete', 'network'], true)) {
         requireCondition(count($changes) === 0, 'Saved pilot configuration has drifted');
@@ -305,7 +330,7 @@ try {
         if (!file_exists($directory)) {
             requireCondition(mkdir($directory, 0700), 'Cannot create private pilot record directory');
         }
-        if (count($changes) === 0 && ($state['digest'] ?? '') === $digest) {
+        if (($state['phase'] ?? '') === 'pending' && ($state['digest'] ?? '') === $digest) {
             $backup = $state['backup'];
         } else {
             $backup = $directory . '/before-' . gmdate('Ymd\THis\Z') . '-' . bin2hex(random_bytes(4)) . '.xml';
@@ -316,9 +341,8 @@ try {
             fclose($handle);
         }
         writePrivate($statePath, ['seed_id'=>$seed['seed_id'], 'digest'=>$digest, 'phase'=>'pending', 'backup'=>$backup]);
-        if (count($changes) > 0) {
-            $filter->serializeToConfig(true);
-            $unbound->serializeToConfig(true);
+        if (count($legacyChanges) > 0) {
+            $nativeUnbound->serializeToConfig(true);
             $cnf->save(['description'=>'Ansible management pilot configuration']);
         }
         $result['backup'] = $backup;

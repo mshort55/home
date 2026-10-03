@@ -37,3 +37,7 @@ A normal repeat checks the archive hash and ISO signature again. A valid existin
 The repository-wide Vault prompt can appear even though this playbook loads no Vault credentials. Enter the password locally or disable that prompt for this credential-free command.
 
 Continue with [VM creation](create-opnsense-vm.md).
+
+## Collection scope
+
+This workflow prepares or verifies local installation media. `community.proxmox` manages an already running Proxmox API and OXL manages an already running OPNsense API; neither provides this media preparation operation. The native preparation and verification remain in place. Subsequent VM and firewall operations use the pinned community collections.

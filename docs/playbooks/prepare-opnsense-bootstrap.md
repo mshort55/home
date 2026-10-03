@@ -59,3 +59,7 @@ Identical inputs/password and intact output reuse the same ISO and host keys, re
 Keep the artifacts protected like a system backup. Possession of their SSH host private keys allows impersonating this guest. Never share or commit the DVD, keys, hash or settings.
 
 References: [OPNsense installation](https://docs.opnsense.org/manual/install.html), [virtual machine guidance](https://docs.opnsense.org/manual/virtuals.html), [vendor scriptable installer](https://github.com/opnsense/installer).
+
+## Collection scope
+
+This workflow prepares or verifies local installation media. `community.proxmox` manages an already running Proxmox API and OXL manages an already running OPNsense API; neither provides this media preparation operation. The native preparation and verification remain in place. Subsequent VM and firewall operations use the pinned community collections.

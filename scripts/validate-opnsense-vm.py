@@ -81,6 +81,8 @@ def validate(payload: dict[str, object]) -> bool:
     for device, expected in expected_networks.items():
         actual = properties(actual_networks[device], "model")
         target = mapping(expected)
+        # The community NIC module omits the disabled firewall default.
+        actual.setdefault("firewall", "0")
         if "virtio" in actual:
             actual["macaddr"] = actual.pop("virtio").lower()
             actual["model"] = "virtio"

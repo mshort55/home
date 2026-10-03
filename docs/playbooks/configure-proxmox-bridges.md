@@ -4,6 +4,7 @@
 
 ## Prerequisites
 
+- Run [Proxmox API enrollment](configure-proxmox-api.md) for `pve01` on this controller first.
 - Proxmox is installed with ifupdown2 and a working management bridge. Establish SSH host-key trust and install the administration machine's public key for root first.
 - The management bridge uses the installer configuration: static address and gateway, one physical port, STP off and forwarding delay zero.
 - `/etc/network/interfaces` includes `source /etc/network/interfaces.d/*`. Other snippets and unrelated auto interfaces require separate review; this workflow refuses them.
@@ -71,3 +72,7 @@ If SSH does not return, use the console and inspect the reload error. The playbo
 To revert the first creation, remove `/etc/network/interfaces.d/ansible-guest-bridges` and run `ifreload --all` from the console. If a snippet existed previously, restore `ansible-guest-bridges` from the reported recovery directory first. Restore the saved `interfaces` file only if it was subsequently changed. Reverting bridges with attached guests interrupts their networking.
 
 Keep these bridge definitions in the owned snippet. If editing networking through the Proxmox GUI, inspect its pending file and reconcile definitions before using this playbook again. Duplicate definitions, unrelated snippets and pending GUI changes require explicit network maintenance outside this bootstrap workflow.
+
+## Community API and file ownership
+
+`community.proxmox.proxmox_node_network_info` checks pending API changes and management identity. The writer remains an owned ifupdown2 snippet. `proxmox_node_network` stages and applies the node-wide network configuration; using it here would move definitions into the main file and break the guarantee that the installer management file stays unchanged. Changing that ownership with attached guests requires a separate network maintenance workflow. Live MAC/address/VLAN checks continue through SSH.

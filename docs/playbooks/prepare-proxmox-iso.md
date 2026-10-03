@@ -110,3 +110,7 @@ ANSIBLE_ASK_VAULT_PASS=False ansible-playbook \
 ```
 
 References: [Proxmox preparation tool](https://github.com/proxmox/pve-installer/tree/master/proxmox-auto-install-assistant), [official answer examples](https://github.com/proxmox/pve-installer/tree/master/proxmox-auto-installer/tests/resources/parse_answer), [Proxmox signed repositories and key checksum](https://github.com/proxmox/pve-docs/blob/master/pve-package-repos.adoc), [unattended installation](https://pve.proxmox.com/wiki/Automated_Installation).
+
+## Collection scope
+
+This workflow prepares or verifies local installation media. `community.proxmox` manages an already running Proxmox API and OXL manages an already running OPNsense API; neither provides this media preparation operation. The native preparation and verification remain in place. Subsequent VM and firewall operations use the pinned community collections.

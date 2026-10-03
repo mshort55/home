@@ -1,0 +1,78 @@
+---
+- name: Enroll the OPNsense API through seeded trusted SSH
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  tasks:
+    - name: Validate the controller export destination
+      ansible.builtin.include_tasks: tasks/prepare-community-api-directory.yml
+
+    - name: Validate and enroll the restricted API user and IP certificate
+      ansible.builtin.raw: "printf '%s' {{ lookup('ansible.builtin.file', playbook_dir ~ '/../scripts/enroll-opnsense-api.php') | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php -- {{ 'plan' if ansible_check_mode else 'apply' }} {{ ansible_host | quote }}"
+      register: api_enrollment
+      changed_when: (api_enrollment.stdout | trim | from_json).changed
+      check_mode: false
+      no_log: true
+
+    - name: Apply the selected GUI and API certificate
+      ansible.builtin.raw: /usr/local/sbin/configctl webgui restart
+      when: not ansible_check_mode and ((api_enrollment.stdout | trim | from_json).changed or (api_enrollment.stdout | trim | from_json).restart_required)
+      changed_when: true
+
+    - name: Read enrollment credentials and public certificate through pinned SSH
+      ansible.builtin.raw: "cat {{ item }}"
+      loop: [/conf/ansible-api/credentials.json, /conf/ansible-api/server.pem]
+      register: api_exports
+      changed_when: false
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Create the private controller enrollment directory
+      ansible.builtin.file:
+        path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}"
+        state: directory
+        mode: '0700'
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: not ansible_check_mode
+
+    - name: Export enrollment credentials and public trust without displaying them
+      ansible.builtin.copy:
+        dest: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/{{ item.name }}"
+        content: "{{ api_exports.results[item.index].stdout | trim }}\n"
+        mode: '0600'
+      loop:
+        - {name: credentials.json, index: 0}
+        - {name: ca.pem, index: 1}
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      diff: false
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Load the enrolled OPNsense API
+      ansible.builtin.include_tasks: tasks/load-community-api.yml
+      vars:
+        community_api_host: "{{ inventory_hostname }}"
+        community_api_var: opn_api
+      when: not ansible_check_mode
+
+    - name: Verify trusted API authentication using OXL
+      oxlorg.opnsense.list:
+        firewall: "{{ opn_api.firewall }}"
+        api_key: "{{ opn_api.api_key }}"
+        api_secret: "{{ opn_api.api_secret }}"
+        ssl_verify: true
+        ssl_ca_file: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+        target: rule
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      retries: 12
+      delay: 5
+      register: api_probe
+      until: api_probe is succeeded
+      when: not ansible_check_mode

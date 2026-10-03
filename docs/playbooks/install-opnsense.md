@@ -4,6 +4,8 @@
 
 ## Prerequisites
 
+Run [Proxmox API enrollment](configure-proxmox-api.md) for `pve01` on this controller before VM operations. After installation, run [OPNsense API enrollment](configure-opnsense-api.md) for `opnsense01` before applying the pilot policy.
+
 - Create the VM using [create-opnsense-vm.yml](create-opnsense-vm.md).
 - Prepare [private bootstrap media](prepare-opnsense-bootstrap.md) on the same controller.
 - Keep the five VM MACs/bridges/tags unchanged, WAN disconnected and automatic startup disabled.
@@ -46,3 +48,9 @@ A live session with a partitioned disk or an installation lock but no recorded c
 Preserve the failure output and installation records for inspection. Guest installer diagnostics are `/var/log/ansible-install.log` and `/var/log/installer.log`. Do not delete records or partitions merely to force a rerun. The workflow does not erase an incomplete installation or provide an automatic reinstall operation.
 
 The guest remains at a management bootstrap: HOME/DEV/BMC disabled, no configured DHCP/DNS or forwarding policy, WAN link disconnected. Configure those services through a separate Ansible workflow after installation verification.
+
+## Community modules and installer scope
+
+VM readback uses `community.proxmox.proxmox_vm_info`; DVD changes use `proxmox_disk` with `create: disabled`; power operations use `proxmox_kvm`. Shutdown is graceful with `force: false` and a bounded timeout. These operations retain the installation record and hardware checks. The private bootstrap DVD still transfers through SSH with mode 0600, avoiding publicly readable installation credentials. Vendor ZFS installation, seed generation, blank-disk checks and pinned guest SSH verification remain native because neither community collection installs OPNsense or provisions a live installer.
+
+A completed, running installation can be verified with WAN connected. The saved phase must be `complete` and current WAN state must match inventory; this path runs no installer, media or power change. A first or incomplete installation still requires disconnected WAN.

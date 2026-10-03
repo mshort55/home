@@ -13,7 +13,22 @@
     pilot_settings: "{{ hostvars[opnsense_guest].opnsense_pilot }}"
     pilot_code: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../scripts/configure-opnsense-pilot.php') | b64encode }}"
     pilot_prefix: "printf '%s' {{ pilot_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: "{{ pve_api.api_host }}"
+      api_user: "{{ pve_api.api_user }}"
+      api_token_id: "{{ pve_api.api_token_id }}"
+      api_token_secret: "{{ pve_api.api_token_secret }}"
+      validate_certs: true
+      ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+      api_timeout: 30
   tasks:
+    - name: Load the enrolled guest API
+      ansible.builtin.include_tasks: tasks/load-community-api.yml
+      vars:
+        community_api_host: "{{ opnsense_guest }}"
+        community_api_var: opn_api
+
     - name: Require the installed guest and explicitly selected pilot inputs
       ansible.builtin.assert:
         that:
@@ -60,12 +75,25 @@
           wan: Connect the owned WAN vNIC only after saved configuration and loaded firewall and DNS checks pass
           scope: MGMT DNS/NTP and named administration/update hosts; HOME/DEV/BMC stay disabled and no DHCP server is enabled
 
+    - name: Preview firewall and DNS with the community modules
+      ansible.builtin.include_tasks:
+        file: tasks/configure-opnsense-policy.yml
+        apply:
+          check_mode: true
+      vars:
+        pilot_reload_required: false
+        pilot_policy_preview: true
+
+    - name: Select whether the API preview requires a configuration transaction
+      ansible.builtin.set_fact:
+        pilot_api_change: "{{ pilot_rule_changes.changed or pilot_bootstrap_change.changed | default(false) or pilot_dns_general_change.changed or pilot_dns_acl_changes.changed or pilot_dns_host_changes.changed }}"
+
     - name: Finish the read-only preview before guest or VM writes
       ansible.builtin.meta: end_host
       when: ansible_check_mode
 
     - name: Save validated pilot settings and a protected pre-change backup
-      ansible.builtin.raw: "{{ pilot_prefix }} apply {{ pilot_payload | to_json | b64encode | quote }}"
+      ansible.builtin.raw: "{{ pilot_prefix }} apply {{ pilot_payload | to_json | b64encode | quote }} {{ 'api-change' if pilot_api_change else 'no-api-change' }}"
       delegate_to: "{{ opnsense_guest }}"
       register: pilot_apply
       changed_when: pilot_apply.rc == 0 and (pilot_apply.stdout | trim | from_json).changed
@@ -115,11 +143,12 @@
       no_log: true
       when: pilot_reload_required
 
-    - name: Generate and load firewall rules and management DNS and time services
+    - name: Apply firewall and DNS through OXL
+      ansible.builtin.include_tasks: tasks/configure-opnsense-policy.yml
+
+    - name: Apply native time and resolver settings
       ansible.builtin.raw: "{{ item }}"
       loop:
-        - /usr/local/sbin/configctl filter reload
-        - /usr/local/sbin/configctl unbound restart
         - /usr/local/sbin/pluginctl -s ntpd restart
         - /usr/local/bin/php -r 'require_once("config.inc"); require_once("util.inc"); require_once("system.inc"); system_resolvconf_generate();'
       delegate_to: "{{ opnsense_guest }}"
@@ -141,25 +170,26 @@
       changed_when: pilot_reload_required
 
     - name: Recheck current and pending VM hardware and running state before WAN attachment
-      ansible.builtin.command:
-        argv: "{{ item }}"
-      loop:
-        - [pvesh, get, /nodes/localhost/qemu/100/config, --current, '1', --output-format, json]
-        - [pvesh, get, /nodes/localhost/qemu/100/config, --current, '0', --output-format, json]
-        - [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: "{{ item }}"
+        network: false
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       register: pilot_host
-      changed_when: false
+      loop: [current, pending]
 
     - name: Refuse concurrent pending changes or a stopped VM
       ansible.builtin.assert:
         that:
-          - pilot_host.results[0].stdout | from_json == pilot_host.results[1].stdout | from_json
-          - (pilot_host.results[2].stdout | from_json).status == 'running'
+          - pilot_host.results[0].proxmox_vms[0].config == pilot_host.results[1].proxmox_vms[0].config
+          - pilot_host.results[0].proxmox_vms[0].status == 'running'
 
     - name: Validate unchanged owned VM hardware before changing only the WAN link
       ansible.builtin.command:
         argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/../scripts/validate-opnsense-vm.py"]
-        stdin: "{{ {'config': pilot_host.results[0].stdout | from_json, 'desired': opnsense_expected} | to_json }}"
+        stdin: "{{ {'config': pilot_host.results[0].proxmox_vms[0].config, 'desired': opnsense_expected} | to_json }}"
       delegate_to: localhost
       vars:
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
@@ -167,20 +197,34 @@
       changed_when: false
 
     - name: Connect only the verified owned WAN vNIC to the existing Fortinet pilot
-      ansible.builtin.command:
-        argv: [qm, set, '100', --net0, "{{ opnsense_wan_argument }}"]
+      community.proxmox.proxmox_nic:
+        vmid: "{{ opnsense_vm.vmid }}"
+        interface: net0
+        model: virtio
+        mac: "{{ opnsense_vm.networks[0].mac }}"
+        bridge: "{{ opnsense_vm.networks[0].bridge }}"
+        firewall: false
+        link_down: "{{ not opnsense_vm.wan_connected }}"
+        state: present
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       when: (pilot_wan_validation.stdout | from_json).wan_link_change
 
     - name: Read current VM hardware after the WAN link transition
-      ansible.builtin.command:
-        argv: [pvesh, get, /nodes/localhost/qemu/100/config, --current, '1', --output-format, json]
+      community.proxmox.proxmox_vm_info:
+        vmid: "{{ opnsense_vm.vmid }}"
+        config: current
+        network: false
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
       register: pilot_final_hardware
-      changed_when: false
 
     - name: Verify the exact requested WAN state and preserved VM hardware
       ansible.builtin.command:
         argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/../scripts/validate-opnsense-vm.py"]
-        stdin: "{{ {'config': pilot_final_hardware.stdout | from_json, 'desired': opnsense_expected} | to_json }}"
+        stdin: "{{ {'config': pilot_final_hardware.proxmox_vms[0].config, 'desired': opnsense_expected} | to_json }}"
       delegate_to: localhost
       vars:
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
