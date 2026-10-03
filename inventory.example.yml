@@ -89,6 +89,7 @@ all:
             disk_storage: local-lvm
             iso_storage: local
             onboot: false
+            # Set true after installation/pilot setup for configure-proxmox-boot.yml.
             wan_connected: false
             networks:
               - {device: net0, role: WAN, bridge: vmbr2, mac: '02:77:00:00:64:00'}

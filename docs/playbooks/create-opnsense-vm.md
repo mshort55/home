@@ -34,7 +34,7 @@ opnsense_vm:
 
 Use unique locally administered MACs and retain them across repeat runs. Every guest NIC uses VirtIO and disables the Proxmox VM NIC firewall. Internal NICs have individual tags; the guest sees untagged Ethernet and does not create additional VLAN subinterfaces for these four connections.
 
-The VM uses Q35, OVMF UEFI without pre-enrolled Secure Boot keys, CPU type `host`, one socket, fixed RAM with ballooning disabled, VirtIO SCSI Single and `cache=none` with an I/O thread. Discard remains disabled. Boot uses the modern explicit order `scsi0;ide2`: an installed system disk takes priority over the DVD. Startup order is 1, with 30 seconds before the next VM starts and a 120-second shutdown timeout. Automatic host-boot startup is disabled during installation; enabling it after bootstrap is a separate reviewed setting.
+The VM uses Q35, OVMF UEFI without pre-enrolled Secure Boot keys, CPU type `host`, one socket, fixed RAM with ballooning disabled, VirtIO SCSI Single and `cache=none` with an I/O thread. Discard remains disabled. Boot uses the modern explicit order `scsi0;ide2`: an installed system disk takes priority over the DVD. Startup order is 1, with 30 seconds before the next VM starts and a 120-second shutdown timeout. Automatic host-boot startup is disabled during installation; [configure-proxmox-boot.yml](configure-proxmox-boot.md) enables it after installation and connected pilot verification. Change the inventory setting to true for that workflow; VM creation/verification then requires the enabled setting to match.
 
 ## Preview and create
 

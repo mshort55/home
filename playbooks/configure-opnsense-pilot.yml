@@ -41,7 +41,6 @@
           - pilot_settings.ntp_servers | length > 0
           - pilot_settings.dns_hosts is sequence
           - opnsense_vm.wan_connected is sameas true
-          - opnsense_vm.onboot is sameas false
         fail_msg: Define management pilot inputs on the guest and select a connected pilot WAN in the Proxmox VM inventory.
 
     - name: Build the installed MAC and role identities

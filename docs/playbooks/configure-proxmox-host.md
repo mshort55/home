@@ -58,7 +58,7 @@ The APT task uses a full dependency-resolving upgrade within the configured rele
 
 After normal repository or package work, the playbook checks source convergence, the Proxmox meta-package, package health, and identical hashes for Debian sources, host network files and storage definitions, plus an unchanged management default route. It verifies Proxmox services and trusted API access, and requires the firewall VM to retain identical current/pending configuration and running power state. It sends no VM start/stop or host network reload request. Package installation scripts may restart host services; API checks retry while they return.
 
-The report includes the running kernel, newest installed Proxmox kernel and whether a newer kernel or Debian reboot marker indicates pending reboot work. It performs no host reboot. Plan any required reboot as separate maintenance with console recovery and verified firewall startup behavior; the pilot's firewall may still have automatic startup disabled.
+The report includes the running kernel, newest installed Proxmox kernel and whether a newer kernel or Debian reboot marker indicates pending reboot work. It performs no host reboot. Use [configure-proxmox-boot.yml](configure-proxmox-boot.md) to enable startup for the installed firewall and explicitly request a required maintenance reboot with recovery checks.
 
 A repeat run converges repository files and packages. Cache refresh can report a change when its age expires. An immediate repeated upgrade preview should report no package changes after successful application, unless repository content or installed state changed meanwhile.
 

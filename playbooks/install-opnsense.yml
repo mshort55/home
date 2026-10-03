@@ -30,10 +30,9 @@
           - opnsense_guest in groups.get('opnsense_hosts', [])
           - hostvars[opnsense_guest].opnsense_proxmox_host == inventory_hostname
           - not opnsense_wan_change
-          - opnsense_vm.onboot is sameas false
           - opnsense_allocations | length == 1
           - inventory_hostname is match('^[A-Za-z0-9_-]+$')
-        fail_msg: This entry point requires the owned VM and automatic startup disabled; a connected WAN is allowed only for a completed running installation.
+        fail_msg: This entry point requires the owned VM; connected WAN or automatic startup is allowed only for a completed running installation.
 
     - name: Inspect private controller bootstrap files
       ansible.builtin.stat:
@@ -149,7 +148,7 @@
           - install_previous | length == 0 or install_previous.intent == install_intent
           - install_previous | length == 0 or install_previous.phase in ['started', 'disk_written', 'complete']
           - install_previous | length > 0 or install_vm_state == 'stopped'
-          - not opnsense_vm.wan_connected or (install_previous.phase | default('') == 'complete' and install_vm_state == 'running')
+          - not (opnsense_vm.wan_connected or opnsense_vm.onboot) or (install_previous.phase | default('') == 'complete' and install_vm_state == 'running')
           - install_cdrom.split(',')[0] in [opnsense_bootstrap_volume, 'none', opnsense_expected.iso_volume]
         fail_msg: Existing installation ownership, state or media requires inspection; no disk is replaced.
 

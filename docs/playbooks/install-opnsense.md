@@ -1,6 +1,6 @@
 # Install OPNsense through Ansible
 
-`playbooks/install-opnsense.yml` installs ZFS on the single empty 32 GiB disk of the owned OPNsense VM, then boots and verifies the installed system over pinned SSH. It uses Proxmox's root SSH connection for VM operations and the guest's inventory SSH connection for the vendor installer components. It requires no guest Python or Proxmox API token and does not use simulated console keystrokes.
+`playbooks/install-opnsense.yml` installs ZFS on the single empty 32 GiB disk of the owned OPNsense VM, then boots and verifies the installed system over pinned SSH. It uses the enrolled Proxmox API for VM media and power operations, trusted host SSH for protected files/storage checks, and the guest's inventory SSH connection for the vendor installer components. It requires no guest Python and does not use simulated console keystrokes.
 
 ## Prerequisites
 
@@ -8,7 +8,7 @@ Run [Proxmox API enrollment](configure-proxmox-api.md) for `pve01` on this contr
 
 - Create the VM using [create-opnsense-vm.yml](create-opnsense-vm.md).
 - Prepare [private bootstrap media](prepare-opnsense-bootstrap.md) on the same controller.
-- Keep the five VM MACs/bridges/tags unchanged, WAN disconnected and automatic startup disabled.
+- Keep the five VM MACs/bridges/tags unchanged, WAN disconnected and automatic startup disabled during initial or incomplete installation. A completed running installation may be verified with WAN connected and automatic startup enabled by [configure-proxmox-boot.yml](configure-proxmox-boot.md).
 - The first installation requires a stopped VM, no previous installation record, an owned 32 GiB system disk and zero bytes at both the first and last 2 MiB of that disk. Inside the live guest, the installer also requires exactly one non-optical disk, `da0`, with the expected size and no existing partition table.
 - The controller must reach both Proxmox and the guest's management subnet and possess a private key corresponding to a public key included in the seed. Standard Ansible SSH key selection applies; specify `ansible_ssh_private_key_file` in private inventory if needed.
 
@@ -53,4 +53,4 @@ The guest remains at a management bootstrap: HOME/DEV/BMC disabled, no configure
 
 VM readback uses `community.proxmox.proxmox_vm_info`; DVD changes use `proxmox_disk` with `create: disabled`; power operations use `proxmox_kvm`. Shutdown is graceful with `force: false` and a bounded timeout. These operations retain the installation record and hardware checks. The private bootstrap DVD still transfers through SSH with mode 0600, avoiding publicly readable installation credentials. Vendor ZFS installation, seed generation, blank-disk checks and pinned guest SSH verification remain native because neither community collection installs OPNsense or provisions a live installer.
 
-A completed, running installation can be verified with WAN connected. The saved phase must be `complete` and current WAN state must match inventory; this path runs no installer, media or power change. A first or incomplete installation still requires disconnected WAN.
+A completed, running installation can be verified with WAN connected and automatic startup enabled. The saved phase must be `complete` and current WAN/startup state must match inventory; this path runs no installer, media or power change. A first or incomplete installation still requires disconnected WAN and disabled automatic startup.
