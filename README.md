@@ -72,3 +72,4 @@ Playbooks run only when explicitly invoked; Git pushes do not apply configuratio
 | iDRAC ISO mounting and native Mac image hosting | [Mount an ISO](docs/playbooks/mount-idrac-iso.md) |
 | iDRAC one-time virtual DVD boot and power on | [Boot a mounted ISO](docs/playbooks/boot-idrac-iso.md) |
 | Private unattended Proxmox ISO preparation | [Prepare a Proxmox ISO](docs/playbooks/prepare-proxmox-iso.md) |
+| Proxmox guest LAN and WAN bridges over SSH | [Configure Proxmox bridges](docs/playbooks/configure-proxmox-bridges.md) |

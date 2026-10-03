@@ -78,6 +78,16 @@ all:
         pve01:
           ansible_host: 10.77.10.10
           proxmox_idrac_host: idrac01
+          proxmox_network:
+            management:
+              bridge: vmbr0
+              port: eno1
+              mac: '02:00:00:00:00:10'
+              address: 10.77.10.10/24
+              gateway: 10.77.10.254
+            guest_bridges:
+              - {name: vmbr1, port: eno2, mac: '02:00:00:00:00:11', vlan_aware: true, vlans: [10, 20, 30, 40]}
+              - {name: vmbr2, port: eno3, mac: '02:00:00:00:00:12', vlan_aware: false}
           proxmox_install:
             source_iso: "{{ inventory_dir }}/.cache/iso/installer.iso"
             source_sha256: '<expected lowercase original ISO SHA-256>'
@@ -99,3 +109,4 @@ all:
       vars:
         ansible_connection: ssh
         ansible_user: root
+        ansible_python_interpreter: /usr/bin/python3
