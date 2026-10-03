@@ -73,3 +73,29 @@ all:
         ansible_connection: local
         ansible_python_interpreter: "{{ ansible_playbook_python }}"
         idrac_ca_path: "{{ inventory_dir }}/secrets/idrac-ca.pem"
+    proxmox_hosts:
+      hosts:
+        pve01:
+          ansible_host: 10.77.10.10
+          proxmox_idrac_host: idrac01
+          proxmox_install:
+            source_iso: "{{ inventory_dir }}/.cache/iso/installer.iso"
+            source_sha256: '<expected lowercase original ISO SHA-256>'
+            fqdn: pve01.lab.home.arpa
+            mailto: admin@example.test
+            country: us
+            keyboard: en-us
+            timezone: UTC
+            cidr: 10.77.10.10/24
+            gateway: 10.77.10.254
+            dns: 10.77.10.254
+            disk_serial: '<exact observed ID_SERIAL>'
+            management_mac: '02:00:00:00:00:10'
+            maxroot: 96
+            swapsize: 8
+            minfree: 32
+            ssh_public_key_files:
+              - "{{ inventory_dir }}/.cache/proxmox-installer-inputs/admin.pub"
+      vars:
+        ansible_connection: ssh
+        ansible_user: root

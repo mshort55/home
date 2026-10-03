@@ -1,0 +1,370 @@
+---
+- name: Set one-time virtual DVD boot and power on an offline server
+  hosts: idracs
+  gather_facts: false
+  become: false
+  serial: 1
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    vault_file: "{{ playbook_dir }}/../secrets/vault.yml"
+    backup_root: "{{ playbook_dir }}/../backups"
+    boot_iso_port: "{{ idrac_iso_port | default(8080) }}"
+    boot_manager_path: /redfish/v1/Managers/iDRAC.Embedded.1
+    boot_system_path: /redfish/v1/Systems/System.Embedded.1
+    boot_bios_path: /redfish/v1/Systems/System.Embedded.1/Bios
+    boot_settings_path: /redfish/v1/Systems/System.Embedded.1/Bios/Settings
+    boot_media_path: /redfish/v1/Managers/iDRAC.Embedded.1/VirtualMedia/CD
+    boot_identity_path: /redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/iDRAC.Embedded.1%23NIC.1
+    boot_jobs_path: /redfish/v1/Managers/iDRAC.Embedded.1/Jobs
+    boot_import_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ImportSystemConfiguration
+    boot_reset_path: /redfish/v1/Systems/System.Embedded.1/Actions/ComputerSystem.Reset
+    boot_image_url: "http://{{ idrac_iso_bind_address }}:{{ boot_iso_port }}/{{ idrac_iso_path | basename | urlencode }}"
+    boot_profile: >-
+      <SystemConfiguration><Component FQDD="iDRAC.Embedded.1"><Attribute Name="ServerBoot.1#BootOnce">Enabled</Attribute><Attribute Name="ServerBoot.1#FirstBootDevice">vCD-DVD</Attribute></Component></SystemConfiguration>
+  vars_files:
+    - "{{ vault_file }}"
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30
+  tasks:
+    - name: Require exact local ISO and device identity inputs
+      ansible.builtin.assert:
+        that:
+          - idrac_iso_boot_operation | default('boot') in ['boot', 'verify']
+          - inventory_hostname is match('^[A-Za-z0-9_-]+$')
+          - idrac_expected_mac is match('^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
+          - idrac_iso_path is string and idrac_iso_path.startswith('/')
+          - idrac_iso_path | basename is match('^[A-Za-z0-9_.-]+[.]iso$')
+          - idrac_iso_sha256 is match('^[0-9a-f]{64}$')
+          - idrac_iso_bind_address is match('^(?:[0-9]{1,3}[.]){3}[0-9]{1,3}$')
+          - boot_iso_port is integer and 1024 <= boot_iso_port <= 65535
+        fail_msg: Supply the same local ISO path, checksum, hosting address and expected iDRAC MAC used to mount the image.
+
+    - name: Verify the selected local ISO without changing it
+      ansible.builtin.stat:
+        path: "{{ idrac_iso_path }}"
+        follow: false
+        checksum_algorithm: sha256
+      register: boot_iso
+      no_log: true
+
+    - name: Require the expected original or prepared ISO bytes
+      ansible.builtin.assert:
+        that:
+          - boot_iso.stat.isreg | default(false)
+          - not boot_iso.stat.islnk | default(false)
+          - boot_iso.stat.size | default(0) > 0
+          - boot_iso.stat.checksum | default('') == idrac_iso_sha256
+        fail_msg: The selected local ISO is missing, empty, a symlink or has an unexpected checksum.
+
+    - name: Verify an existing boot record without another boot request
+      ansible.builtin.include_tasks: tasks/verify-idrac-iso-boot.yml
+      when: idrac_iso_boot_operation | default('boot') == 'verify'
+
+    - name: Finish the verification operation before any boot requests
+      ansible.builtin.meta: end_host
+      when: idrac_iso_boot_operation | default('boot') == 'verify'
+
+    - name: Read current system, BIOS, DVD, device identity and jobs
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}{{ item }}"
+        status_code: 200
+      loop: "{{ [boot_manager_path, boot_system_path, boot_bios_path, boot_settings_path, boot_media_path, boot_identity_path, boot_jobs_path] }}"
+      register: boot_before
+      check_mode: false
+      no_log: true
+
+    - name: Select the advertised Dell import action
+      ansible.builtin.set_fact:
+        boot_import_actions: "{{ boot_before.results[0].json.Actions.Oem | dict2items | selectattr('key', 'search', '#OemManager.ImportSystemConfiguration$') | map(attribute='value') | list }}"
+      no_log: true
+
+    - name: Require an offline UEFI server with the exact mounted read-only DVD
+      ansible.builtin.assert:
+        that:
+          - boot_before.results[5].json.MACAddress | lower == idrac_expected_mac | lower
+          - boot_before.results[1].json['@odata.id'] == boot_system_path
+          - boot_before.results[1].json.PowerState == 'Off'
+          - boot_before.results[1].json.Boot.BootSourceOverrideTarget in ['None', 'Cd']
+          - boot_before.results[1].json.Boot.BootSourceOverrideEnabled in ['Disabled', 'Once']
+          - boot_before.results[1].json.Boot.BootSourceOverrideMode == 'UEFI'
+          - boot_before.results[2].json.Attributes.BootMode == 'Uefi'
+          - boot_before.results[2].json['@Redfish.Settings'].SettingsObject['@odata.id'] == boot_settings_path
+          - boot_before.results[4].json['@odata.id'] == boot_media_path
+          - boot_before.results[4].json.Inserted is sameas true
+          - boot_before.results[4].json.WriteProtected is sameas true
+          - boot_before.results[4].json.Image == boot_image_url
+          - boot_import_actions | length == 1
+          - boot_import_actions[0].target == boot_import_path
+          - "'IDRAC' in boot_import_actions[0].ShareParameters['Target@Redfish.AllowableValues']"
+          - boot_before.results[1].json.Actions['#ComputerSystem.Reset'].target == boot_reset_path
+          - "'On' in boot_before.results[1].json.Actions['#ComputerSystem.Reset']['ResetType@Redfish.AllowableValues']"
+        fail_msg: Boot requires the expected offline UEFI server and already-mounted image. Inspect current boot/media state; this workflow never shuts down or restarts a running server.
+      no_log: true
+
+    - name: Refuse pending BIOS differences that would apply during boot
+      ansible.builtin.assert:
+        that:
+          - item.key in boot_before.results[2].json.Attributes
+          - item.value == boot_before.results[2].json.Attributes[item.key]
+        fail_msg: Pending BIOS changes need separate review before booting.
+      loop: "{{ boot_before.results[3].json.Attributes | dict2items }}"
+      no_log: true
+
+    - name: Require a complete bounded job collection and safe job links
+      ansible.builtin.assert:
+        that:
+          - boot_before.results[6].json.Members | length <= 64
+          - boot_before.results[6].json['Members@odata.count'] == boot_before.results[6].json.Members | length
+          - "'Members@odata.nextLink' not in boot_before.results[6].json"
+      no_log: true
+
+    - name: Validate each job link before sending credentials
+      ansible.builtin.assert:
+        that: item['@odata.id'] is match('^/redfish/v1/Managers/iDRAC[.]Embedded[.]1/Jobs/[A-Za-z0-9_-]+$')
+      loop: "{{ boot_before.results[6].json.Members }}"
+      no_log: true
+
+    - name: Read existing job states
+      ansible.builtin.uri:
+        url: "https://{{ ansible_host }}{{ item['@odata.id'] }}"
+        status_code: 200
+      loop: "{{ boot_before.results[6].json.Members }}"
+      register: boot_jobs
+      check_mode: false
+      no_log: true
+
+    - name: Refuse unfinished or unknown jobs
+      ansible.builtin.assert:
+        that: item.json.JobState in ['Completed', 'Failed', 'RebootCompleted', 'Completed with Errors']
+        fail_msg: Inspect unfinished or unknown jobs before booting.
+      loop: "{{ boot_jobs.results }}"
+      no_log: true
+
+    - name: Verify the existing ISO host without sending iDRAC credentials
+      ansible.builtin.uri:
+        url: "{{ boot_image_url }}"
+        url_username: ''
+        url_password: ''
+        force_basic_auth: false
+        headers:
+          Range: bytes=0-0
+        return_content: false
+        status_code: 206
+      register: boot_host
+      check_mode: false
+      no_log: true
+
+    - name: Require the expected hosted file size and checksum ETag
+      ansible.builtin.assert:
+        that:
+          - boot_host.content_range == 'bytes 0-0/' ~ (boot_iso.stat.size | string)
+          - boot_host.etag == '"' ~ idrac_iso_sha256 ~ '"'
+        fail_msg: The mounted image hosting service is unavailable or serves different ISO bytes.
+
+    - name: Report the one-time boot preview
+      ansible.builtin.debug:
+        msg:
+          image: "{{ idrac_iso_path | basename }}"
+          boot_device: Virtual CD/DVD
+          boot_once: true
+          power_action: On
+          scope: No writes in check mode. A normal run boots the mounted image; an unattended installer can format its selected disk.
+      when: ansible_check_mode
+
+    - name: Finish the read-only preview before device writes
+      ansible.builtin.meta: end_host
+      when: ansible_check_mode
+
+    - name: Create the private boot record parent
+      ansible.builtin.file:
+        path: "{{ backup_root }}"
+        state: directory
+        mode: '0700'
+
+    - name: Allocate a fresh private boot record
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ backup_root }}"
+        prefix: "{{ inventory_hostname }}-iso-boot-{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-"
+      register: boot_directory
+
+    - name: Record the selected image and state before submission
+      ansible.builtin.copy:
+        dest: "{{ boot_directory.path }}/before.json"
+        mode: '0600'
+        content: "{{ {'image': boot_image_url, 'iso_sha256': idrac_iso_sha256, 'power_state': boot_before.results[1].json.PowerState, 'boot': boot_before.results[1].json.Boot, 'profile': boot_profile} | to_nice_json }}\n"
+      no_log: true
+      diff: false
+
+    - name: Report the boot recovery record location
+      ansible.builtin.debug:
+        msg: "Boot records: {{ boot_directory.path }}"
+
+    - name: Submit the Dell virtual DVD boot profile once
+      block:
+        - name: Set only one-time virtual DVD boot through an iDRAC-only import
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host }}{{ boot_import_path }}"
+            method: POST
+            body_format: json
+            body:
+              ShareParameters:
+                Target: IDRAC
+              ImportBuffer: "{{ boot_profile }}"
+            status_code: 202
+          register: boot_import
+          changed_when: true
+          no_log: true
+      always:
+        - name: Preserve the import response without request credentials
+          ansible.builtin.copy:
+            dest: "{{ boot_directory.path }}/import-submission.json"
+            mode: '0600'
+            content: "{{ {'http_status': boot_import.status | default(0), 'location': boot_import.location | default(''), 'body': boot_import.json | default({})} | to_nice_json }}\n"
+          no_log: true
+          diff: false
+
+    - name: Require an import task on the verified iDRAC origin
+      ansible.builtin.assert:
+        that:
+          - boot_import.location | default('') is match('^(https://' ~ (ansible_host | regex_escape) ~ ')?/redfish/v1/TaskService/Tasks/[A-Za-z0-9_.-]+$')
+        fail_msg: Unexpected import task URL; inspect the saved submission before any retry.
+      no_log: true
+
+    - name: Normalize the verified import task URL
+      ansible.builtin.set_fact:
+        boot_task_url: "{{ boot_import.location if boot_import.location.startswith('https://') else 'https://' ~ ansible_host ~ boot_import.location }}"
+      no_log: true
+
+    - name: Wait for completed boot configuration before any separate power request
+      block:
+        - name: Poll the one-time boot import task with a bounded wait
+          ansible.builtin.uri:
+            url: "{{ boot_task_url }}"
+            status_code: [200, 202]
+          register: boot_task
+          until: >-
+            boot_task.status | default(0) not in [200, 202] or
+            (boot_task.json | default({})).get('TaskState', '') in
+            ['Completed', 'Exception', 'Killed', 'Cancelled', 'Interrupted', 'Suspended'] or
+            (boot_task.json | default({}) | to_json) is search('(?i)waiting\s+(?:for|on)\s+(?:a\s+)?(?:system\s+)?(?:reboot|shutdown)')
+          retries: 24
+          delay: 5
+          no_log: true
+      always:
+        - name: Preserve the last import task response
+          ansible.builtin.copy:
+            dest: "{{ boot_directory.path }}/import-task.json"
+            mode: '0600'
+            content: "{{ {'http_status': boot_task.status | default(0), 'body': boot_task.json | default({})} | to_nice_json }}\n"
+          no_log: true
+          diff: false
+
+    - name: Require successful completed boot configuration
+      ansible.builtin.assert:
+        that:
+          - boot_task.json.TaskState == 'Completed'
+          - boot_task.json.TaskStatus in ['OK', 'Ok']
+        fail_msg: Boot import did not complete cleanly. No separate power request was sent; inspect import-task.json and current power state before any retry.
+
+    - name: Recheck and preserve power and DVD state after import
+      block:
+        - name: Read system and DVD state after the completed import
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host }}{{ item }}"
+            status_code: 200
+          loop: "{{ [boot_system_path, boot_media_path] }}"
+          register: boot_ready
+          no_log: true
+      always:
+        - name: Preserve post-import state without request credentials
+          ansible.builtin.copy:
+            dest: "{{ boot_directory.path }}/ready.json"
+            mode: '0600'
+            content: "{{ boot_ready.results | default([]) | map(attribute='json', default={}) | list | to_nice_json }}\n"
+          no_log: true
+          diff: false
+
+    - name: Require unchanged media and a stable off or on power state
+      ansible.builtin.assert:
+        that:
+          - boot_ready.results[0].json['@odata.id'] == boot_system_path
+          - boot_ready.results[0].json.PowerState in ['Off', 'On']
+          - boot_ready.results[1].json['@odata.id'] == boot_media_path
+          - boot_ready.results[1].json.Inserted is sameas true
+          - boot_ready.results[1].json.WriteProtected is sameas true
+          - boot_ready.results[1].json.Image == boot_image_url
+      no_log: true
+
+    - name: Determine whether a separate power-on request is still needed
+      ansible.builtin.set_fact:
+        boot_needs_power_on: "{{ boot_ready.results[0].json.PowerState == 'Off' }}"
+
+    - name: Record whether power on is needed before any separate request
+      ansible.builtin.copy:
+        dest: "{{ boot_directory.path }}/power-intent.json"
+        mode: '0600'
+        content: "{{ {'reset_type': 'On' if boot_needs_power_on else none, 'import_task': boot_task_url, 'status': 'submission_pending' if boot_needs_power_on else 'already_on', 'power_state_after_import': boot_ready.results[0].json.PowerState, 'image': boot_image_url} | to_nice_json }}\n"
+      diff: false
+
+    - name: Power on only if still off and verify the reported power state
+      block:
+        - name: Submit the advertised power-on action once
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host }}{{ boot_reset_path }}"
+            method: POST
+            body_format: json
+            body:
+              ResetType: 'On'
+            status_code: [200, 202, 204]
+          register: boot_power
+          when: boot_needs_power_on
+          changed_when: true
+          no_log: true
+
+        - name: Wait for the server to report powered on
+          ansible.builtin.uri:
+            url: "https://{{ ansible_host }}{{ boot_system_path }}"
+            status_code: 200
+          register: boot_after
+          until: boot_after.status | default(0) != 200 or (boot_after.json | default({})).get('PowerState', '') == 'On'
+          retries: 12
+          delay: 5
+          no_log: true
+      always:
+        - name: Preserve power responses without request credentials
+          ansible.builtin.copy:
+            dest: "{{ boot_directory.path }}/power-result.json"
+            mode: '0600'
+            content: "{{ {'submission': {'submitted': boot_needs_power_on, 'http_status': boot_power.status | default(0), 'body': boot_power.json | default({})}, 'read_back': {'http_status': boot_after.status | default(0), 'body': boot_after.json | default({})}} | to_nice_json }}\n"
+          no_log: true
+          diff: false
+
+    - name: Require the verified powered-on state
+      ansible.builtin.assert:
+        that:
+          - boot_after.json.PowerState == 'On'
+          - boot_after.json['@odata.id'] == boot_system_path
+      no_log: true
+
+    - name: Record completed boot submission without claiming OS installation
+      ansible.builtin.copy:
+        dest: "{{ boot_directory.path }}/completion.json"
+        mode: '0600'
+        content: "{{ {'image': boot_image_url, 'iso_sha256': idrac_iso_sha256, 'boot_profile_task_completed': true, 'boot_once': true, 'power_on_request_submitted': boot_needs_power_on, 'power_state': 'On', 'os_installation_verified': false} | to_nice_json }}\n"
+      diff: false
+
+    - name: Report power-on and the required installation observation
+      ansible.builtin.debug:
+        msg: "One-time virtual DVD boot configured and server powered on. Keep the ISO host running and observe the console. This confirms API completion and power state, not successful installer boot or OS installation. Records: {{ boot_directory.path }}"

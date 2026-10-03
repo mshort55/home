@@ -38,6 +38,8 @@ A normal mount verifies the ISO hash, installs [the single-file HTTP helper](../
 
 An already-mounted matching read-only ISO receives no additional insert POST. A different image, inconsistent console attachment or unexpected action target stops the run. The playbook never automatically ejects an unrelated image. Changes to an active local server's source or helper require ejection first.
 
+Once mounting succeeds, [boot-idrac-iso.yml](boot-idrac-iso.md) can configure one-time virtual DVD boot and power on an offline UEFI server. Mounting and booting remain separately invoked operations.
+
 The server exposes exactly one ISO over HTTP/1.1, without directory browsing, on the specified Ethernet IPv4 address. GET and HEAD support single byte ranges, including suffix ranges. Only the iDRAC address and serving Mac address can read it. HTTP image requests carry no iDRAC credentials. HTTP is unencrypted; use this temporary service on the isolated BMC path. The Redfish connection separately uses verified HTTPS.
 
 ## Boot for discovery

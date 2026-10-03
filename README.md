@@ -70,3 +70,5 @@ Playbooks run only when explicitly invoked; Git pushes do not apply configuratio
 | iDRAC IPv4 network transition | [Configure iDRAC networking](docs/playbooks/configure-idrac-network.md) |
 | iDRAC UEFI boot maintenance | [Set UEFI through Redfish](docs/playbooks/set-idrac-uefi.md) |
 | iDRAC ISO mounting and native Mac image hosting | [Mount an ISO](docs/playbooks/mount-idrac-iso.md) |
+| iDRAC one-time virtual DVD boot and power on | [Boot a mounted ISO](docs/playbooks/boot-idrac-iso.md) |
+| Private unattended Proxmox ISO preparation | [Prepare a Proxmox ISO](docs/playbooks/prepare-proxmox-iso.md) |
