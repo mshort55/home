@@ -77,3 +77,4 @@ Playbooks run only when explicitly invoked; Git pushes do not apply configuratio
 | OPNsense VM creation and controlled pilot WAN attachment | [Create the OPNsense VM](docs/playbooks/create-opnsense-vm.md) |
 | Private OPNsense management bootstrap DVD preparation | [Prepare OPNsense bootstrap media](docs/playbooks/prepare-opnsense-bootstrap.md) |
 | OPNsense ZFS installation and pinned management SSH verification | [Install OPNsense](docs/playbooks/install-opnsense.md) |
+| OPNsense management DNS/NTP, restricted update access and private WAN pilot | [Configure OPNsense pilot](docs/playbooks/configure-opnsense-pilot.md) |

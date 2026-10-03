@@ -1,0 +1,67 @@
+# Configure OPNsense management and its private WAN pilot
+
+`playbooks/configure-opnsense-pilot.yml` configures an installed, owned OPNsense 26.7 VM through its pinned SSH connection. It validates changes with OPNsense's installed Firewall and Unbound models, saves through the native configuration manager, and applies services through the vendor commands. Guest Python, API credentials and guest UI steps are unnecessary.
+
+This stage enables management DNS/NTP and outbound HTTP/HTTPS for explicitly named infrastructure hosts. HOME, DEV and BMC remain assigned but disabled. It enables no DHCP server, WireGuard, port forward or household gateway service. IPv6 forwarding remains disabled. Named GUI accounts, GUI certificate trust, host updates and the other zone policies use separate workflows.
+
+## Prerequisites and inventory
+
+Complete [installation](install-opnsense.md) first. Keep the existing household router active, with the server's WAN bridge connected to the existing household LAN through its pilot switch port. Do not attach the ISP cable during this workflow. The WAN pilot gateway must belong to a different private 10/8 /24 from management.
+
+Keep VM MACs, bridges, tags and hardware unchanged. Set `opnsense_vm.wan_connected: true` on the Proxmox host; the pilot playbook applies this desired link state only after the guest's configuration and loaded policy pass verification. Keep `onboot: false` at this stage. The installation entry point deliberately requires disconnected WAN; use this pilot entry point for subsequent management verification.
+
+Define `opnsense_pilot` on the **guest**, using your actual private addresses:
+
+```yaml
+opnsense_pilot:
+  admin_addresses: [10.77.10.250]
+  update_addresses: [10.77.10.10]
+  wan_gateway: 10.77.55.254
+  dns_servers: [192.0.2.53, 198.51.100.53]  # Replace these documentation addresses.
+  ntp_servers:
+    - 0.opnsense.pool.ntp.org
+    - 1.opnsense.pool.ntp.org
+    - 2.opnsense.pool.ntp.org
+    - 3.opnsense.pool.ntp.org
+  dns_hosts:
+    - {hostname: opnsense01, address: 10.77.10.254}
+    - {hostname: pve01, address: 10.77.10.10}
+    - {hostname: switch01, address: 10.77.10.2}
+```
+
+Administration and update hosts must be ordinary addresses on the installed management /24. The current SSH controller's observed source address must appear in `admin_addresses`; this check occurs before removing broad bootstrap access. Local DNS records use the installed firewall domain. Configure the Proxmox host's existing management gateway and resolver to use the firewall, as established during its installation.
+
+## Preview, apply and repeat
+
+```bash
+ansible-playbook playbooks/configure-opnsense-pilot.yml --limit pve01 --check
+ansible-playbook playbooks/configure-opnsense-pilot.yml --limit pve01
+ansible-playbook playbooks/configure-opnsense-pilot.yml --limit pve01
+```
+
+The target is the Proxmox host. Guest operations delegate to its declared `opnsense_guest`. Check mode reads installed identity, hardware and configuration, builds candidate models in memory, performs native validation and reports differences. It makes no configuration, trust-file, service or WAN-link writes. It does not prove runtime or internet access; normal runs perform those checks.
+
+The normal workflow backs up the configuration, writes the validated settings, loads rules and services, verifies runtime state, and then connects the owned WAN vNIC. It requires the resulting WAN DHCP /24 and default gateway to match the private pilot. An HTTPS request from Proxmox verifies management DNS, routing, NAT and certificate validation. The final report includes WAN address and NTP synchronization status; a running NTP service may need time to select an upstream after WAN first becomes available.
+
+## Managed policy
+
+| Source | Destination | Permitted traffic |
+|---|---|---|
+| Explicit administrator addresses | Firewall itself | TCP 22/443 and ICMP |
+| Management /24 | Firewall itself | TCP/UDP DNS 53 and UDP NTP 123 |
+| Explicit update hosts | External destinations | TCP 80/443 |
+| Management /24 | Private, link-local and carrier NAT networks | Block after local service allowances |
+| Remaining management traffic | Any | Block |
+| Unsolicited WAN traffic | Any | Block; normal WAN DHCP and established replies retain vendor handling |
+
+The broad bootstrap management rule and automatic anti-lockout rules are replaced by explicit rules. No WAN management allowance is added. Standard automatic outbound NAT is enabled. Private-address and bogon WAN blocking are removed for this private DHCP pilot; final ISP attachment needs a separate policy review. Only management traffic currently participates because the optional interfaces stay disabled.
+
+Unbound listens on management and loopback, permits those client networks, forwards to the two pinned system resolvers, and disables WAN DHCP resolver overrides. No additional forwarding rules or recursive fallback are introduced. NTP uses the standard [OPNsense pool](https://docs.opnsense.org/manual/ntpd.html); it binds management and WAN for upstream operation, while firewall policy exposes the service only on management. [Vendor service actions](https://docs.opnsense.org/development/backend/configd.html) apply the saved configuration.
+
+## Backups, conflicts and interrupted runs
+
+Before each configuration save, a root-owned mode-0600 `before-*.xml` is kept beneath the mode-0700 `/conf/ansible-pilot` directory. The controller also exports it into a unique private `backups/<guest>-pilot-*/before.xml` directory without displaying credentials or configuration contents. Treat these files as secrets. `/conf/ansible-pilot/state.json` binds the record to the installed seed and tracks pending versus completed service application.
+
+A repeated run with matching configuration and a completed record makes no save, backup, reload or WAN change. It still checks loaded policy, local DNS/time services, WAN addressing and Proxmox HTTPS access. A pending run reapplies services and retains its original pre-change backup before completing verification. If WAN attachment succeeded but connectivity verification failed, repeat after correcting that external dependency; no VM reinstall or disk operation occurs.
+
+Unowned rules, NAT/port forwards, unrelated DNS entries, enabled optional interfaces/DHCP, mismatched MACs, an unlisted controller, missing private backups or conflicting VM hardware cause failure. This workflow manages its own stable rule and DNS entry IDs and deliberately refuses to overwrite unrelated configuration. It changes no switch ports, physical cables, household router configuration, VM disks or host networking.

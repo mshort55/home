@@ -1,0 +1,219 @@
+---
+- ansible.builtin.import_playbook: create-opnsense-vm.yml
+  vars:
+    opnsense_verify_only: true
+    opnsense_verify_wan_state: false
+
+- name: Configure management services and verify policy before pilot WAN attachment
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  vars:
+    pilot_settings: "{{ hostvars[opnsense_guest].opnsense_pilot }}"
+    pilot_code: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../scripts/configure-opnsense-pilot.php') | b64encode }}"
+    pilot_prefix: "printf '%s' {{ pilot_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
+  tasks:
+    - name: Require the installed guest and explicitly selected pilot inputs
+      ansible.builtin.assert:
+        that:
+          - opnsense_guest in groups.get('opnsense_hosts', [])
+          - hostvars[opnsense_guest].opnsense_proxmox_host == inventory_hostname
+          - pilot_settings is mapping
+          - pilot_settings.admin_addresses is sequence
+          - pilot_settings.update_addresses is sequence
+          - pilot_settings.dns_servers | length == 2
+          - pilot_settings.ntp_servers | length > 0
+          - pilot_settings.dns_hosts is sequence
+          - opnsense_vm.wan_connected is sameas true
+          - opnsense_vm.onboot is sameas false
+        fail_msg: Define management pilot inputs on the guest and select a connected pilot WAN in the Proxmox VM inventory.
+
+    - name: Build the installed MAC and role identities
+      ansible.builtin.set_fact:
+        pilot_networks: []
+
+    - name: Associate each VM NIC with its installed guest section
+      ansible.builtin.set_fact:
+        pilot_networks: "{{ pilot_networks + [item | combine({'section': sections[item.role]})] }}"
+      loop: "{{ opnsense_vm.networks }}"
+      vars:
+        sections: {WAN: wan, MGMT: lan, HOME: opt1, DEV: opt2, BMC: opt3}
+
+    - name: Build the bounded guest configuration payload
+      ansible.builtin.set_fact:
+        pilot_payload: "{{ pilot_settings | combine({'management_address': hostvars[opnsense_guest].ansible_host, 'networks': pilot_networks}) }}"
+
+    - name: Validate the installed identity and preview vendor model changes without saving
+      ansible.builtin.raw: "{{ pilot_prefix }} plan {{ pilot_payload | to_json | b64encode | quote }}"
+      delegate_to: "{{ opnsense_guest }}"
+      register: pilot_preview
+      changed_when: pilot_preview.rc == 0 and ansible_check_mode and (pilot_preview.stdout | trim | from_json).reload_required
+      check_mode: false
+
+    - name: Report the scoped management pilot preview
+      ansible.builtin.debug:
+        msg:
+          guest: "{{ opnsense_guest }}"
+          management: "{{ hostvars[opnsense_guest].ansible_host }}"
+          changes: "{{ (pilot_preview.stdout | trim | from_json).changes }}"
+          wan: Connect the owned WAN vNIC only after saved configuration and loaded firewall and DNS checks pass
+          scope: MGMT DNS/NTP and named administration/update hosts; HOME/DEV/BMC stay disabled and no DHCP server is enabled
+
+    - name: Finish the read-only preview before guest or VM writes
+      ansible.builtin.meta: end_host
+      when: ansible_check_mode
+
+    - name: Save validated pilot settings and a protected pre-change backup
+      ansible.builtin.raw: "{{ pilot_prefix }} apply {{ pilot_payload | to_json | b64encode | quote }}"
+      delegate_to: "{{ opnsense_guest }}"
+      register: pilot_apply
+      changed_when: pilot_apply.rc == 0 and (pilot_apply.stdout | trim | from_json).changed
+
+    - name: Select whether pending runtime configuration needs applying
+      ansible.builtin.set_fact:
+        pilot_reload_required: "{{ (pilot_apply.stdout | trim | from_json).reload_required }}"
+
+    - name: Read the private pre-change backup without displaying it
+      ansible.builtin.raw: "/usr/bin/base64 {{ (pilot_apply.stdout | trim | from_json).backup | quote }}"
+      delegate_to: "{{ opnsense_guest }}"
+      register: pilot_backup_bytes
+      changed_when: false
+      no_log: true
+      when: pilot_reload_required
+
+    - name: Create the protected controller backup parent
+      ansible.builtin.file:
+        path: "{{ inventory_dir }}/backups"
+        state: directory
+        mode: '0700'
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: pilot_reload_required
+
+    - name: Allocate a private controller backup directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: "{{ inventory_dir }}/backups"
+        prefix: "{{ opnsense_guest }}-pilot-"
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: pilot_backup_directory
+      when: pilot_reload_required
+
+    - name: Export the exact pre-change configuration privately
+      ansible.builtin.copy:
+        dest: "{{ pilot_backup_directory.path }}/before.xml"
+        content: "{{ pilot_backup_bytes.stdout | b64decode }}"
+        mode: '0600'
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      diff: false
+      no_log: true
+      when: pilot_reload_required
+
+    - name: Generate and load firewall rules and management DNS and time services
+      ansible.builtin.raw: "{{ item }}"
+      loop:
+        - /usr/local/sbin/configctl filter reload
+        - /usr/local/sbin/configctl unbound restart
+        - /usr/local/sbin/pluginctl -s ntpd restart
+        - /usr/local/bin/php -r 'require_once("config.inc"); require_once("util.inc"); require_once("system.inc"); system_resolvconf_generate();'
+      delegate_to: "{{ opnsense_guest }}"
+      changed_when: true
+      when: pilot_reload_required
+
+    - name: Verify saved settings and loaded rules, DNS records and time service
+      ansible.builtin.raw: "{{ pilot_prefix }} verify {{ pilot_payload | to_json | b64encode | quote }}"
+      delegate_to: "{{ opnsense_guest }}"
+      register: pilot_runtime
+      changed_when: false
+      retries: 12
+      delay: 5
+      until: pilot_runtime is succeeded
+
+    - name: Record successfully applied management services
+      ansible.builtin.raw: "{{ pilot_prefix }} complete {{ pilot_payload | to_json | b64encode | quote }}"
+      delegate_to: "{{ opnsense_guest }}"
+      changed_when: pilot_reload_required
+
+    - name: Recheck current and pending VM hardware and running state before WAN attachment
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - [pvesh, get, /nodes/localhost/qemu/100/config, --current, '1', --output-format, json]
+        - [pvesh, get, /nodes/localhost/qemu/100/config, --current, '0', --output-format, json]
+        - [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      register: pilot_host
+      changed_when: false
+
+    - name: Refuse concurrent pending changes or a stopped VM
+      ansible.builtin.assert:
+        that:
+          - pilot_host.results[0].stdout | from_json == pilot_host.results[1].stdout | from_json
+          - (pilot_host.results[2].stdout | from_json).status == 'running'
+
+    - name: Validate unchanged owned VM hardware before changing only the WAN link
+      ansible.builtin.command:
+        argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/../scripts/validate-opnsense-vm.py"]
+        stdin: "{{ {'config': pilot_host.results[0].stdout | from_json, 'desired': opnsense_expected} | to_json }}"
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: pilot_wan_validation
+      changed_when: false
+
+    - name: Connect only the verified owned WAN vNIC to the existing Fortinet pilot
+      ansible.builtin.command:
+        argv: [qm, set, '100', --net0, "{{ opnsense_wan_argument }}"]
+      when: (pilot_wan_validation.stdout | from_json).wan_link_change
+
+    - name: Read current VM hardware after the WAN link transition
+      ansible.builtin.command:
+        argv: [pvesh, get, /nodes/localhost/qemu/100/config, --current, '1', --output-format, json]
+      register: pilot_final_hardware
+      changed_when: false
+
+    - name: Verify the exact requested WAN state and preserved VM hardware
+      ansible.builtin.command:
+        argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/../scripts/validate-opnsense-vm.py"]
+        stdin: "{{ {'config': pilot_final_hardware.stdout | from_json, 'desired': opnsense_expected} | to_json }}"
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: pilot_final_validation
+      changed_when: false
+      failed_when: pilot_final_validation.rc != 0 or (pilot_final_validation.stdout | from_json).wan_link_change
+
+    - name: Verify the private WAN DHCP lease and intended gateway
+      ansible.builtin.raw: "{{ pilot_prefix }} network {{ pilot_payload | to_json | b64encode | quote }}"
+      delegate_to: "{{ opnsense_guest }}"
+      register: pilot_network
+      changed_when: false
+      retries: 36
+      delay: 5
+      until: pilot_network is succeeded
+
+    - name: Verify Proxmox DNS, NAT and outbound HTTPS through management
+      ansible.builtin.uri:
+        url: https://enterprise.proxmox.com/
+        validate_certs: true
+        use_proxy: false
+        status_code: [200, 401]
+        timeout: 30
+      register: pilot_https
+      retries: 6
+      delay: 5
+      until: pilot_https is succeeded
+
+    - name: Report pilot access and backup location without configuration secrets
+      ansible.builtin.debug:
+        msg:
+          management: "{{ hostvars[opnsense_guest].ansible_host }}"
+          wan_address: "{{ (pilot_network.stdout | trim | from_json).wan_address }}"
+          ntp_synchronized: "{{ (pilot_network.stdout | trim | from_json).ntp_synchronized }}"
+          backup: "{{ pilot_backup_directory.path if pilot_reload_required else 'Existing protected guest backup retained; no new configuration save' }}"
+          next: HOME/DEV/BMC services, WireGuard and GUI certificate/account provisioning use separate workflows

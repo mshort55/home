@@ -132,6 +132,22 @@ all:
         opnsense01:
           opnsense_proxmox_host: pve01
           ansible_host: 10.77.10.254
+          # Management pilot; select wan_connected: true on pve01 when using it.
+          opnsense_pilot:
+            admin_addresses: [10.77.10.250]
+            update_addresses: [10.77.10.10]
+            wan_gateway: 10.77.55.254
+            # Documentation-only addresses: replace with your actual resolvers.
+            dns_servers: [192.0.2.53, 198.51.100.53]
+            ntp_servers:
+              - 0.opnsense.pool.ntp.org
+              - 1.opnsense.pool.ntp.org
+              - 2.opnsense.pool.ntp.org
+              - 3.opnsense.pool.ntp.org
+            dns_hosts:
+              - {hostname: opnsense01, address: 10.77.10.254}
+              - {hostname: pve01, address: 10.77.10.10}
+              - {hostname: switch01, address: 10.77.10.2}
           opnsense_bootstrap:
             filesystem: zfs
             hostname: opnsense01
