@@ -66,7 +66,7 @@ function writePrivate(string $path, array $content): void
 
 function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$desired, string $label, array &$changes): void
 {
-    $field = ['filter rules'=>'description', 'DNS access lists'=>'name', 'DNS host records'=>'hostname'][$label];
+    $field = ['filter rules'=>'description', 'DNS access lists'=>'name', 'DNS host records'=>'hostname', 'DHCP subnets'=>'description'][$label];
     $existing = [];
     foreach ($container->iterateItems() as $key => $node) {
         $values = $node->getNodeContent();
@@ -86,7 +86,11 @@ function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$des
         }
         // Compare only explicitly managed fields; collection defaults may add model fields.
         foreach ($values as $fieldName => $value) {
-            if (($before[$fieldName] ?? '') !== $value) {
+            $previous = $before[$fieldName] ?? '';
+            if (is_array($value) && is_array($previous)) {
+                $previous = array_intersect_key($previous, $value);
+            }
+            if ($previous !== $value) {
                 $changes[] = $label;
             }
         }
@@ -101,6 +105,53 @@ function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$des
     foreach ($desired as $key => $values) {
         $container->add($key)->setNodes($values);
     }
+}
+
+function homeSettings(array $home, string $managementPrefix, string $wanGateway): array
+{
+    $keys = array_keys($home);
+    sort($keys);
+    requireCondition($keys === ['address', 'lease_seconds', 'pool_end', 'pool_start', 'subnet'], 'Unexpected HOME settings');
+    $address = ipv4($home['address']);
+    $prefix = substr($address, 0, strrpos($address, '.') + 1);
+    $wanPrefix = substr($wanGateway, 0, strrpos($wanGateway, '.') + 1);
+    requireCondition(str_starts_with($address, '10.') && $prefix !== $managementPrefix && $prefix !== $wanPrefix,
+        'HOME must use a private /24 distinct from MGMT and pilot WAN');
+    requireCondition($home['subnet'] === $prefix . '0/24', 'HOME subnet must match its /24 gateway');
+    foreach ([$address, $home['pool_start'], $home['pool_end']] as $host) {
+        requireCondition(str_starts_with(ipv4($host), $prefix) && !in_array($host, [$prefix . '0', $prefix . '255'], true), 'Invalid HOME host address');
+    }
+    requireCondition(ip2long($home['pool_start']) <= ip2long($home['pool_end']) &&
+        (ip2long($address) < ip2long($home['pool_start']) || ip2long($address) > ip2long($home['pool_end'])), 'Invalid DHCP pool or gateway inside pool');
+    requireCondition(is_int($home['lease_seconds']) && $home['lease_seconds'] >= 600 && $home['lease_seconds'] <= 86400, 'Invalid lease lifetime');
+    return ['address'=>$address, 'subnet'=>$home['subnet'], 'pool_start'=>$home['pool_start'], 'pool_end'=>$home['pool_end'], 'lease_seconds'=>$home['lease_seconds']];
+}
+
+function homeRuntime(array $home, string $device): bool
+{
+    $info = shell_exec('/sbin/ifconfig ' . escapeshellarg($device)) ?? '';
+    $dns = is_file('/var/unbound/unbound.conf') ? file_get_contents('/var/unbound/unbound.conf') : '';
+    if (!str_contains($info, 'inet ' . $home['address'] . ' netmask 0xffffff00') ||
+        !str_contains($dns, 'interface: ' . $home['address']) ||
+        trim(shell_exec('/usr/bin/pgrep -x kea-dhcp4') ?? '') === '' || !is_file('/usr/local/etc/kea/kea-dhcp4.conf')) {
+        return false;
+    }
+    $configuration = json_decode(file_get_contents('/usr/local/etc/kea/kea-dhcp4.conf'), true, 512, JSON_THROW_ON_ERROR)['Dhcp4'];
+    $subnets = $configuration['subnet4'] ?? [];
+    if (($configuration['interfaces-config']['interfaces'] ?? []) !== [$device] || count($subnets) !== 1 ||
+        $subnets[0]['subnet'] !== $home['subnet'] || ($configuration['valid-lifetime'] ?? null) !== $home['lease_seconds'] ||
+        count($subnets[0]['pools'] ?? []) !== 1 || preg_replace('/\s+/', '', $subnets[0]['pools'][0]['pool']) !== $home['pool_start'] . '-' . $home['pool_end']) {
+        return false;
+    }
+    $options = array_column($subnets[0]['option-data'] ?? [], 'data', 'name');
+    if (($options['routers'] ?? '') !== $home['address'] || ($options['domain-name-servers'] ?? '') !== $home['address'] ||
+        ($options['ntp-servers'] ?? '') !== $home['address']) {
+        return false;
+    }
+    $nat = shell_exec('/sbin/pfctl -sn') ?? '';
+    // OPNsense emits dynamic interface networks in automatic outbound NAT.
+    $source = '(?:' . preg_quote($home['subnet'], '/') . '|\(' . preg_quote($device, '/') . ':network\))';
+    return preg_match('/^nat on \S+ inet from ' . $source . ' to any -> /m', $nat) === 1;
 }
 
 try {
@@ -142,23 +193,6 @@ try {
     foreach ($input['ntp_servers'] as $server) {
         requireCondition(preg_match('/^[a-z0-9][a-z0-9.-]+[a-z0-9]$/i', $server) === 1, 'Invalid NTP server');
     }
-    foreach ($seed['networks'] as $nic) {
-        $iface = $xml->interfaces->{$nic['section']};
-        $name = (string)$iface->if;
-        requireCondition(preg_match('/^vtnet[0-9]+$/', $name) === 1, 'Unexpected NIC name');
-        $info = shell_exec('/sbin/ifconfig ' . escapeshellarg($name));
-        requireCondition(preg_match('/ether\s+([0-9a-f:]+)/i', $info, $matches) === 1 && strtolower($matches[1]) === $nic['mac'], 'Live NIC MAC-to-role mapping conflicts');
-        if (in_array($nic['section'], ['opt1', 'opt2', 'opt3'], true)) {
-            requireCondition(!isset($iface->enable), 'Optional interfaces must remain disabled in this management pilot');
-        }
-    }
-    requireCondition((string)$xml->interfaces->lan->ipaddr === $address && (string)$xml->interfaces->lan->subnet === '24', 'Management SVI conflicts');
-    requireCondition((string)$xml->interfaces->wan->ipaddr === 'dhcp' && isset($xml->interfaces->wan->enable), 'Pilot WAN must use DHCP');
-    requireCondition(!isset($xml->system->ipv6allow), 'IPv6 forwarding must stay disabled');
-    requireCondition(isset($xml->system->ssh->enabled) && !isset($xml->system->ssh->passwordauth) && (string)$xml->system->ssh->interfaces === 'lan', 'Preserve key-only management SSH');
-    requireCondition(!isset($xml->filter->rule) && !isset($xml->nat->rule) && !isset($xml->nat->onetoone), 'Legacy firewall or port-forward entries require separate review');
-    requireCondition(!isset($xml->dnsmasq->enable) || (string)$xml->dnsmasq->enable !== '1', 'DHCP/Dnsmasq must stay disabled');
-
     $directory = '/conf/ansible-pilot';
     $statePath = $directory . '/state.json';
     privatePath($directory, true);
@@ -170,8 +204,46 @@ try {
         requireCondition(str_starts_with($state['backup'], $directory . '/before-') && dirname($state['backup']) === $directory && file_exists($state['backup']), 'Missing original pilot backup');
         privatePath($state['backup'], false);
     }
+    $home = $input['home_pilot'] ?? $state['home_pilot'] ?? null;
+    if ($home !== null) {
+        requireCondition(is_array($home), 'Invalid HOME settings');
+        $home = homeSettings($home, $subnet, $wanGateway);
+        requireCondition(!isset($state['home_pilot']) || $state['home_pilot'] == $home, 'Changing an existing HOME allocation requires a separate migration');
+        requireCondition(isset($state['home_pilot']) || ($state['phase'] ?? '') === 'complete', 'Complete the management pilot before enabling HOME');
+        $input['home_pilot'] = $home;
+    }
+    foreach ($seed['networks'] as $nic) {
+        $iface = $xml->interfaces->{$nic['section']};
+        $name = (string)$iface->if;
+        requireCondition(preg_match('/^vtnet[0-9]+$/', $name) === 1, 'Unexpected NIC name');
+        $info = shell_exec('/sbin/ifconfig ' . escapeshellarg($name));
+        requireCondition(preg_match('/ether\s+([0-9a-f:]+)/i', $info, $matches) === 1 && strtolower($matches[1]) === $nic['mac'], 'Live NIC MAC-to-role mapping conflicts');
+        if ($nic['section'] === 'opt1' && $home !== null) {
+            requireCondition(!isset($iface->enable) || (isset($state['home_pilot']) && (string)$iface->ipaddr === $home['address'] && (string)$iface->subnet === '24'), 'Unowned or conflicting enabled HOME interface');
+            requireCondition(!isset($iface->gateway) && !isset($iface->bridge) && !isset($iface->blockpriv) && !isset($iface->blockbogons), 'Unexpected HOME interface services');
+        } elseif (in_array($nic['section'], ['opt1', 'opt2', 'opt3'], true)) {
+            requireCondition(!isset($iface->enable), 'Optional interfaces must remain disabled in this management pilot');
+        }
+    }
+    requireCondition((string)$xml->interfaces->lan->ipaddr === $address && (string)$xml->interfaces->lan->subnet === '24', 'Management SVI conflicts');
+    requireCondition((string)$xml->interfaces->wan->ipaddr === 'dhcp' && isset($xml->interfaces->wan->enable), 'Pilot WAN must use DHCP');
+    requireCondition(!isset($xml->system->ipv6allow), 'IPv6 forwarding must stay disabled');
+    requireCondition(isset($xml->system->ssh->enabled) && !isset($xml->system->ssh->passwordauth) && (string)$xml->system->ssh->interfaces === 'lan', 'Preserve key-only management SSH');
+    requireCondition(!isset($xml->filter->rule) && !isset($xml->nat->rule) && !isset($xml->nat->onetoone), 'Legacy firewall or port-forward entries require separate review');
+    requireCondition(!isset($xml->dnsmasq->enable) || (string)$xml->dnsmasq->enable !== '1', 'DHCP/Dnsmasq must stay disabled');
+
     $digest = hash('sha256', json_encode($input, JSON_THROW_ON_ERROR));
     $changes = [];
+    $homeInterfaceReload = false;
+    if ($home !== null) {
+        setValue($xml->interfaces->opt1, 'enable', '1', $changes);
+        setValue($xml->interfaces->opt1, 'ipaddr', $home['address'], $changes);
+        setValue($xml->interfaces->opt1, 'subnet', '24', $changes);
+        setValue($xml->interfaces->opt1, 'ipaddrv6', 'none', $changes);
+        $homeDevice = (string)$xml->interfaces->opt1->if;
+        $homeInfo = shell_exec('/sbin/ifconfig ' . escapeshellarg($homeDevice)) ?? '';
+        $homeInterfaceReload = !str_contains($homeInfo, 'inet ' . $home['address'] . ' netmask 0xffffff00');
+    }
     setValue($xml->system->webgui, 'noantilockout', '1', $changes);
     removeValue($xml->system, 'dnsallowoverride', $changes);
     removeValue($xml->system, 'dnslocalhost', $changes);
@@ -191,7 +263,7 @@ try {
         $xml->addChild('ntpd');
     }
     // WAN is needed for upstream NTP replies; filter rules expose NTP only on MGMT.
-    setValue($xml->ntpd, 'interface', 'lan,wan', $changes);
+    setValue($xml->ntpd, 'interface', $home === null ? 'lan,wan' : 'lan,wan,opt1', $changes);
     setValue($xml->ntpd, 'iburst', implode(' ', $input['ntp_servers']), $changes);
     setValue($xml->ntpd, 'ispool', implode(' ', $input['ntp_servers']), $changes);
     removeValue($xml->ntpd, 'clientmode', $changes);
@@ -247,15 +319,36 @@ try {
     }
     $addRule('MGMT default deny', $cidr, 'any', 'any', '', 'block');
     $addRule('WAN default deny', 'any', 'any', 'any', '', 'block', 'wan');
+    if ($home !== null) {
+        $sequence = 300;
+        foreach (['TCP', 'UDP'] as $protocol) {
+            $addRule('HOME DNS ' . $protocol, $home['subnet'], $home['address'] . '/32', $protocol, '53', 'pass', 'opt1');
+        }
+        $addRule('HOME NTP', $home['subnet'], $home['address'] . '/32', 'UDP', '123', 'pass', 'opt1');
+        $addRule('HOME gateway ICMP', $home['subnet'], $home['address'] . '/32', 'ICMP', '', 'pass', 'opt1');
+        $addRule('HOME firewall deny', 'any', '(self)', 'any', '', 'block', 'opt1');
+        foreach (['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16', '100.64.0.0/10'] as $private) {
+            $addRule('HOME private deny ' . $private, 'any', $private, 'any', '', 'block', 'opt1');
+        }
+        foreach (['TCP', 'UDP'] as $protocol) {
+            $addRule('HOME external DNS deny ' . $protocol, 'any', 'any', $protocol, '53', 'block', 'opt1');
+        }
+        $addRule('HOME internet', $home['subnet'], 'any', 'any', '', 'pass', 'opt1');
+        $addRule('HOME default deny', 'any', 'any', 'any', '', 'block', 'opt1');
+    }
     collection($filter->rules->rule, $rules, 'filter rules', $changes);
 
     $unbound = new \OPNsense\Unbound\Unbound();
     $before = $unbound->getNodeContent();
-    $unbound->setNodes(['general'=>['enabled'=>'1', 'port'=>'53', 'active_interface'=>'lan', 'outgoing_interface'=>'wan', 'regdhcp'=>'0', 'regdhcpstatic'=>'0', 'noreglladdr6'=>'1', 'noregrecords'=>'1'], 'forwarding'=>['enabled'=>'1'], 'acls'=>['default_action'=>'refuse']]);
+    $dnsInterfaces = $home === null ? ['lan'] : ['lan', 'opt1'];
+    $unbound->setNodes(['general'=>['enabled'=>'1', 'port'=>'53', 'active_interface'=>implode(',', $dnsInterfaces), 'outgoing_interface'=>'wan', 'regdhcp'=>'0', 'regdhcpstatic'=>'0', 'noreglladdr6'=>'1', 'noregrecords'=>'1'], 'forwarding'=>['enabled'=>'1'], 'acls'=>['default_action'=>'refuse']]);
     if ($before !== $unbound->getNodeContent()) {
         $changes[] = 'Unbound settings';
     }
     $acls = [uuid('acl MGMT')=>['enabled'=>'1', 'name'=>'MGMT', 'action'=>'allow', 'networks'=>$cidr], uuid('acl loopback')=>['enabled'=>'1', 'name'=>'loopback', 'action'=>'allow', 'networks'=>'127.0.0.0/8,::1/128']];
+    if ($home !== null) {
+        $acls[uuid('acl HOME')] = ['enabled'=>'1', 'name'=>'HOME', 'action'=>'allow', 'networks'=>$home['subnet']];
+    }
     collection($unbound->acls->acl, $acls, 'DNS access lists', $changes);
     requireCondition(iterator_count($unbound->dots->dot->iterateItems()) === 0 && iterator_count($unbound->dnsbl->blocklist->iterateItems()) === 0 && iterator_count($unbound->aliases->alias->iterateItems()) === 0, 'Extra DNS forwarding, aliases or blocklist entries require review');
     $hosts = [];
@@ -265,7 +358,50 @@ try {
         $hosts[uuid('host ' . $host['hostname'])] = ['enabled'=>'1', 'hostname'=>$host['hostname'], 'domain'=>(string)$xml->system->domain, 'rr'=>'A', 'server'=>$host['address']];
     }
     collection($unbound->hosts->host, $hosts, 'DNS host records', $changes);
-    foreach ([$filter, $unbound] as $model) {
+    $models = [$filter, $unbound];
+    $dhcpSubnet = null;
+    $dhcpReady = false;
+    if ($home !== null) {
+        if (isset($xml->dhcpd)) {
+            foreach ($xml->dhcpd->children() as $dhcp) {
+                requireCondition(!isset($dhcp->enable), 'Legacy DHCP server must remain disabled');
+            }
+        }
+        $dnsmasq = new \OPNsense\Dnsmasq\Dnsmasq();
+        requireCondition((string)$dnsmasq->general->enabled !== '1', 'Dnsmasq must remain disabled');
+        foreach ([new \OPNsense\Kea\KeaDhcpv6(), new \OPNsense\Kea\KeaDdns(), new \OPNsense\Kea\KeaCtrlAgent()] as $other) {
+            requireCondition((string)$other->general->enabled !== '1', 'Unrelated Kea services must remain disabled');
+        }
+        $kea = new \OPNsense\Kea\KeaDhcpv4();
+        requireCondition((string)$kea->general->manual_config !== '1' && (string)$kea->ha->enabled !== '1', 'Manual or HA DHCP requires separate review');
+        requireCondition((string)$kea->general->enabled !== '1' || (isset($state['home_pilot']) && (string)$kea->general->interfaces === 'opt1'), 'Unowned DHCP service requires separate review');
+        foreach (['reservations'=>'reservation', 'options'=>'option', 'ha_peers'=>'peer'] as $section=>$field) {
+            requireCondition(iterator_count($kea->$section->$field->iterateItems()) === 0, 'Extra DHCP reservations, options or peers require separate review');
+        }
+        $before = $kea->getNodeContent();
+        $kea->setNodes(['general'=>['enabled'=>'1', 'interfaces'=>'opt1', 'dhcp_socket_type'=>'raw', 'fwrules'=>'1', 'valid_lifetime'=>(string)$home['lease_seconds']]]);
+        if ($before !== $kea->getNodeContent()) {
+            $changes[] = 'Kea settings';
+        }
+        $dhcpSubnet = ['subnet'=>$home['subnet'], 'description'=>'Home automation: HOME pilot',
+            'pools'=>$home['pool_start'] . ' - ' . $home['pool_end'], 'option_data_autocollect'=>'0', 'next_server'=>'',
+            'option_data'=>['domain_name_servers'=>$home['address'], 'domain_search'=>(string)$xml->system->domain,
+                'routers'=>$home['address'], 'static_routes'=>'', 'domain_name'=>(string)$xml->system->domain,
+                'ntp_servers'=>$home['address'], 'time_servers'=>'', 'tftp_server_name'=>'', 'boot_file_name'=>'', 'v6_only_preferred'=>'']];
+        foreach ($kea->subnets->subnet4->iterateItems() as $node) {
+            $values = $node->getNodeContent();
+            foreach (['valid_lifetime', 'allocator', 'option', 'ddns_forward_zone', 'ddns_dns_server'] as $key) {
+                requireCondition(($values[$key] ?? '') === '', 'Unexpected DHCP subnet customization requires separate review');
+            }
+        }
+        $dhcpSubnets = [uuid('subnet HOME')=>$dhcpSubnet];
+        collection($kea->subnets->subnet4, $dhcpSubnets, 'DHCP subnets', $changes);
+        $models[] = $kea;
+        $auth = new \OPNsense\Auth\User();
+        $user = $auth->getUserByName('home-ansible');
+        $dhcpReady = $user !== null && in_array('page-dhcp-kea-v4', explode(',', (string)$user->priv), true);
+    }
+    foreach ($models as $model) {
         $errors = $model->performValidation(true);
         if (count($errors) > 0) {
             $messages = [];
@@ -285,8 +421,12 @@ try {
         $runtimeReady = $runtimeReady && str_contains($loadedDns, 'forward-addr: ' . $server);
     }
     $runtimeReady = $runtimeReady && str_contains($loadedDns, 'interface: ' . $address) && !str_contains($loadedDns, 'forward-first: yes');
+    if ($home !== null) {
+        $runtimeReady = $runtimeReady && homeRuntime($home, $homeDevice);
+    }
     $reload = ($argv[3] ?? '') === 'api-change' || count($changes) > 0 || !$runtimeReady || ($state['phase'] ?? '') !== 'complete' || ($state['digest'] ?? '') !== $digest;
     $result = ['rules'=>$rules, 'acls'=>array_values($acls), 'hosts'=>array_values($hosts), 'domain'=>(string)$xml->system->domain, 'bootstrap_rule'=>$bootstrapRule, 'changed'=>count($changes) > 0, 'reload_required'=>$reload, 'changes'=>array_values(array_unique($changes)), 'management'=>$address, 'rule_count'=>count($rules), 'seed_id'=>$seed['seed_id']];
+    $result += ['home_pilot'=>$home, 'dns_interfaces'=>$dnsInterfaces, 'dhcp_subnet'=>$dhcpSubnet, 'dhcp_api_ready'=>$dhcpReady, 'home_interface_reload'=>$homeInterfaceReload];
 
     if (in_array($mode, ['verify', 'complete', 'network'], true)) {
         requireCondition(count($changes) === 0, 'Saved pilot configuration has drifted');
@@ -304,6 +444,9 @@ try {
         requireCondition(!str_contains($runtimeDns, 'forward-first: yes'), 'Recursive DNS fallback is forbidden');
         requireCondition(str_contains($runtimeDns, 'interface: ' . $address), 'Missing MGMT DNS listener');
         requireCondition(trim(shell_exec('/usr/bin/pgrep -x ntpd')) !== '', 'NTP service is not running');
+        if ($home !== null) {
+            requireCondition(homeRuntime($home, $homeDevice), 'HOME address, DNS, DHCP or automatic NAT is not loaded');
+        }
         foreach ($input['dns_hosts'] as $host) {
             $answer = shell_exec('/usr/local/bin/drill -Q @' . escapeshellarg($address) . ' ' . escapeshellarg($host['hostname'] . '.' . (string)$xml->system->domain) . ' A');
             requireCondition(trim($answer ?? '') === $host['address'], 'Local DNS host verification failed');
@@ -340,7 +483,11 @@ try {
             fwrite($handle, file_get_contents('/conf/config.xml'));
             fclose($handle);
         }
-        writePrivate($statePath, ['seed_id'=>$seed['seed_id'], 'digest'=>$digest, 'phase'=>'pending', 'backup'=>$backup]);
+        $nextState = ['seed_id'=>$seed['seed_id'], 'digest'=>$digest, 'phase'=>'pending', 'backup'=>$backup];
+        if ($home !== null) {
+            $nextState['home_pilot'] = $home;
+        }
+        writePrivate($statePath, $nextState);
         if (count($legacyChanges) > 0) {
             $nativeUnbound->serializeToConfig(true);
             $cnf->save(['description'=>'Ansible management pilot configuration']);

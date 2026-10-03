@@ -1,0 +1,4 @@
+---
+- ansible.builtin.import_playbook: configure-opnsense-pilot.yml
+  vars:
+    opnsense_home_requested: true

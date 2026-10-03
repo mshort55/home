@@ -19,6 +19,7 @@ all:
             legacy_address: 10.77.55.1/24
           # Synthetic port assignments; replace these in your private inventory.
           switch_ports:
+            - {role: home_pilot, name: GigabitEthernet1/0/36, description: HOME-PILOT, access_vlan: 20, enabled: true}
             - {role: idrac, name: GigabitEthernet1/0/16, description: IDRAC, access_vlan: 1, enabled: true}
             - {role: fortinet, name: GigabitEthernet1/0/18, description: FORTINET-LAN, access_vlan: 1, enabled: true}
             - {role: ap1, name: GigabitEthernet1/0/20, description: AP1, access_vlan: 1, enabled: true}
@@ -135,6 +136,12 @@ all:
           opnsense_proxmox_host: pve01
           ansible_host: 10.77.10.254
           # Management pilot; select wan_connected: true on pve01 when using it.
+          opnsense_home_pilot:
+            address: 10.77.200.254
+            subnet: 10.77.200.0/24
+            pool_start: 10.77.200.100
+            pool_end: 10.77.200.199
+            lease_seconds: 3600
           opnsense_pilot:
             admin_addresses: [10.77.10.250]
             update_addresses: [10.77.10.10]

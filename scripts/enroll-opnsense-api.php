@@ -38,11 +38,12 @@ try {
     }
     $mdl = new \OPNsense\Auth\User();
     $user = $mdl->getUserByName('home-ansible');
-    $privileges = 'page-filter-api,page-services-unbound';
+    $legacyPrivileges = 'page-filter-api,page-services-unbound';
+    $privileges = $legacyPrivileges . ',page-dhcp-kea-v4';
     if ($user !== null) {
         ensure(in_array((string)$user->descr, [OWNERSHIP_MARKER, LEGACY_OWNERSHIP_MARKER], true), 'Conflicting API user');
         ensure(file_exists($record), 'Missing original API credentials; refusing key rotation');
-        ensure((string)$user->priv === $privileges && (string)$user->disabled === '0', 'API user privileges conflict');
+        ensure(in_array((string)$user->priv, [$legacyPrivileges, $privileges], true) && (string)$user->disabled === '0', 'API user privileges conflict');
     }
     $credentials = file_exists($record) ? json_decode(file_get_contents($record), true, 512, JSON_THROW_ON_ERROR) : null;
     if ($credentials !== null) {
@@ -75,7 +76,8 @@ try {
     if ($certificateMatches) {
         ensure(is_file($directory . '/server.pem') && is_file($directory . '/server.key'), 'Missing original enrolled certificate; refusing replacement');
     }
-    $changed = $user === null || !$certificateMatches || $ktlsConfigChanged || $ktlsRuntimeChanged;
+    $privilegesChanged = $user !== null && (string)$user->priv !== $privileges;
+    $changed = $user === null || $privilegesChanged || !$certificateMatches || $ktlsConfigChanged || $ktlsRuntimeChanged;
     $restartRequired = !$certificateMatches || $ktlsRuntimeChanged;
     if ($certificateMatches) {
         exec('/usr/local/bin/openssl s_client -connect 127.0.0.1:443 -verify_return_error -verify_ip ' . escapeshellarg($address) . ' -CAfile ' . escapeshellarg($directory . '/server.pem') . ' -brief < /dev/null 2>/dev/null', $unused, $verifyRc);
@@ -124,6 +126,11 @@ try {
                     $messages[] = $error->getField() . ': ' . $error->getMessage();
                 }
                 ensure(count($errors) === 0, 'API user model validation failed: ' . implode('; ', $messages));
+                $mdl->serializeToConfig(true);
+            }
+            if ($privilegesChanged) {
+                $user->priv = $privileges;
+                ensure(count($mdl->performValidation(true)) === 0, 'API privilege model validation failed');
                 $mdl->serializeToConfig(true);
             }
             $certs = new \OPNsense\Trust\Cert();

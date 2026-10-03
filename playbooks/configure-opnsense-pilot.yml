@@ -58,6 +58,11 @@
       ansible.builtin.set_fact:
         pilot_payload: "{{ pilot_settings | combine({'management_address': hostvars[opnsense_guest].ansible_host, 'networks': pilot_networks}) }}"
 
+    - name: Select the explicitly requested HOME pilot allocation
+      ansible.builtin.set_fact:
+        pilot_payload: "{{ pilot_payload | combine({'home_pilot': hostvars[opnsense_guest].opnsense_home_pilot}) }}"
+      when: opnsense_home_requested | default(false) | bool
+
     - name: Validate the installed identity and preview vendor model changes without saving
       ansible.builtin.raw: "{{ pilot_prefix }} plan {{ pilot_payload | to_json | b64encode | quote }}"
       delegate_to: "{{ opnsense_guest }}"
@@ -65,14 +70,22 @@
       changed_when: pilot_preview.rc == 0 and ansible_check_mode and (pilot_preview.stdout | trim | from_json).reload_required
       check_mode: false
 
-    - name: Report the scoped management pilot preview
+    - name: Require DHCP API enrollment before previewing HOME writes
+      ansible.builtin.assert:
+        that:
+          - (pilot_preview.stdout | trim | from_json).dhcp_api_ready
+        fail_msg: Run configure-opnsense-api.yml for the guest to enroll the Kea DHCP privilege, then rerun this playbook.
+      when: (pilot_preview.stdout | trim | from_json).home_pilot is not none
+
+    - name: Report the scoped pilot preview
       ansible.builtin.debug:
         msg:
           guest: "{{ opnsense_guest }}"
           management: "{{ hostvars[opnsense_guest].ansible_host }}"
           changes: "{{ (pilot_preview.stdout | trim | from_json).changes }}"
           wan: Connect the owned WAN vNIC only after saved configuration and loaded firewall and DNS checks pass
-          scope: MGMT DNS/NTP and named administration/update hosts; HOME/DEV/BMC stay disabled and no DHCP server is enabled
+          home: "{{ (pilot_preview.stdout | trim | from_json).home_pilot }}"
+          scope: "{{ 'MGMT services and isolated HOME DHCP/DNS/internet; DEV/BMC stay disabled' if (pilot_preview.stdout | trim | from_json).home_pilot is not none else 'MGMT services; HOME/DEV/BMC stay disabled and no DHCP server is enabled' }}"
 
     - name: Preview firewall and DNS with the community modules
       ansible.builtin.include_tasks:
@@ -85,7 +98,7 @@
 
     - name: Select whether the API preview requires a configuration transaction
       ansible.builtin.set_fact:
-        pilot_api_change: "{{ pilot_rule_changes.changed or pilot_bootstrap_change.changed | default(false) or pilot_dns_general_change.changed or pilot_dns_acl_changes.changed or pilot_dns_host_changes.changed }}"
+        pilot_api_change: "{{ pilot_rule_changes.changed or pilot_bootstrap_change.changed | default(false) or pilot_dns_general_change.changed or pilot_dns_acl_changes.changed or pilot_dns_host_changes.changed or pilot_dhcp_general_change.changed | default(false) or pilot_dhcp_subnet_change.changed | default(false) }}"
 
     - name: Finish the read-only preview before guest or VM writes
       ansible.builtin.meta: end_host
@@ -142,7 +155,7 @@
       no_log: true
       when: pilot_reload_required
 
-    - name: Apply firewall and DNS through OXL
+    - name: Apply firewall, DNS and selected DHCP through OXL
       ansible.builtin.include_tasks: tasks/configure-opnsense-policy.yml
 
     - name: Apply native time and resolver settings
@@ -259,4 +272,4 @@
           wan_address: "{{ (pilot_network.stdout | trim | from_json).wan_address }}"
           ntp_synchronized: "{{ (pilot_network.stdout | trim | from_json).ntp_synchronized }}"
           backup: "{{ pilot_backup_directory.path if pilot_reload_required else 'Existing protected guest backup retained; no new configuration save' }}"
-          next: HOME/DEV/BMC services, WireGuard and GUI certificate/account provisioning use separate workflows
+          home: "{{ (pilot_network.stdout | trim | from_json).home_pilot }}"
