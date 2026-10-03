@@ -1,5 +1,6 @@
 # Local environment and downloaded dependencies
 .venv/
+.venv-macos/
 .collections/
 .ansible/
 .cache/

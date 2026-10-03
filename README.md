@@ -15,6 +15,17 @@ python3 -m venv .venv
 
 `requirements.in` records direct Python dependencies; `requirements.txt` pins their resolved dependencies. Collections and their dependencies are pinned separately. The virtual environment and downloaded collections stay local and Git-ignored. Installation changes laptop files only.
 
+When the repository is shared between a Linux container and a Mac, create a separate native Mac environment. Python must be 3.12 or later. Run in the Mac's terminal:
+
+```bash
+cd /Users/$(whoami)/Repos/home
+python3 -m venv .venv-macos
+.venv-macos/bin/python -m pip install -r requirements.txt
+.venv-macos/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
+```
+
+Use `.venv-macos/bin/ansible-playbook` for native Mac runs. Linux virtual environments cannot be reused on macOS. Native execution is required when hosting an ISO on the Mac's Ethernet address.
+
 ## Shared inventory and credentials
 
 Keep real device addresses and connection settings in `inventory.private.yml`, mode 0600 and Git-ignored. Use `inventory.example.yml` as the starting structure for another installation. Store login usernames and passwords in the encrypted, Git-ignored `secrets/vault.yml`; inventory contains references rather than credential literals. Use the [native Vault commands](docs/credentials.md) to create, edit, view and rekey the store. The repo's `ansible.cfg` sets `ask_vault_pass = True`, so playbook commands prompt automatically without `--ask-vault-pass`. Keep the unlock password separately in your password manager and keep secrets out of command arguments and committed files.
@@ -58,3 +69,4 @@ Playbooks run only when explicitly invoked; Git pushes do not apply configuratio
 | iDRAC configuration backup | [iDRAC SCP backup](docs/playbooks/backup-idrac.md) |
 | iDRAC IPv4 network transition | [Configure iDRAC networking](docs/playbooks/configure-idrac-network.md) |
 | iDRAC UEFI boot maintenance | [Set UEFI through Redfish](docs/playbooks/set-idrac-uefi.md) |
+| iDRAC ISO mounting and native Mac image hosting | [Mount an ISO](docs/playbooks/mount-idrac-iso.md) |

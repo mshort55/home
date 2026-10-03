@@ -1,0 +1,26 @@
+---
+- name: Read native local platform details
+  ansible.builtin.setup:
+    gather_subset: [min]
+
+- name: Require native Mac hosting management
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.system == 'Darwin'
+      - ansible_facts.user_uid > 0
+    fail_msg: Stop local hosting from the native Mac terminal that started it.
+
+- name: Inspect the temporary launchd job before stopping
+  ansible.builtin.command:
+    argv: [launchctl, print, "gui/{{ ansible_facts.user_uid }}/{{ iso_server_label }}"]
+  register: iso_launchd_stop
+  changed_when: false
+  failed_when: iso_launchd_stop.rc not in [0, 113]
+  no_log: true
+
+- name: Stop the temporary ISO server
+  ansible.builtin.command:
+    argv: [launchctl, bootout, "gui/{{ ansible_facts.user_uid }}/{{ iso_server_label }}"]
+  when: iso_launchd_stop.rc == 0
+  changed_when: true
+  no_log: true

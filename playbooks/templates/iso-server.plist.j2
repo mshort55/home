@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>{{ iso_server_label | e }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
+    <string>-s</string>
+    <string>{{ ansible_facts.python.executable | e }}</string>
+    <string>-u</string>
+    <string>{{ (iso_server_directory ~ '/serve-iso.py') | e }}</string>
+    <string>{{ idrac_iso_path | e }}</string>
+    <string>--bind</string><string>{{ idrac_iso_bind_address | e }}</string>
+    <string>--allow-client</string><string>{{ idrac_network.address | e }}</string>
+    <string>--port</string><string>{{ idrac_iso_port }}</string>
+    <string>--sha256</string><string>{{ idrac_iso_sha256 | e }}</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><false/>
+  <key>ProcessType</key><string>Background</string>
+  <key>Umask</key><integer>63</integer>
+  <key>StandardOutPath</key><string>{{ (iso_server_directory ~ '/server.log') | e }}</string>
+  <key>StandardErrorPath</key><string>{{ (iso_server_directory ~ '/server.log') | e }}</string>
+</dict>
+</plist>
