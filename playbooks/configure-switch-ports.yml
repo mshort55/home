@@ -27,18 +27,46 @@
       ansible.builtin.set_fact:
         selected_ports: "{{ switch_ports | selectattr('role', 'in', switch_port_roles | default(switch_ports | map(attribute='role') | list)) | list }}"
 
-    - name: Validate access-port inputs
+    - name: Validate port identity and mode inputs
       ansible.builtin.assert:
         that:
           - selected_ports | length > 0
           - item.name is match('^GigabitEthernet[0-9]+/[0-9]+/[0-9]+$')
           - item.description is match('^[A-Za-z0-9 _.-]{1,80}$')
-          - item.access_vlan is integer
-          - item.access_vlan >= 1 and item.access_vlan <= 4094
           - item.enabled is boolean
+          - item.mode | default('access') in ['access', 'trunk']
+          - item.allow_mode_change | default(false) is boolean
       loop: "{{ selected_ports }}"
       loop_control:
         label: "{{ item.role }}"
+
+    - name: Validate access-port VLAN inputs
+      ansible.builtin.assert:
+        that:
+          - item.access_vlan is integer
+          - item.access_vlan >= 1 and item.access_vlan <= 4094
+          - item.native_vlan is not defined
+          - item.allowed_vlans is not defined
+      loop: "{{ selected_ports }}"
+      loop_control:
+        label: "{{ item.role }}"
+      when: item.mode | default('access') == 'access'
+
+    - name: Validate static trunk VLAN inputs
+      ansible.builtin.assert:
+        that:
+          - item.access_vlan is not defined
+          - item.native_vlan is integer
+          - item.native_vlan >= 1 and item.native_vlan <= 4094
+          - item.allowed_vlans is sequence and item.allowed_vlans is not string and item.allowed_vlans is not mapping
+          - item.allowed_vlans | length > 0
+          - item.allowed_vlans | select('integer') | list | length == item.allowed_vlans | length
+          - item.allowed_vlans | unique | length == item.allowed_vlans | length
+          - item.allowed_vlans | min >= 1 and item.allowed_vlans | max <= 4094
+      loop: "{{ selected_ports }}"
+      loop_control:
+        label: "{{ item.role }}"
+      when: item.mode | default('access') == 'trunk'
 
     - name: Refuse to persist unrelated unsaved configuration
       ansible.builtin.assert:
@@ -56,34 +84,103 @@
         gather_network_resources: [interfaces, l2_interfaces, vlans]
       no_log: true
 
-    - name: Require existing layer two ports without voice or trunk configuration
+    - name: Initialize available VLAN IDs
+      ansible.builtin.set_fact:
+        active_vlan_ids: []
+
+    - name: Select active VLANs from resource facts
+      ansible.builtin.set_fact:
+        active_vlan_ids: "{{ active_vlan_ids + [item.vlan_id] }}"
+      loop: "{{ ansible_facts['network_resources'].vlans }}"
+      when:
+        - item.state | default('active') == 'active'
+        - item.shutdown | default('disabled') != 'enabled'
+      no_log: true
+
+    - name: Require ordinary layer two ports and existing active VLANs
       ansible.builtin.assert:
         that:
           - item.name in (ansible_facts['network_resources'].interfaces | map(attribute='name') | list)
-          - item.access_vlan in (ansible_facts['network_resources'].vlans | map(attribute='vlan_id') | list)
+          - desired_vlans | difference(active_vlan_ids) | length == 0
           - existing_l2 | length == 1
-          - existing_l2[0].mode | default('access') == 'access'
-          - existing_l2[0].trunk is not defined
+          - existing_l2[0].mode | default('') in ['access', 'trunk']
+          - existing_l2[0].mode == item.mode | default('access') or item.allow_mode_change | default(false)
           - existing_l2[0].voice is not defined
-        fail_msg: This access-port workflow refuses routed, trunk or voice ports; review the existing configuration.
+          - existing_l2[0].private_vlan is not defined
+          - existing_l2[0].xconnect is not defined
+          - existing_l2[0].encapsulation is not defined
+        fail_msg: Review unexpected port features, missing or inactive VLANs, or a mode conversion without inventory permission.
       vars:
         existing_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | list }}"
+        desired_vlans: "{{ [item.access_vlan] if item.mode | default('access') == 'access' else item.allowed_vlans + [item.native_vlan] }}"
       loop: "{{ selected_ports }}"
       no_log: true
+
+    - name: Read selected interface configuration before changes
+      cisco.ios.ios_command:
+        commands: ["show running-config interface {{ item.name }}"]
+        retries: 1
+      loop: "{{ selected_ports }}"
+      register: port_config_before
+      no_log: true
+
+    - name: Refuse routed ports, aggregation members and unexpected interface services
+      ansible.builtin.assert:
+        that:
+          - item.stdout | length == 1
+          - item.stdout[0] is search('(?m)^interface ' ~ (item.item.name | regex_escape) ~ '\\s*$')
+          - item.stdout[0] is search('(?m)^end\\s*$')
+          - item.stdout[0] is not search('(?m)^ (no switchport|channel-group|service instance|ip address|ipv6 address|ip access-group|ipv6 traffic-filter|mac access-group)( |$)')
+        fail_msg: A selected interface has unexpected dependencies or an incomplete configuration response; review it before changing the port.
+      loop: "{{ port_config_before.results }}"
+      no_log: true
+
+    - name: Initialize resource-module inputs
+      ansible.builtin.set_fact:
+        port_interfaces: []
+        port_access: []
+        port_trunks: []
 
     - name: Build resource-module inputs
       ansible.builtin.set_fact:
         port_interfaces: "{{ (port_interfaces | default([])) + [{'name': item.name, 'description': item.description, 'enabled': item.enabled}] }}"
-        port_l2: "{{ (port_l2 | default([])) + [{'name': item.name, 'mode': 'access', 'access': {'vlan': item.access_vlan}}] }}"
       loop: "{{ selected_ports }}"
       loop_control:
         label: "{{ item.role }}"
 
+    - name: Build access-port inputs
+      ansible.builtin.set_fact:
+        port_access: "{{ port_access + [{'name': item.name, 'mode': 'access', 'access': {'vlan': item.access_vlan}}] }}"
+      loop: "{{ selected_ports }}"
+      loop_control:
+        label: "{{ item.role }}"
+      when: item.mode | default('access') == 'access'
+
+    - name: Build exact trunk inputs while retaining other layer two settings
+      ansible.builtin.set_fact:
+        port_trunks: "{{ port_trunks + [existing_l2 | combine({'mode': 'trunk', 'nonegotiate': true, 'trunk': existing_l2.get('trunk', {}) | combine({'encapsulation': 'dot1q', 'native_vlan': item.native_vlan, 'allowed_vlans': item.allowed_vlans | map('string') | list})})] }}"
+      vars:
+        existing_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
+      loop: "{{ selected_ports }}"
+      loop_control:
+        label: "{{ item.role }}"
+      when: item.mode | default('access') == 'trunk'
+
     - name: Apply access VLAN and mode to selected ports
       cisco.ios.ios_l2_interfaces:
-        config: "{{ port_l2 }}"
+        config: "{{ port_access }}"
         state: merged
       register: port_l2_result
+      when: port_access | length > 0
+
+    - name: Apply exact static trunk VLANs and disable negotiation
+      cisco.ios.ios_l2_interfaces:
+        # merged unions allowed VLANs; replaced removes unwanted allowed VLANs.
+        # Inputs above retain non-owned settings on each selected trunk.
+        config: "{{ port_trunks }}"
+        state: replaced
+      register: port_trunk_result
+      when: port_trunks | length > 0
 
     - name: Apply descriptions and administrative state to selected ports
       cisco.ios.ios_interfaces:
@@ -105,8 +202,7 @@
             that:
               - actual_interface.description == item.description
               - actual_interface.enabled | default(true) == item.enabled
-              - actual_l2.mode == 'access'
-              - actual_l2.access.vlan | default(1) == item.access_vlan
+              - actual_l2.mode == item.mode | default('access')
           vars:
             actual_interface: "{{ ansible_facts['network_resources'].interfaces | selectattr('name', 'equalto', item.name) | first }}"
             actual_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
@@ -114,11 +210,41 @@
           loop_control:
             label: "{{ item.role }}"
 
+        - name: Verify each access VLAN
+          ansible.builtin.assert:
+            that: actual_l2.access.vlan | default(1) == item.access_vlan
+          vars:
+            actual_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
+          loop: "{{ selected_ports }}"
+          loop_control:
+            label: "{{ item.role }}"
+          when: item.mode | default('access') == 'access'
+
+        - name: Verify exact trunk VLANs, encapsulation and disabled negotiation
+          ansible.builtin.assert:
+            that:
+              - actual_l2.trunk.encapsulation == 'dot1q'
+              - actual_l2.trunk.native_vlan == item.native_vlan
+              - actual_l2.nonegotiate | default(false)
+              - actual_l2.trunk.allowed_vlans is defined
+              - actual_l2.trunk.allowed_vlans | join(',') | ansible.netcommon.vlan_expander | sort == item.allowed_vlans | sort
+          vars:
+            actual_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
+          loop: "{{ selected_ports }}"
+          loop_control:
+            label: "{{ item.role }}"
+          when: item.mode | default('access') == 'trunk'
+
         - name: Save verified port changes to startup
           cisco.ios.ios_config:
             save_when: always
-          when: port_l2_result.changed or port_interface_result.changed
+          when: port_l2_result.changed or port_trunk_result.changed or port_interface_result.changed
           no_log: true
+
+    - name: Report bounded commands in check mode
+      ansible.builtin.debug:
+        msg: "{{ (port_l2_result.commands | default([])) + (port_trunk_result.commands | default([])) + (port_interface_result.commands | default([])) }}"
+      when: ansible_check_mode
 
     - name: Report configured scope
       ansible.builtin.debug:

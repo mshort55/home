@@ -3,7 +3,7 @@
   ansible.builtin.import_playbook: backup-switch.yml
   when: not ansible_check_mode
 
-- name: Prepare inventory-owned management and recovery VLANs
+- name: Prepare inventory-owned VLANs and the management SVI
   hosts: cisco_switches
   gather_facts: false
   become: true
@@ -221,4 +221,4 @@
 
     - name: Report management stage
       ansible.builtin.debug:
-        msg: "{{ 'Previewed' if ansible_check_mode else 'Verified and saved' }} VLANs and management SVI. Configure recovery ports with the shared port playbook, then test wired recovery. The legacy management address is retained."
+        msg: "{{ 'Previewed' if ansible_check_mode else 'Verified and saved' }} VLANs and management SVI. Configure selected ports with the shared port playbook, then test their endpoint connectivity. The legacy management address is retained."

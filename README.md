@@ -54,8 +54,8 @@ There is no automatic apply on Git push. Configuration-changing operations, init
 |---|---|
 | Shared credential management | [Ansible Vault CLI](docs/credentials.md) |
 | Cisco configuration backup | [Switch backup](docs/playbooks/backup-switch.md) |
-| Switch port configuration, including iDRAC | [Configure managed ports](docs/playbooks/configure-switch-ports.md) |
-| Switch management and recovery VLAN preparation | [Configure management](docs/playbooks/configure-switch-management.md) |
+| Switch access ports and static trunks, including iDRAC and server roles | [Configure managed ports](docs/playbooks/configure-switch-ports.md) |
+| Switch VLAN objects and management SVI preparation | [Configure management](docs/playbooks/configure-switch-management.md) |
 | FortiGate configuration backup | [FortiGate backup](docs/playbooks/backup-fortigate.md) |
 | iDRAC state snapshot | [iDRAC snapshot](docs/playbooks/snapshot-idrac.md) |
 | iDRAC configuration backup | [iDRAC SCP backup](docs/playbooks/backup-idrac.md) |

@@ -4,10 +4,13 @@ all:
       hosts:
         switch01:
           ansible_host: 10.77.55.1
-          # Optional staged management/recovery inputs; apply management first.
+          # Staged VLAN inputs; apply management before selecting new port roles.
           switch_vlans:
             - {vlan_id: 10, name: MGMT, state: active}
+            - {vlan_id: 20, name: HOME, state: active}
+            - {vlan_id: 30, name: DEV, state: active}
             - {vlan_id: 40, name: BMC, state: active}
+            - {vlan_id: 999, name: UNUSED, state: active}
           switch_management:
             vlan: 10
             address: 10.77.10.2/24
@@ -23,6 +26,9 @@ all:
             - {role: home_wired, name: GigabitEthernet1/0/24, description: HOME-WIRED, access_vlan: 1, enabled: true}
             - {role: recovery_mgmt, name: GigabitEthernet1/0/26, description: RECOVERY-MGMT, access_vlan: 10, enabled: true}
             - {role: recovery_bmc, name: GigabitEthernet1/0/28, description: RECOVERY-BMC, access_vlan: 40, enabled: true}
+            - {role: server_mgmt, name: GigabitEthernet1/0/30, description: PVE-MGMT, access_vlan: 10, enabled: true}
+            - {role: server_lan, name: GigabitEthernet1/0/32, description: PVE-LAN, mode: trunk, native_vlan: 999, allowed_vlans: [10, 20, 30, 40], allow_mode_change: true, enabled: true}
+            - {role: pilot_wan, name: GigabitEthernet1/0/34, description: PILOT-WAN, access_vlan: 1, enabled: true}
       vars:
         ansible_connection: ansible.netcommon.network_cli
         ansible_network_os: cisco.ios.ios
