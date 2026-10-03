@@ -59,15 +59,15 @@
     - name: Require existing layer two ports without voice or trunk configuration
       ansible.builtin.assert:
         that:
-          - item.name in (ansible_network_resources.interfaces | map(attribute='name') | list)
-          - item.access_vlan in (ansible_network_resources.vlans | map(attribute='vlan_id') | list)
+          - item.name in (ansible_facts['network_resources'].interfaces | map(attribute='name') | list)
+          - item.access_vlan in (ansible_facts['network_resources'].vlans | map(attribute='vlan_id') | list)
           - existing_l2 | length == 1
           - existing_l2[0].mode | default('access') == 'access'
           - existing_l2[0].trunk is not defined
           - existing_l2[0].voice is not defined
         fail_msg: This access-port workflow refuses routed, trunk or voice ports; review the existing configuration.
       vars:
-        existing_l2: "{{ ansible_network_resources.l2_interfaces | selectattr('name', 'equalto', item.name) | list }}"
+        existing_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | list }}"
       loop: "{{ selected_ports }}"
       no_log: true
 
@@ -108,8 +108,8 @@
               - actual_l2.mode == 'access'
               - actual_l2.access.vlan | default(1) == item.access_vlan
           vars:
-            actual_interface: "{{ ansible_network_resources.interfaces | selectattr('name', 'equalto', item.name) | first }}"
-            actual_l2: "{{ ansible_network_resources.l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
+            actual_interface: "{{ ansible_facts['network_resources'].interfaces | selectattr('name', 'equalto', item.name) | first }}"
+            actual_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
           loop: "{{ selected_ports }}"
           loop_control:
             label: "{{ item.role }}"

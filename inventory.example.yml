@@ -4,6 +4,16 @@ all:
       hosts:
         switch01:
           ansible_host: 10.77.55.1
+          # Optional staged management/recovery inputs; apply management first.
+          switch_vlans:
+            - {vlan_id: 10, name: MGMT, state: active}
+            - {vlan_id: 40, name: BMC, state: active}
+          switch_management:
+            vlan: 10
+            address: 10.77.10.2/24
+            description: MGMT
+            legacy_interface: Vlan1
+            legacy_address: 10.77.55.1/24
           # Synthetic port assignments; replace these in your private inventory.
           switch_ports:
             - {role: idrac, name: GigabitEthernet1/0/16, description: IDRAC, access_vlan: 1, enabled: true}
@@ -11,6 +21,8 @@ all:
             - {role: ap1, name: GigabitEthernet1/0/20, description: AP1, access_vlan: 1, enabled: true}
             - {role: ap2, name: GigabitEthernet1/0/22, description: AP2, access_vlan: 1, enabled: true}
             - {role: home_wired, name: GigabitEthernet1/0/24, description: HOME-WIRED, access_vlan: 1, enabled: true}
+            - {role: recovery_mgmt, name: GigabitEthernet1/0/26, description: RECOVERY-MGMT, access_vlan: 10, enabled: true}
+            - {role: recovery_bmc, name: GigabitEthernet1/0/28, description: RECOVERY-BMC, access_vlan: 40, enabled: true}
       vars:
         ansible_connection: ansible.netcommon.network_cli
         ansible_network_os: cisco.ios.ios
