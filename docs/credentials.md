@@ -23,7 +23,7 @@ Choose and confirm a strong Vault password. Ansible opens the editor selected by
 vault_devices: {}
 ```
 
-Save and exit; Ansible encrypts the file. Creation initializes the store; adding device credentials is a separate edit below. The current local Vault already exists and does not need to be recreated.
+Save and exit; Ansible encrypts the file. Creation initializes the store; adding device credentials is a separate edit below.
 
 ## Add or update device credentials
 
@@ -42,7 +42,7 @@ vault_devices:
     enable_password: '<device enable password>'
 ```
 
-Replace the placeholders in the editor. Preserve existing device entries when adding another device. Existing switch entries created before the username was moved into Vault need the `username` field added alongside their existing passwords. Use valid YAML quoting for passwords with special characters. Add only fields required by the relevant workflow; an API-managed device may need different fields from an SSH-managed device. Updating this file changes credentials supplied to automation, not the accounts or passwords configured on devices.
+Replace the placeholders in the editor. Preserve existing device entries when adding another device. Each switch entry requires `username`, `ssh_password` and `enable_password`. Use valid YAML quoting for passwords with special characters. Add only fields required by the relevant workflow; an API-managed device may need different fields from an SSH-managed device. Updating this file changes credentials supplied to automation, not the accounts or passwords configured on devices.
 
 Ansible decrypts into a temporary editor file, then re-encrypts on save. Avoid editor backup/swap/history copies containing secrets. Do not use `ansible-vault decrypt` to leave the store permanently unencrypted.
 
@@ -84,12 +84,8 @@ ansible_become_password: "{{ vault_devices[inventory_hostname].enable_password }
 
 A playbook loads `secrets/vault.yml` using `vars_files`. The repo's `ansible.cfg` sets `ask_vault_pass = True`, so playbook commands prompt automatically; `--ask-vault-pass` is unnecessary when running from the repo root. This supplies the stored credentials without individual SSH/enable prompts. The default also prompts for playbooks that do not need Vault; for those commands, use `ANSIBLE_ASK_VAULT_PASS=False` as a per-command override. This setting does not store or cache the password. See the [switch backup instructions](playbooks/backup-switch.md) for the complete command and prerequisites.
 
-Encryption does not verify a device password. A successful connection through the relevant playbook is the acceptance check. If unlocking fails, check the Vault password. If authentication fails after successful unlocking, inspect the device entry with `edit`. Keep secret-bearing output suppressed during ordinary playbook runs.
+Encryption does not verify a device password. Use the relevant playbook to verify device authentication. If unlocking fails, check the Vault password. If authentication fails after successful unlocking, inspect the device entry with `edit`. Keep secret-bearing output suppressed during ordinary playbook runs.
 
 Vault protects this credential store at rest. It does not automatically encrypt configuration exports under `backups/`, which retain their separate permissions and Git ignores.
-
-## Verification record
-
-The existing local Vault was confirmed to have an Ansible Vault header and mode 0600. Replacing the custom setup workflow with native CLI instructions preserved both the encrypted file and private inventory byte-for-byte. Inventory credential resolution and backup syntax were previously validated with an encrypted test fixture. Live validation of owner-entered credentials remains a separate backup run; no real credentials were decrypted as part of this documentation change.
 
 Reference: [Ansible Vault create, edit, view and rekey](https://docs.ansible.com/projects/ansible/latest/vault_guide/vault_encrypting_content.html).

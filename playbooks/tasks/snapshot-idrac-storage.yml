@@ -8,7 +8,7 @@
   ansible.builtin.assert:
     that:
       - idrac_storage_path is string
-      - idrac_storage_path is match('^/redfish/v1/(Systems|Chassis)/[A-Za-z0-9_.:-]+/(Storage|Drives)(/[A-Za-z0-9_.:-]+)*/?$')
+      - idrac_storage_path is match('^/redfish/v1/(Systems|Chassis)/[A-Za-z0-9_.:-]+/(Storage|StorageControllers|SimpleStorage|Drives)(/[A-Za-z0-9_.:-]+)*/?$')
       - "'..' not in idrac_storage_path.split('/')"
       - "'.' not in idrac_storage_path.split('/')"
     fail_msg: The advertised storage link is outside the allowed local Redfish paths.
@@ -47,14 +47,18 @@
     idrac_storage_body: "{{ idrac_storage_read.json | default({}) if idrac_storage_read.status == 200 else {} }}"
   no_log: true
 
-- name: Queue advertised members, drives and volumes once each
+- name: Queue advertised storage members, controllers, related drives and volumes once each
   ansible.builtin.set_fact:
     idrac_storage_pending: >-
       {%- set links = namespace(paths=idrac_storage_pending[1:]) -%}
       {%- for link in (idrac_storage_body.Members | default([])) +
                      (idrac_storage_body.Drives | default([])) +
-                     ([idrac_storage_body.Volumes] if idrac_storage_body.Volumes is defined else []) -%}
-      {%- if '@odata.id' in link -%}
+                     (idrac_storage_body.StorageControllers | default([])) +
+                     (idrac_storage_body.get('Links', {}).get('Drives', [])) +
+                     (idrac_storage_body.get('Links', {}).get('Volumes', [])) +
+                     ([idrac_storage_body.Volumes] if idrac_storage_body.Volumes is defined else []) +
+                     ([idrac_storage_body.get('@Redfish.Settings', {}).get('SettingsObject', {})]) -%}
+      {%- if link is mapping and '@odata.id' in link -%}
       {%- set links.paths = links.paths + [link['@odata.id']] -%}
       {%- endif -%}
       {%- endfor -%}

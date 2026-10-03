@@ -82,10 +82,23 @@
       loop: "{{ idrac_reads.results }}"
       no_log: true
 
-    - name: Start discovery at the advertised storage collection
+    - name: Start discovery at advertised storage and simple storage collections
       ansible.builtin.set_fact:
-        idrac_storage_pending: "{{ [idrac_observations.system.body.Storage['@odata.id']] if idrac_observations.system.body.Storage is defined and '@odata.id' in idrac_observations.system.body.Storage else [] }}"
+        idrac_storage_roots: >-
+          {%- set roots = namespace(paths={}) -%}
+          {%- for key in ['Storage', 'SimpleStorage'] -%}
+          {%- set link = idrac_observations.system.body.get(key, {}) -%}
+          {%- if link is mapping and '@odata.id' in link -%}
+          {%- set roots.paths = roots.paths | combine({key: link['@odata.id']}) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ roots.paths }}
         idrac_storage_resources: {}
+      no_log: true
+
+    - name: Queue unique advertised storage roots
+      ansible.builtin.set_fact:
+        idrac_storage_pending: "{{ idrac_storage_roots.values() | unique | list }}"
       no_log: true
 
     - name: Discover up to 64 storage resources
@@ -97,10 +110,61 @@
         idrac_observations: >-
           {{ idrac_observations | combine({'storage_discovery': {
             'root_advertised': idrac_observations.system.body.Storage is defined,
+            'advertised_roots': idrac_storage_roots,
             'resources': idrac_storage_resources,
             'unread_paths': idrac_storage_pending,
             'resource_limit': 64,
             'pagination_followed': false}}) }}
+      no_log: true
+
+    - name: Select advertised network and PCIe inventory roots
+      ansible.builtin.set_fact:
+        idrac_network_roots: >-
+          {%- set roots = namespace(paths={}) -%}
+          {%- for owner in ['system', 'manager', 'chassis'] -%}
+          {%- set body = idrac_observations[owner].body -%}
+          {%- for key in ['EthernetInterfaces', 'NetworkInterfaces', 'NetworkAdapters'] -%}
+          {%- set link = body.get(key, {}) -%}
+          {%- if link is mapping and '@odata.id' in link -%}
+          {%- set roots.paths = roots.paths | combine({owner ~ '.' ~ key: link['@odata.id']}) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {%- endfor -%}
+          {%- if 'system.NetworkAdapters' not in roots.paths -%}
+          {%- set roots.paths = roots.paths | combine({'documented_optional.NetworkAdapters':
+            '/redfish/v1/Systems/System.Embedded.1/NetworkAdapters'}) -%}
+          {%- endif -%}
+          {{ roots.paths }}
+        idrac_network_resources: {}
+      no_log: true
+
+    - name: Queue network roots and advertised PCIe devices and functions
+      ansible.builtin.set_fact:
+        idrac_network_pending: >-
+          {%- set links = namespace(paths=idrac_network_roots.values() | list) -%}
+          {%- for link in (idrac_observations.system.body.PCIeDevices | default([])) +
+                         (idrac_observations.system.body.PCIeFunctions | default([])) -%}
+          {%- if link is mapping and '@odata.id' in link -%}
+          {%- set links.paths = links.paths + [link['@odata.id']] -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ links.paths | unique | list }}
+      no_log: true
+
+    - name: Discover up to 128 network and PCIe resources
+      ansible.builtin.include_tasks: tasks/snapshot-idrac-network.yml
+      when: idrac_network_pending | length > 0
+
+    - name: Record network discovery and its limits
+      ansible.builtin.set_fact:
+        idrac_observations: >-
+          {{ idrac_observations | combine({'network_discovery': {
+            'roots': idrac_network_roots,
+            'resources': idrac_network_resources,
+            'unread_paths': idrac_network_pending,
+            'resource_limit': 128,
+            'pagination_followed': false,
+            'linux_interface_names_observed': false}}) }}
       no_log: true
 
     - name: Create the private backup parent directory

@@ -34,7 +34,7 @@ The account must be authorized to export the entire device configuration, includ
 .venv/bin/ansible-playbook playbooks/backup-fortigate.yml
 ```
 
-Vault prompts automatically. For syntax-only validation without unlocking the real store, override it with an empty local fixture:
+Vault prompts automatically. For syntax-only validation without unlocking the real store, use `/dev/null` as the Vault input:
 
 ```bash
 ANSIBLE_ASK_VAULT_PASS=False .venv/bin/ansible-playbook \
@@ -63,13 +63,5 @@ Before writing, the playbook requires HTTP 200, a FortiOS configuration header, 
 `--check` is deliberately rejected before connection. A repeated normal run creates another snapshot and reports local changes. No automatic restore or device configuration change is part of either run.
 
 If TLS validation fails, resolve the certificate chain, name or expiry before authenticating. If authentication fails, verify the Vault entry locally without guessing credentials or enabling verbose connection logs. If export validation fails, inspect it privately and confirm firmware/API compatibility and account scope; do not print its body into ordinary logs.
-
-## Verification record
-
-2026-09-30: syntax validation for both backup playbooks, Python dependency checks and diff whitespace checks passed in the existing Python 3.12 / ansible-core 2.20.9 / ansible.netcommon 8.7.1 environment with `fortinet.fortios` 2.5.1. Collection source inspection confirms username/password login, GET export, raw response handling and logout support.
-
-The complete playbook passed against a temporary local HTTPS fixture with certificate validation enabled: two exports created distinct snapshots with exact response bytes, matching checksums and restricted permissions; truncated and masked responses were rejected before file creation; check mode was rejected without contacting the fixture. Session logout was observed and synthetic secrets were absent from captured task output. The fixtures were removed. These checks validate workflow mechanics, not device compatibility or restoration.
-
-The owner confirmed the live certificate fingerprint independently. A connection-scoped trust file and local hostname mapping pass a TLS handshake with certificate, hostname and validity checks enabled. The owner subsequently completed a live Vault-backed backup. Independent local verification confirmed a global-scope completion manifest, a 207,718-byte configuration export, matching SHA-256 and byte count, mode 0700 for the snapshot directory, mode 0600 for both files, the expected configuration header/final marker and no password-mask placeholder. The backup milestone is complete; restoration remains untested.
 
 References: [Fortinet backup/restore workflow](https://ansible-galaxy-fortios-docs.readthedocs.io/en/latest/faq.html#how-to-backup-and-restore-fos), [monitor facts module](https://docs.ansible.com/projects/ansible/latest/collections/fortinet/fortios/fortios_monitor_fact_module.html), [HTTP API connection and scoped CA trust](https://docs.ansible.com/projects/ansible/latest/collections/ansible/netcommon/httpapi_connection.html).

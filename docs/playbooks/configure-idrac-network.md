@@ -43,7 +43,7 @@ Stage a recovery computer on the destination BMC access port with a static addre
 
 Apply first runs the existing iDRAC backup workflow, then reads live identity and settings, refuses unfinished jobs and performs a fresh preview. If the requested IPv4 state is already present, it submits no import. Otherwise it imports the same bounded profile once with `Target: IDRAC`, omitting shutdown and other host power-control options. Dell documents that iDRAC-only profiles do not trigger a host reboot. A successful POST means the request was accepted; configuration completion remains unverified. The response can be lost when the management address changes. Do not resubmit blindly after a timeout or interrupted run: inspect the private intent/submission record and the recovered endpoint first.
 
-The earlier implementation explicitly sent `ShutdownType: NoReboot`. On iDRAC8 this defers even iDRAC-only changes until a host reboot; it does not mean immediate application without reboot. The live import paused waiting for reboot, retained its old address, then reached the desired address after the operator rebooted the host. That option has been removed for future imports. The corrected request has been validated offline; immediate live application with the revised request has not yet been tested. No automatic reboot task has been added. [Dell SCP guide, sections 4.1 and 4.2.3](https://dl.dell.com/manuals/all-products/esuprt_solutions_int/esuprt_solutions_int_solutions_resources/servers-solution-resources_setup-guide3_en-us.pdf).
+`ShutdownType: NoReboot` can defer iDRAC8 SCP changes until a host reboot. This playbook omits that option and does not automatically reboot the host. If an existing import is paused waiting for reboot, inspect its task with `status` and follow the recovery procedure below before submitting another import. [Dell SCP guide, sections 4.1 and 4.2.3](https://dl.dell.com/manuals/all-products/esuprt_solutions_int/esuprt_solutions_int_solutions_resources/servers-solution-resources_setup-guide3_en-us.pdf).
 
 Next, update only the `idrac` port's access VLAN in the normal private switch inventory. Preview and apply the shared port workflow:
 
@@ -54,7 +54,7 @@ Next, update only the `idrac` port's access VLAN in the normal private switch in
   -e '{"switch_port_roles":["idrac"]}'
 ```
 
-The iDRAC remains untagged. Its management cable stays on its existing switch port; the recovery computer uses the separate BMC recovery port. Test the new address from that recovery computer. Update its local hostname mapping to the new address while retaining the same verified CA/certificate identity. The HOME controller has no route to the new BMC network yet; execute verification from a prepared controller with direct BMC access. Transfer the pinned repo environment, private inventory, CA and encrypted credentials to that controller if needed.
+The iDRAC remains untagged. Its management cable stays on its existing switch port; the recovery computer uses the separate BMC recovery port. Test the new address from that recovery computer. Update its local hostname mapping to the new address while retaining the same verified CA/certificate identity. Execute verification from a controller with direct BMC access or a working route to the destination network. Transfer the pinned repo environment, private inventory, CA and encrypted credentials to that controller if needed.
 
 Use the relative `task_path` printed after an accepted import (or strip the verified origin from `import-submission.json.location`):
 
@@ -83,7 +83,7 @@ curl --fail --silent --show-error --noproxy '*' \
   'https://bmc.example.test/redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/iDRAC.Embedded.1%23NIC.1'
 ```
 
-`--user` prompts for the password; keep it out of the command. `--resolve` directs the request to the new IP while validating the certificate against the trusted hostname. Read the saved task path on the same origin, require `Completed`/`OK`, and reread the interface after completion. This is a manual recovery verification path; record the observed identity, IPv4/VLAN settings and task result in the private handoff.
+`--user` prompts for the password; keep it out of the command. `--resolve` directs the request to the new IP while validating the certificate against the trusted hostname. Read the saved task path on the same origin, require `Completed`/`OK`, and reread the interface after completion. Compare the returned MAC, IPv4/VLAN settings and task result with the requested configuration.
 
 ## Rollback
 
@@ -101,9 +101,5 @@ After submission, restore the iDRAC switch port's original access VLAN through t
 ## Records and validation
 
 Each submitted preview/apply has a unique mode-0700 `backups/<host>-network-<timestamp>-<suffix>/` directory. Mode-0600 files contain the exact `profile.xml`, `before.json`, `intent.json`, `preview-submission.json` and `preview-task.json`. Apply adds `import-submission.json` and references its separate verified SCP backup. Credentials are excluded from records and suppressed in task output/diffs. Intent distinguishes pending submission, completed preview and accepted-but-unverified import; an incomplete intent alone does not prove a POST failed. No import is automatically retried. HTTP errors stop polling. Preview allows 25 GET attempts, verification 13, with five-second delays and 30-second request timeouts. Read-only status performs one task GET.
-
-An initial temporary HTTPS fixture passed 15 cases against the actual playbook, covering verified TLS, exact four/one-attribute profiles, backup/preview/single-import ordering, already-configured apply, verification, identity and active-job guards, invalid IPv4, missing recovery readiness, failed/foreign tasks and check-mode refusal. It also checked private artifact permissions and absence of supplied credentials in output/artifacts. Temporary Python fixtures are deleted after validation at the owner's request. Both static and DHCP rollback previews succeeded against live iDRAC8 2.86.86.86. The owner subsequently applied the original request, observed its reboot pause, rebooted the host and confirmed ICMP recovery at the desired BMC address. Authenticated final settings and completed task verification remain pending. The initial fixture did not model NoReboot's deferred behavior; its success did not establish correct live import timing.
-
-After correcting the request, a temporary verified-HTTPS fixture passed ten cases: preview, static and DHCP imports with all shutdown/power fields omitted, paused/completed status, paused verification stopping after one task GET, completed/failed/wrong-address verification, and foreign task-path refusal. It also checked the accepted import intent, exact profile component/attributes, one import POST, private file permissions, suppressed credentials and absence of Ansible deprecation warnings. Syntax and whitespace checks passed. The fixture was deleted afterward. No live request or host reboot was performed to validate this code correction.
 
 Reference: [Dell RESTful Server Configuration, sections 2.5, 2.9 and 2.13–2.14](https://downloads.dell.com/manuals/common/dell-emc-restful-server-config-idrac-api.pdf).

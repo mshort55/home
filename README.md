@@ -1,9 +1,8 @@
 # Home infrastructure automation
 
-Run infrastructure workflows from the administration laptop, using a pinned local environment. Occasional maintenance and recovery tasks belong here when keeping them repeatable is useful; frequency alone does not determine whether a task should be automated. Build and test automation incrementally: establish initial access manually, then apply supported settings through small, explicitly invoked workflows. Document manual exceptions when automation is not practical.
+Run infrastructure backup, snapshot and configuration playbooks from the administration laptop using the pinned local Ansible environment.
 
 ## Install the pinned local environment
-
 
 Run from this directory, using Python 3.12:
 
@@ -24,14 +23,12 @@ Keep SSH host-key checking and TLS certificate validation enabled. Verify and es
 
 Private inventories, credentials, generated configuration and backup artifacts remain local and Git-ignored. Keep real device details out of public examples and workflow documentation; use synthetic values instead. Use mode 0700 for private artifact directories and 0600 for files. Suppress secret-bearing task output and diffs; keep persistent connection logging disabled.
 
-## Layout and documentation conventions
+## Repository layout
 
 | Location | Purpose |
 |---|---|
 | `playbooks/` | Explicitly invoked workflows |
-| `roles/` | Reusable implementation units, added when needed |
-| `docs/playbooks/<playbook-name>.md` | Purpose, prerequisites, inputs, commands, outputs, side effects, troubleshooting and verification record for that playbook |
-| `docs/roles/<role-name>.md` | Role-specific inputs, behavior, dependencies and verification, added with each role |
+| `docs/playbooks/<playbook-name>.md` | Playbook purpose, prerequisites, inputs, commands, outputs and troubleshooting |
 | `docs/credentials.md` | Shared native Vault command reference |
 | `collections/requirements.yml` | Pinned Ansible collections |
 | `requirements.in` / `requirements.txt` | Direct and resolved Python dependencies |
@@ -40,13 +37,13 @@ Private inventories, credentials, generated configuration and backup artifacts r
 | `secrets/vault.yml` | Encrypted device credentials, untracked; unlock password stored separately |
 | `backups/` | All local backups, grouped by device/run, untracked |
 
-This README owns shared setup and conventions plus the documentation index. Put all playbook/role-specific operational instructions and test results under `docs/`, and link them here. Use matching filenames so a playbook or role's documentation is easy to find. Links between workflow documents and implementation files should be relative; command examples run from the automation root.
+The workflow documentation below describes each playbook. Command examples run from the repository root.
 
 ## Running workflows
 
 Read the workflow's documentation before invoking it. Validate syntax first, review the intended scope, then run one bounded operation at a time. Check-mode support and repeat-run behavior are workflow-specific; never assume `--check` proves successful application or creates an artifact.
 
-There is no automatic apply on Git push. Configuration-changing operations, initial installation, firmware maintenance and migration transitions use separate entry points. Routine runs must not replay destructive bootstrap steps. Verify the relevant behavior after execution and reconcile emergency manual changes before subsequent applies.
+Playbooks run only when explicitly invoked; Git pushes do not apply configuration. Use the documented read-back and recovery procedures to verify changes and reconcile manual device changes before subsequent applies.
 
 ## Workflow documentation
 
@@ -61,5 +58,3 @@ There is no automatic apply on Git push. Configuration-changing operations, init
 | iDRAC configuration backup | [iDRAC SCP backup](docs/playbooks/backup-idrac.md) |
 | iDRAC IPv4 network transition | [Configure iDRAC networking](docs/playbooks/configure-idrac-network.md) |
 | iDRAC UEFI boot maintenance | [Set UEFI through Redfish](docs/playbooks/set-idrac-uefi.md) |
-
-No reusable roles have been introduced yet. Add their documentation to this index when they are implemented.

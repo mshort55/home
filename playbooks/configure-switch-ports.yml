@@ -106,6 +106,7 @@
           - existing_l2[0].mode | default('') in ['access', 'trunk']
           - existing_l2[0].mode == item.mode | default('access') or item.allow_mode_change | default(false)
           - existing_l2[0].voice is not defined
+          - existing_l2[0].get('access', {}).vlan_name is not defined
           - existing_l2[0].private_vlan is not defined
           - existing_l2[0].xconnect is not defined
           - existing_l2[0].encapsulation is not defined
@@ -149,8 +150,18 @@
         label: "{{ item.role }}"
 
     - name: Build access-port inputs
+      # IOS omits default access VLAN 1 from resource facts. Omit its assignment
+      # only if the selected port already has that default; explicit nondefault
+      # VLANs still need a real command to return to VLAN 1.
       ansible.builtin.set_fact:
-        port_access: "{{ port_access + [{'name': item.name, 'mode': 'access', 'access': {'vlan': item.access_vlan}}] }}"
+        port_access: >-
+          {{ port_access + [
+            {'name': item.name, 'mode': 'access'} |
+            combine({'access': {'vlan': item.access_vlan}} if needs_vlan_assignment else {})
+          ] }}
+      vars:
+        existing_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
+        needs_vlan_assignment: "{{ item.access_vlan != 1 or existing_l2.get('access', {}).get('vlan', 1) != 1 }}"
       loop: "{{ selected_ports }}"
       loop_control:
         label: "{{ item.role }}"
@@ -212,7 +223,9 @@
 
         - name: Verify each access VLAN
           ansible.builtin.assert:
-            that: actual_l2.access.vlan | default(1) == item.access_vlan
+            that:
+              - actual_l2.get('access', {}).vlan_name is not defined
+              - actual_l2.access.vlan | default(1) == item.access_vlan
           vars:
             actual_l2: "{{ ansible_facts['network_resources'].l2_interfaces | selectattr('name', 'equalto', item.name) | first }}"
           loop: "{{ selected_ports }}"

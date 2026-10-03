@@ -1,6 +1,6 @@
 # Set UEFI boot mode through Redfish
 
-[set-idrac-uefi.yml](../../playbooks/set-idrac-uefi.yml) is a maintenance operation for this server before OS installation. It changes `BootMode` from `Bios` to `Uefi`, creates the Dell BIOS configuration job, waits for scheduling, issues one `ForceRestart`, waits for completion, and verifies the applied BIOS attribute. The force restart is deliberate for the owner's server with no installed OS; do not reuse this workflow on a running workload without a shutdown plan.
+[set-idrac-uefi.yml](../../playbooks/set-idrac-uefi.yml) sets the server BIOS boot mode through Redfish. It changes `BootMode` from `Bios` to `Uefi`, creates the Dell BIOS configuration job, waits for scheduling, issues one `ForceRestart`, waits for completion, and verifies the applied BIOS attribute. This workflow force-restarts the host. Use it before OS installation or during a maintenance window with a shutdown plan for any running workloads.
 
 Run locally with the existing inventory, scoped certificate trust and Vault credentials:
 
@@ -24,7 +24,5 @@ ANSIBLE_ASK_VAULT_PASS=False .venv/bin/ansible-playbook \
   -i inventory.example.yml playbooks/set-idrac-uefi.yml \
   -e vault_file=/dev/null --syntax-check
 ```
-
-Validation uses a temporary authenticated HTTPS fixture running the actual playbook: successful PATCH/job/restart/read-back; already-UEFI no-op; pending BIOS and active-job refusal before writes; foreign job URL and failed scheduling refusal before restart; incorrect final BIOS value rejected; check mode without requests; private record permissions and credential suppression. The owner's live run subsequently completed successfully: the BIOS job reported Completed and both the maintenance read-back and an independent full snapshot confirmed BootMode Uefi. Processor virtualization remained enabled and storage health remained OK.
 
 References: [Dell BIOS setting example](https://infohub.delltechnologies.com/en-nz/l/dell-poweredge-getting-started-with-redfish-ansible-modules/changing-a-bios-setting/), [Dell iDRAC8 job API](https://www.dell.com/support/manuals/en-nz/precision-r7910-workstation/idrac8_redfishapiguide_2.70.70.70/delljob?guid=guid-79d11cfa-c737-45b1-ab5e-f46f10508ca7&lang=en-us).
