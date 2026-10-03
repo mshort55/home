@@ -118,7 +118,8 @@ def validate(payload: dict[str, object]) -> bool:
             "EFI disk contains unreviewed settings")
 
     cdrom = properties(config.get("ide2", "none,media=cdrom"), "file")
-    require(cdrom.get("media") == "cdrom" and cdrom.get("file") in (desired["iso_volume"], "none"),
+    require(cdrom.get("media") == "cdrom" and cdrom.get("file") in
+            (desired["iso_volume"], desired.get("bootstrap_iso_volume", desired["iso_volume"]), "none"),
             "Attached installation media conflicts")
     require(cdrom.keys() <= {"file", "media", "size"}, "CD-ROM contains unreviewed settings")
     allowed_drives = {"scsi0", "efidisk0", "ide2"}

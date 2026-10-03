@@ -29,6 +29,7 @@
           - opnsense_vm.networks | map(attribute='device') | list == ['net0', 'net1', 'net2', 'net3', 'net4']
           - opnsense_vm.networks | map(attribute='role') | list == ['WAN', 'MGMT', 'HOME', 'DEV', 'BMC']
           - opnsense_vm.networks | map(attribute='mac') | unique | length == 5
+          - opnsense_verify_only | default(false) is boolean
         fail_msg: Define the documented VM 100 allocation and five ordered MAC-to-role mappings.
 
     - name: Validate explicit guest network isolation
@@ -140,6 +141,7 @@
           - '"iso" in iso_storage[0].content.split(",")'
           - opnsense_remote_media.stat.exists or iso_storage[0].avail > opnsense_manifest.iso_size * 2
           - opnsense_allocations | length <= 1
+          - not opnsense_verify_only | default(false) or opnsense_allocations | length == 1
           - opnsense_allocations | length == 0 or (opnsense_allocations[0].type == 'qemu' and opnsense_allocations[0].node == opnsense_host_name)
           - opnsense_allocations | length != 0 or opnsense_host_reads.results[5].stdout_lines | length == 1
           - opnsense_allocations | length != 0 or disk_storage[0].avail > (opnsense_vm.disk_gib + 1) * 1024 ** 3
@@ -193,6 +195,7 @@
           disk_gib: "{{ opnsense_vm.disk_gib }}"
           disk_storage: "{{ opnsense_vm.disk_storage }}"
           iso_volume: "{{ opnsense_iso_volume }}"
+          bootstrap_iso_volume: "{{ opnsense_vm.iso_storage }}:iso/OPNsense-{{ opnsense_release.version }}-bootstrap-{{ inventory_hostname }}.iso"
           networks: {}
         opnsense_create_argv:
           - qm
@@ -286,6 +289,12 @@
       ansible.builtin.set_fact:
         opnsense_wan_change: "{{ opnsense_allocations | length == 1 and (opnsense_existing_verification.stdout | from_json).wan_link_change }}"
 
+    - name: Require a matching WAN state during verification-only use
+      ansible.builtin.assert:
+        that:
+          - not opnsense_wan_change
+      when: opnsense_verify_only | default(false)
+
     - name: Require console interface assignment confirmation before connecting WAN
       ansible.builtin.assert:
         that:
@@ -306,20 +315,21 @@
         owner: root
         group: root
         mode: '0644'
+      when: not opnsense_verify_only | default(false)
 
     - name: Verify the staged ISO before VM creation
       ansible.builtin.stat:
         path: "{{ opnsense_remote_iso }}"
         checksum_algorithm: sha256
       register: opnsense_staged_iso
-      when: not ansible_check_mode
+      when: not ansible_check_mode and not opnsense_verify_only | default(false)
 
     - name: Require exact staged ISO bytes
       ansible.builtin.assert:
         that:
           - opnsense_staged_iso.stat.checksum == opnsense_manifest.iso_sha256
           - opnsense_staged_iso.stat.size == opnsense_manifest.iso_size
-      when: not ansible_check_mode
+      when: not ansible_check_mode and not opnsense_verify_only | default(false)
 
     - name: Preview creation without allocating disks or starting the VM
       ansible.builtin.debug:
@@ -330,12 +340,12 @@
     - name: Create the VM once without starting it
       ansible.builtin.command:
         argv: "{{ opnsense_create_argv }}"
-      when: opnsense_allocations | length == 0 and not ansible_check_mode
+      when: opnsense_allocations | length == 0 and not ansible_check_mode and not opnsense_verify_only | default(false)
 
     - name: Apply only the requested WAN link transition on an existing VM
       ansible.builtin.command:
         argv: [qm, set, '100', --net0, "{{ opnsense_wan_argument }}"]
-      when: opnsense_wan_change and not ansible_check_mode
+      when: opnsense_wan_change and not ansible_check_mode and not opnsense_verify_only | default(false)
 
     - name: Read final VM configuration and power state
       ansible.builtin.command:

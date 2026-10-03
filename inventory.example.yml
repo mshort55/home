@@ -78,6 +78,7 @@ all:
         pve01:
           ansible_host: 10.77.10.10
           proxmox_idrac_host: idrac01
+          opnsense_guest: opnsense01
           opnsense_vm:
             vmid: 100
             name: opnsense01
@@ -126,3 +127,23 @@ all:
         ansible_connection: ssh
         ansible_user: root
         ansible_python_interpreter: /usr/bin/python3
+    opnsense_hosts:
+      hosts:
+        opnsense01:
+          opnsense_proxmox_host: pve01
+          ansible_host: 10.77.10.254
+          opnsense_bootstrap:
+            filesystem: zfs
+            hostname: opnsense01
+            domain: lab.home.arpa
+            timezone: Etc/UTC
+            prefix: 24
+            ssh_public_key_files:
+              - "{{ inventory_dir }}/.cache/proxmox-installer-inputs/admin.pub"
+      vars:
+        ansible_connection: ssh
+        ansible_user: root
+        ansible_ssh_common_args: >-
+          -o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519
+          -o IdentitiesOnly=yes
+          -o UserKnownHostsFile={{ (inventory_dir ~ '/.cache/opnsense-bootstrap/' ~ opnsense_proxmox_host ~ '/known_hosts') | quote }}

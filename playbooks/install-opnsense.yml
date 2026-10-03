@@ -1,0 +1,423 @@
+---
+- ansible.builtin.import_playbook: create-opnsense-vm.yml
+  vars:
+    opnsense_verify_only: true
+
+- name: Install the owned OPNsense VM disk and verify management SSH
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  vars:
+    opnsense_bootstrap_dir: "{{ inventory_dir }}/.cache/opnsense-bootstrap/{{ inventory_hostname }}"
+    opnsense_install_record_dir: /var/lib/home-automation/opnsense-100
+    opnsense_install_record: "{{ opnsense_install_record_dir }}/install.json"
+    opnsense_bootstrap_volume: "{{ opnsense_expected.bootstrap_iso_volume }}"
+    opnsense_guest_ssh_args: "-o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519 -o IdentitiesOnly=yes -o UserKnownHostsFile={{ (opnsense_bootstrap_dir ~ '/known_hosts') | quote }}"
+  tasks:
+    - name: Require a disconnected WAN and the explicit guest inventory
+      ansible.builtin.assert:
+        that:
+          - opnsense_guest in groups.get('opnsense_hosts', [])
+          - hostvars[opnsense_guest].opnsense_proxmox_host == inventory_hostname
+          - not opnsense_vm.wan_connected
+          - not opnsense_wan_change
+          - opnsense_vm.onboot is sameas false
+          - opnsense_allocations | length == 1
+          - inventory_hostname is match('^[A-Za-z0-9_-]+$')
+        fail_msg: This installation entry point requires the owned VM with WAN disconnected and automatic startup disabled.
+
+    - name: Inspect private controller bootstrap files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        checksum_algorithm: sha256
+      loop:
+        - "{{ opnsense_bootstrap_dir }}/opnsense-bootstrap.iso"
+        - "{{ opnsense_bootstrap_dir }}/completion.json"
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: install_local_files
+      no_log: true
+
+    - name: Require complete protected bootstrap artifacts
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not item.stat.islnk | default(false)
+          - item.stat.mode == '0600'
+      loop: "{{ install_local_files.results }}"
+      no_log: true
+
+    - name: Read the controller seed manifest
+      ansible.builtin.slurp:
+        src: "{{ opnsense_bootstrap_dir }}/completion.json"
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: install_manifest_file
+      no_log: true
+
+    - name: Decode the selected seed
+      ansible.builtin.set_fact:
+        install_seed: "{{ install_manifest_file.content | b64decode | from_json }}"
+      no_log: true
+
+    - name: Match the seed to verified media and current inventory
+      ansible.builtin.assert:
+        that:
+          - install_seed.schema_version == 1
+          - install_seed.efi_boot_verified is sameas true
+          - install_seed.seed_id is match('^[0-9a-f]{64}$')
+          - install_seed.iso_sha256 == install_local_files.results[0].stat.checksum
+          - install_seed.iso_size == install_local_files.results[0].stat.size
+          - install_seed.source_sha256 == opnsense_manifest.iso_sha256
+          - install_seed.settings.networks == opnsense_vm.networks
+          - install_seed.address == hostvars[opnsense_guest].ansible_host
+          - install_seed.settings.hostname == hostvars[opnsense_guest].opnsense_bootstrap.hostname
+          - install_seed.settings.domain == hostvars[opnsense_guest].opnsense_bootstrap.domain
+          - install_seed.ssh_host_key is match('^ssh-ed25519 [A-Za-z0-9+/=]+$')
+        fail_msg: The selected bootstrap media does not match this guest, network allocation or verified DVD.
+
+    - name: Read VM power, owned disk path and seed storage path
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+        - "{{ ['pvesm', 'path', (opnsense_existing_vm.results[0].stdout | from_json).scsi0.split(',')[0]] }}"
+        - "{{ ['pvesm', 'path', opnsense_bootstrap_volume] }}"
+      register: install_host_reads
+      changed_when: false
+      check_mode: false
+
+    - name: Select current disk and boot state
+      ansible.builtin.set_fact:
+        install_vm_state: "{{ (install_host_reads.results[0].stdout | from_json).status }}"
+        install_disk_volume: "{{ (opnsense_existing_vm.results[0].stdout | from_json).scsi0.split(',')[0] }}"
+        install_remote_iso: "{{ install_host_reads.results[2].stdout }}"
+        install_cdrom: "{{ (opnsense_existing_vm.results[0].stdout | from_json).ide2 | default('none,media=cdrom') }}"
+
+    - name: Inspect the installation record directory and files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+        checksum_algorithm: sha256
+      loop:
+        - "{{ opnsense_install_record_dir }}"
+        - "{{ opnsense_install_record }}"
+        - "{{ install_remote_iso }}"
+      register: install_existing_files
+
+    - name: Refuse unrelated or unprotected installation artifacts
+      ansible.builtin.assert:
+        that:
+          - not directory.exists or (directory.isdir | default(false) and not directory.islnk | default(false) and directory.mode == '0700' and directory.uid == 0)
+          - not record.exists or (record.isreg | default(false) and not record.islnk | default(false) and record.mode == '0600' and record.uid == 0)
+          - not media.exists or (media.isreg | default(false) and not media.islnk | default(false) and media.checksum == install_seed.iso_sha256)
+      vars:
+        directory: "{{ install_existing_files.results[0].stat }}"
+        record: "{{ install_existing_files.results[1].stat }}"
+        media: "{{ install_existing_files.results[2].stat }}"
+
+    - name: Read a previous installation intent
+      ansible.builtin.slurp:
+        src: "{{ opnsense_install_record }}"
+      register: install_record_file
+      when: install_existing_files.results[1].stat.exists
+
+    - name: Select the existing installation intent
+      ansible.builtin.set_fact:
+        install_previous: "{{ (install_record_file.content | b64decode | from_json) if install_existing_files.results[1].stat.exists else {} }}"
+        install_intent:
+          seed_id: "{{ install_seed.seed_id }}"
+          disk_volume: "{{ install_disk_volume }}"
+          iso_sha256: "{{ install_seed.iso_sha256 }}"
+          guest: "{{ opnsense_guest }}"
+
+    - name: Refuse a different installation identity or a running unrecorded guest
+      ansible.builtin.assert:
+        that:
+          - install_vm_state in ['stopped', 'running']
+          - install_previous | length == 0 or install_previous.intent == install_intent
+          - install_previous | length == 0 or install_previous.phase in ['started', 'disk_written', 'complete']
+          - install_previous | length > 0 or install_vm_state == 'stopped'
+          - install_cdrom.split(',')[0] in [opnsense_bootstrap_volume, 'none', opnsense_expected.iso_volume]
+        fail_msg: Existing installation ownership, state or media requires inspection; no disk is replaced.
+
+    - name: Check both ends of the stopped system disk before its first installation
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - |
+            import json, os, sys
+            with open(sys.argv[1], 'rb', buffering=0) as disk:
+                size = disk.seek(0, os.SEEK_END)
+                disk.seek(0)
+                first = disk.read(2 * 1024 * 1024)
+                disk.seek(size - 2 * 1024 * 1024)
+                last = disk.read(2 * 1024 * 1024)
+            print(json.dumps({'size': size, 'blank_ends': not any(first) and not any(last)}))
+          - "{{ install_host_reads.results[1].stdout }}"
+      register: install_blank_probe
+      changed_when: false
+      check_mode: false
+      when: install_previous | length == 0
+
+    - name: Require the original empty 32 GiB VM system disk
+      ansible.builtin.assert:
+        that:
+          - (install_blank_probe.stdout | from_json).size == 34359738368
+          - (install_blank_probe.stdout | from_json).blank_ends is sameas true
+        fail_msg: This disk contains data or has a conflicting size. The installation workflow refuses to erase it.
+      when: install_previous | length == 0
+
+    - name: Preview the bounded guest installation
+      ansible.builtin.debug:
+        msg:
+          guest: "{{ opnsense_guest }}"
+          vmid: 100
+          disk: "{{ install_disk_volume }}"
+          management: "{{ install_seed.address }}/24"
+          current_media: "{{ install_cdrom.split(',')[0] }}"
+          mount_bootstrap_media: "{{ install_vm_state == 'stopped' and install_previous.phase | default('started') == 'started' and install_cdrom.split(',')[0] == opnsense_expected.iso_volume }}"
+          scope: "{{ 'Verify the completed installation over pinned SSH' if install_previous.phase | default('') == 'complete' else 'Resume the written disk without reinstalling; shut down a live DVD cleanly, eject media, boot disk and verify SSH; WAN stays disconnected' if install_previous.phase | default('') == 'disk_written' else 'Stage the seeded DVD, boot the owned guest, install ZFS only on the empty guest disk, shut down cleanly, eject media, boot disk and verify SSH; WAN stays disconnected' }}"
+      changed_when: install_previous.phase | default('') != 'complete' or install_vm_state != 'running'
+      when: ansible_check_mode
+
+    - name: Finish the installation preview before writes
+      ansible.builtin.meta: end_host
+      when: ansible_check_mode
+
+    - name: Pin the SSH host key generated into this private bootstrap media
+      ansible.builtin.known_hosts:
+        path: "{{ opnsense_bootstrap_dir }}/known_hosts"
+        name: "{{ install_seed.address }}"
+        key: "{{ install_seed.address }} {{ install_seed.ssh_host_key }}"
+        hash_host: true
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    - name: Protect the dedicated guest trust file
+      ansible.builtin.file:
+        path: "{{ opnsense_bootstrap_dir }}/known_hosts"
+        mode: '0600'
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    - name: Create the protected host installation record directory
+      ansible.builtin.file:
+        path: "{{ opnsense_install_record_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Record installation identity before any VM media or power change
+      ansible.builtin.copy:
+        dest: "{{ opnsense_install_record }}"
+        owner: root
+        group: root
+        mode: '0600'
+        content: "{{ {'intent': install_intent, 'phase': 'started'} | to_nice_json }}\n"
+      when: install_previous | length == 0
+
+    - name: Stage the exact private bootstrap DVD
+      ansible.builtin.copy:
+        src: "{{ opnsense_bootstrap_dir }}/opnsense-bootstrap.iso"
+        dest: "{{ install_remote_iso }}"
+        owner: root
+        group: root
+        mode: '0600'
+      when: install_previous.phase | default('') != 'complete'
+      diff: false
+      no_log: true
+
+    - name: Verify staged bootstrap bytes
+      ansible.builtin.stat:
+        path: "{{ install_remote_iso }}"
+        follow: false
+        checksum_algorithm: sha256
+      register: install_staged_media
+      when: install_previous.phase | default('') != 'complete'
+
+    - name: Require exact staged bootstrap media
+      ansible.builtin.assert:
+        that:
+          - install_staged_media.stat.checksum == install_seed.iso_sha256
+          - install_staged_media.stat.size == install_seed.iso_size
+      when: install_previous.phase | default('') != 'complete'
+
+    - name: Mount bootstrap media only on the stopped guest before its first boot
+      ansible.builtin.command:
+        argv: [qm, set, '100', --ide2, "{{ opnsense_bootstrap_volume }},media=cdrom"]
+      when: install_vm_state == 'stopped' and install_previous.phase | default('started') == 'started' and install_cdrom.split(',')[0] == opnsense_expected.iso_volume
+
+    - name: Eject remaining installation media before resuming a written stopped disk
+      ansible.builtin.command:
+        argv: [qm, set, '100', --ide2, 'none,media=cdrom']
+      when: install_vm_state == 'stopped' and install_previous.phase | default('') in ['disk_written', 'complete'] and install_cdrom.split(',')[0] != 'none'
+
+    - name: Start the owned guest if stopped
+      ansible.builtin.command:
+        argv: [qm, start, '100']
+      when: install_vm_state == 'stopped'
+
+    - name: Wait for the guest management SSH listener
+      ansible.builtin.wait_for:
+        host: "{{ install_seed.address }}"
+        port: 22
+        timeout: 600
+        connect_timeout: 5
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    - name: Inspect the live or installed guest using its seeded SSH identity
+      ansible.builtin.raw: /usr/local/bin/php /usr/local/share/ansible-opnsense/inspect.php
+      delegate_to: "{{ opnsense_guest }}"
+      vars:
+        ansible_ssh_common_args: "{{ opnsense_guest_ssh_args }}"
+      register: install_guest_probe
+      changed_when: false
+      retries: 18
+      delay: 5
+      until: install_guest_probe is succeeded
+
+    - name: Select the authenticated guest state
+      ansible.builtin.set_fact:
+        install_guest_state: "{{ install_guest_probe.stdout | trim | from_json }}"
+
+    - name: Match the running guest to this seed
+      ansible.builtin.assert:
+        that:
+          - install_guest_state.seed_id == install_seed.seed_id
+          - install_guest_state.state in ['live', 'installed']
+          - install_previous.phase | default('') != 'complete' or install_guest_state.state == 'installed'
+
+    - name: Select whether this live guest still needs its first disk installation
+      ansible.builtin.set_fact:
+        install_disk_write_required: "{{ install_guest_state.state == 'live' and install_previous.phase | default('') != 'disk_written' }}"
+
+    - name: Install ZFS using the vendor installer components on the empty guest disk
+      ansible.builtin.raw: /bin/sh /usr/local/share/ansible-opnsense/install.sh
+      delegate_to: "{{ opnsense_guest }}"
+      vars:
+        ansible_ssh_common_args: "{{ opnsense_guest_ssh_args }}"
+      register: install_guest_result
+      changed_when: true
+      when: install_disk_write_required
+
+    - name: Require the guest disk installation to have completed
+      ansible.builtin.assert:
+        that:
+          - '"ANSIBLE_DISK_INSTALLED" in install_guest_result.stdout'
+      when: install_disk_write_required
+
+    - name: Preserve completion of the disk write before the first disk boot
+      ansible.builtin.copy:
+        dest: "{{ opnsense_install_record }}"
+        owner: root
+        group: root
+        mode: '0600'
+        content: "{{ {'intent': install_intent, 'phase': 'disk_written'} | to_nice_json }}\n"
+      when: install_disk_write_required
+
+    - name: Read power after recording the completed disk write
+      ansible.builtin.command:
+        argv: [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      register: install_shutdown_state
+      changed_when: false
+      when: install_guest_state.state == 'live'
+
+    - name: Request a clean shutdown of the installed live guest through Proxmox
+      ansible.builtin.command:
+        argv: [qm, shutdown, '100', --timeout, '300', --forceStop, '0']
+      when: install_guest_state.state == 'live' and (install_shutdown_state.stdout | from_json).status == 'running'
+
+    - name: Wait for the installed guest to power down cleanly
+      ansible.builtin.command:
+        argv: [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      register: install_halted
+      changed_when: false
+      retries: 60
+      delay: 5
+      until: (install_halted.stdout | from_json).status == 'stopped'
+      when: install_guest_state.state == 'live'
+
+    - name: Eject the installer on the halted guest
+      ansible.builtin.command:
+        argv: [qm, set, '100', --ide2, 'none,media=cdrom']
+      when: install_guest_state.state == 'live'
+
+    - name: Boot the installed ZFS disk
+      ansible.builtin.command:
+        argv: [qm, start, '100']
+      when: install_guest_state.state == 'live'
+
+    - name: Wait for installed guest management SSH
+      ansible.builtin.wait_for:
+        host: "{{ install_seed.address }}"
+        port: 22
+        timeout: 600
+        connect_timeout: 5
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    - name: Verify installed ZFS, seed marker, all NIC mappings and management SSH
+      ansible.builtin.raw: /usr/local/bin/php /usr/local/share/ansible-opnsense/inspect.php
+      delegate_to: "{{ opnsense_guest }}"
+      vars:
+        ansible_ssh_common_args: "{{ opnsense_guest_ssh_args }}"
+      register: install_final_guest
+      changed_when: false
+      retries: 24
+      delay: 5
+      until: install_final_guest is succeeded and (install_final_guest.stdout | trim | from_json).state == 'installed'
+
+    - name: Require the installed disk rather than the live DVD
+      ansible.builtin.assert:
+        that:
+          - (install_final_guest.stdout | trim | from_json).seed_id == install_seed.seed_id
+          - (install_final_guest.stdout | trim | from_json).filesystem == 'zfs'
+
+    - name: Read final VM hardware and power
+      ansible.builtin.command:
+        argv: "{{ item }}"
+      loop:
+        - [pvesh, get, /nodes/localhost/qemu/100/config, --current, '1', --output-format, json]
+        - [pvesh, get, /nodes/localhost/qemu/100/status/current, --output-format, json]
+      register: install_final_host
+      changed_when: false
+
+    - name: Verify unchanged VM hardware and the disconnected WAN
+      ansible.builtin.command:
+        argv: ["{{ ansible_playbook_python }}", "{{ playbook_dir }}/../scripts/validate-opnsense-vm.py"]
+        stdin: "{{ {'config': install_final_host.results[0].stdout | from_json, 'desired': opnsense_expected} | to_json }}"
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: install_final_verification
+      changed_when: false
+
+    - name: Require a running installed VM with WAN disconnected
+      ansible.builtin.assert:
+        that:
+          - not (install_final_verification.stdout | from_json).wan_link_change
+          - (install_final_host.results[1].stdout | from_json).status == 'running'
+
+    - name: Record verified installation completion
+      ansible.builtin.copy:
+        dest: "{{ opnsense_install_record }}"
+        owner: root
+        group: root
+        mode: '0600'
+        content: "{{ {'intent': install_intent, 'phase': 'complete'} | to_nice_json }}\n"
+
+    - name: Report verified management access
+      ansible.builtin.debug:
+        msg: "{{ opnsense_guest }} is installed on ZFS and reachable over pinned, key-only SSH at {{ install_seed.address }}. WAN remains disconnected; HOME/DEV/BMC are assigned but disabled. Firewall policy, DHCP, DNS and GUI certificate trust are configured separately."
