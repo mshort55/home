@@ -78,6 +78,22 @@ all:
         pve01:
           ansible_host: 10.77.10.10
           proxmox_idrac_host: idrac01
+          opnsense_vm:
+            vmid: 100
+            name: opnsense01
+            cores: 4
+            memory_mib: 8192
+            disk_gib: 32
+            disk_storage: local-lvm
+            iso_storage: local
+            onboot: false
+            wan_connected: false
+            networks:
+              - {device: net0, role: WAN, bridge: vmbr2, mac: '02:77:00:00:64:00'}
+              - {device: net1, role: MGMT, bridge: vmbr1, mac: '02:77:00:00:64:01', tag: 10}
+              - {device: net2, role: HOME, bridge: vmbr1, mac: '02:77:00:00:64:02', tag: 20}
+              - {device: net3, role: DEV, bridge: vmbr1, mac: '02:77:00:00:64:03', tag: 30}
+              - {device: net4, role: BMC, bridge: vmbr1, mac: '02:77:00:00:64:04', tag: 40}
           proxmox_network:
             management:
               bridge: vmbr0

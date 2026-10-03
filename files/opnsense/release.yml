@@ -1,0 +1,9 @@
+---
+opnsense_release:
+  version: '26.7'
+  filename: OPNsense-26.7-dvd-amd64.iso
+  base_url: https://pkg.opnsense.org/releases/26.7
+  archive_sha256: 95cafedda6d5b22ce832e249dc2309110fbee19f813ad78cf28bb3d387186bfb
+  public_key_sha256: 9f3b76ffef38fb6405595038b324b61043c9a2c375ae5c151d628508e9a845ce
+  public_key_file: 26.7.pub
+  provenance: https://github.com/opnsense/changelog/blob/5a18f785fc5d5817d21d8fb6a233476ffee8546a/community/26.7/26.7

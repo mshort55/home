@@ -73,3 +73,5 @@ Playbooks run only when explicitly invoked; Git pushes do not apply configuratio
 | iDRAC one-time virtual DVD boot and power on | [Boot a mounted ISO](docs/playbooks/boot-idrac-iso.md) |
 | Private unattended Proxmox ISO preparation | [Prepare a Proxmox ISO](docs/playbooks/prepare-proxmox-iso.md) |
 | Proxmox guest LAN and WAN bridges over SSH | [Configure Proxmox bridges](docs/playbooks/configure-proxmox-bridges.md) |
+| Verified OPNsense DVD ISO preparation on the controller | [Prepare an OPNsense ISO](docs/playbooks/prepare-opnsense-iso.md) |
+| OPNsense VM creation and controlled pilot WAN attachment | [Create the OPNsense VM](docs/playbooks/create-opnsense-vm.md) |
