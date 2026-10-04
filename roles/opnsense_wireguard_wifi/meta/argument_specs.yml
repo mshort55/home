@@ -1,4 +1,3 @@
----
 argument_specs:
   main:
     short_description: Validate and dispatch private-WAN Wi-Fi WireGuard actions.
@@ -18,17 +17,16 @@ argument_specs:
             - verify
             - remove
             - verify_absent
+            - prepare
       opnsense_wireguard:
         type: dict
-        description: Existing installed HOME WireGuard allocation; validated by its
-          role.
+        description: Existing installed HOME WireGuard allocation; validated by its role.
         required: true
       wireguard_wifi_key_directory:
         type: path
-        description: Existing protected key directory; configure renders only the
-          additional Mac profile.
-        default: '{{ wireguard_key_directory | default((role_path ~ ''/../..'') |
-          realpath ~ ''/.cache/wireguard/'' ~ inventory_hostname) }}'
+        description: Existing protected key directory; configure renders only the additional Mac profile.
+        default: '{{ wireguard_key_directory | default((role_path ~ ''/../..'') | realpath ~ ''/.cache/wireguard/'' ~ inventory_hostname)
+          }}'
       wireguard_wifi_fortigate_host:
         type: str
         default: fortigate01
@@ -57,8 +55,11 @@ argument_specs:
       vault_file:
         type: path
         default: '{{ (role_path ~ ''/../..'') | realpath }}/secrets/vault.yml'
-        description: Encrypted controller credential file loaded by configure/verify
-          entry points.
+        description: Encrypted controller credential file loaded by configure/verify entry points.
+      opnsense_lab:
+        type: dict
+        required: false
+        description: Optional lab allocations; client preparation queries completed protected guest records.
   inspect:
     short_description: Private Wi-Fi inspect.
     options:
@@ -151,3 +152,17 @@ argument_specs:
             required: true
             choices:
             - verify_absent
+  prepare:
+    short_description: Refresh the existing Wi-Fi client without device writes.
+    options:
+      opnsense_wireguard_wifi_options:
+        type: dict
+        required: true
+        description: Explicit client preparation action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - prepare
+            description: Select the prepare task file.

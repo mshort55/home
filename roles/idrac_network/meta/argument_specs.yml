@@ -1,9 +1,8 @@
----
 argument_specs:
   main:
     short_description: Validate and dispatch idrac_network actions.
     options:
-      idrac_network_options:
+      idrac_network_options: &id001
         type: dict
         description: Role-scoped parameters. The task_action field is required; there is no default action.
         required: true
@@ -17,13 +16,14 @@ argument_specs:
             - apply
             - status
             - verify
-      idrac_ca_path:
+            - verify_current
+      idrac_ca_path: &id002
         type: path
         description: Verified iDRAC CA file.
-      idrac_expected_mac:
+      idrac_expected_mac: &id003
         type: str
         description: Independently verified dedicated iDRAC MAC.
-      idrac_network:
+      idrac_network: &id004
         type: dict
         description: Desired static IPv4 address, mask and gateway.
         options:
@@ -53,11 +53,11 @@ argument_specs:
       vault_file:
         type: path
         description: Encrypted controller credential source.
-        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+        default: '{{ (role_path ~ ''/../..'') | realpath }}/secrets/vault.yml'
       backup_root:
         type: path
         description: Private controller backup parent.
-        default: "{{ (role_path ~ '/../..') | realpath }}/backups"
+        default: '{{ (role_path ~ ''/../..'') | realpath }}/backups'
       idrac_network_mode:
         type: str
         description: Optional idrac_network setting; preserves the existing workflow value.
@@ -161,3 +161,10 @@ argument_specs:
         type: str
         description: Original accepted task path; required for status/verify.
         required: true
+  verify_current:
+    short_description: Read the current static BMC address and return gateway without an old import task.
+    options:
+      idrac_network_options: *id001
+      idrac_ca_path: *id002
+      idrac_expected_mac: *id003
+      idrac_network: *id004

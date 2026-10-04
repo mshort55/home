@@ -1,0 +1,237 @@
+- name: Provision the owned permanent Fedora guest
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: '{{ pve_api.api_host }}'
+      api_user: '{{ pve_api.api_user }}'
+      api_token_id: '{{ pve_api.api_token_id }}'
+      api_token_secret: '{{ pve_api.api_token_secret }}'
+      validate_certs: true
+      ca_path: '{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem'
+      api_timeout: 30
+  block:
+  - name: Verify DEV routing before any VM allocation
+    ansible.builtin.raw: 'printf ''%s'' {{ (lookup(''ansible.builtin.file'', role_path ~ ''/../../scripts/configure-opnsense-lab.php'')
+      | replace(''// LAB_EXTENSION_LIBRARY'', lookup(''ansible.builtin.file'', role_path ~ ''/../../scripts/opnsense-lab-library.php'')))
+      | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php -- verify {{ {''zone'': ''dev'', ''settings'': hostvars[opnsense_guest].opnsense_lab.dev,
+      ''wireguard'': hostvars[opnsense_guest].opnsense_wireguard, ''enabled'': true} | to_json | b64encode | quote }}'
+    delegate_to: '{{ opnsense_guest }}'
+    changed_when: false
+    check_mode: false
+  - name: Read VM ownership before any writes
+    ansible.builtin.include_tasks: _read.yml
+  - name: Require an owned disk boot before resuming a running first installation
+    ansible.builtin.assert:
+      that:
+      - fedora_current.state in ['absent', 'stopped'] or (fedora_current.has_disk and fedora_current.config.boot == 'order=scsi0')
+      fail_msg: Running guest has an unexpected boot state; no disk or boot changes were requested.
+  - name: Inspect verified private controller artifacts
+    ansible.builtin.stat:
+      path: '{{ item }}'
+      follow: false
+      checksum_algorithm: sha256
+    loop:
+    - '{{ fedora_image_directory }}/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2'
+    - '{{ fedora_image_directory }}/completion.json'
+    - '{{ fedora_seed_directory }}/user-data.yml'
+    - '{{ fedora_seed_directory }}/known_hosts'
+    delegate_to: localhost
+    register: fedora_artifacts
+    no_log: true
+  - name: Require verified nonsymlink controller artifacts
+    ansible.builtin.assert:
+      that:
+      - item.stat.isreg | default(false)
+      - not item.stat.islnk | default(false)
+      - item.stat.mode == '0600'
+    loop: '{{ fedora_artifacts.results }}'
+    no_log: true
+  - name: Match the image and seeded keys to the previous VM intent
+    ansible.builtin.assert:
+      that:
+      - fedora_artifacts.results[0].stat.checksum == '28680fe5b371a5a82ebf43a31926e086a168e59949d03969c5093e7071f90b7f'
+      - (lookup('ansible.builtin.file', fedora_image_directory ~ '/completion.json') | from_json).signer == '36F612DCF27F7D1A48A835E4DBFCF71C6D9F90A6'
+      - not fedora_current.previous or fedora_current.previous.seed_sha256 == fedora_artifacts.results[2].stat.checksum
+      fail_msg: Prepare the pinned image and stable private seed first; an existing guest never receives replacement bootstrap
+        keys.
+  - name: Finish creation preview before storage or VM writes
+    ansible.builtin.meta: end_role
+    when: ansible_check_mode
+  - name: Create the protected VM intent directory
+    ansible.builtin.file:
+      path: /var/lib/home-automation/fedora-200
+      state: directory
+      mode: '0700'
+  - name: Record ownership before any VM or disk allocation
+    ansible.builtin.copy:
+      content: '{{ {''version'': 1, ''phase'': ''pending'', ''allocation'': fedora_dev_vm, ''seed_sha256'': fedora_artifacts.results[2].stat.checksum}
+        | to_nice_json }} '
+      dest: /var/lib/home-automation/fedora-200/intent.json
+      mode: '0600'
+      follow: false
+    when: not fedora_current.previous
+  - name: Prepare a dedicated local cloud-init snippet directory
+    ansible.builtin.file:
+      path: /var/lib/home-automation/cloud-init/snippets
+      state: directory
+      mode: '0700'
+  - name: Inspect the dedicated snippet storage before registration
+    ansible.builtin.command:
+      argv:
+      - pvesh
+      - get
+      - /storage
+      - --output-format
+      - json
+    changed_when: false
+    register: fedora_storage_read
+  - name: Refuse a conflicting dedicated snippet storage
+    ansible.builtin.assert:
+      that:
+      - not snippet_storage or (snippet_storage | length == 1 and snippet_storage[0].type == 'dir' and snippet_storage[0].path
+        == '/var/lib/home-automation/cloud-init' and snippet_storage[0].content == 'snippets' and snippet_storage[0].nodes
+        == inventory_hostname)
+    vars:
+      snippet_storage: '{{ fedora_storage_read.stdout | from_json | selectattr(''storage'', ''equalto'', ''home-cloudinit'')
+        | list }}'
+  - name: Register only the dedicated node-local snippet storage
+    ansible.builtin.command:
+      argv:
+      - pvesm
+      - add
+      - dir
+      - home-cloudinit
+      - --path
+      - /var/lib/home-automation/cloud-init
+      - --content
+      - snippets
+      - --nodes
+      - '{{ inventory_hostname }}'
+      - --shared
+      - '0'
+    when: fedora_storage_read.stdout | from_json | selectattr('storage', 'equalto', 'home-cloudinit') | list | length == 0
+  - name: Stage the protected cloud-init seed without displaying its host key
+    ansible.builtin.copy:
+      src: '{{ fedora_seed_directory }}/user-data.yml'
+      dest: /var/lib/home-automation/cloud-init/snippets/dev01-user.yml
+      mode: '0600'
+      follow: false
+    no_log: true
+    diff: false
+  - name: Create the VM shell and cloud-init disk once through the community API
+    community.proxmox.proxmox_kvm:
+      node: '{{ inventory_hostname }}'
+      vmid: 200
+      name: '{{ fedora_dev_vm.name }}'
+      description: Managed by create-fedora-dev-vm.yml; vmid=200
+      cores: 4
+      sockets: 1
+      memory: 8192
+      balloon: 0
+      bios: seabios
+      ostype: l26
+      scsihw: virtio-scsi-single
+      serial:
+        serial0: socket
+      vga: serial0
+      net:
+        net0: virtio={{ fedora_dev_vm.mac }},bridge={{ fedora_dev_vm.bridge }},tag=30
+      ide:
+        ide2: '{{ fedora_dev_vm.storage }}:cloudinit'
+      ipconfig:
+        ipconfig0: ip={{ fedora_dev_vm.address }},gw={{ fedora_dev_vm.gateway }}
+      nameservers:
+      - '{{ fedora_dev_vm.dns }}'
+      searchdomains:
+      - '{{ fedora_dev_vm.domain }}'
+      cicustom: user=home-cloudinit:snippets/dev01-user.yml
+      onboot: false
+      state: present
+      timeout: 180
+      agent: enabled=1
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    when: not fedora_current.exists
+  - name: Stage the exact verified cloud image only before its first disk import
+    ansible.builtin.copy:
+      src: '{{ fedora_image_directory }}/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2'
+      dest: /var/lib/home-automation/fedora-200/source.qcow2
+      mode: '0600'
+      follow: false
+    when: not fedora_current.has_disk
+  - name: Verify the staged image before importing guest disk bytes
+    ansible.builtin.stat:
+      path: /var/lib/home-automation/fedora-200/source.qcow2
+      follow: false
+      checksum_algorithm: sha256
+    register: fedora_staged_image
+    when: not fedora_current.has_disk
+  - name: Require exact protected staged image bytes
+    ansible.builtin.assert:
+      that:
+      - fedora_staged_image.stat.isreg and not fedora_staged_image.stat.islnk
+      - fedora_staged_image.stat.mode == '0600'
+      - fedora_staged_image.stat.checksum == fedora_artifacts.results[0].stat.checksum
+    when: not fedora_current.has_disk
+  - name: Recheck ownership immediately before the first disk import
+    ansible.builtin.include_tasks: _read.yml
+  - name: Import and attach the verified image only to the stopped diskless owned VM
+    ansible.builtin.command:
+      argv:
+      - qm
+      - set
+      - '200'
+      - --scsi0
+      - '{{ fedora_dev_vm.storage }}:0,import-from=/var/lib/home-automation/fedora-200/source.qcow2,discard=on,iothread=1'
+    when: not fedora_current.has_disk and fedora_current.state == 'stopped'
+  - name: Grow the owned system disk to its absolute allocation through the API
+    community.proxmox.proxmox_disk:
+      vmid: 200
+      disk: scsi0
+      state: resized
+      size: 80G
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    when: fedora_current.previous.phase != 'complete' and fedora_current.state == 'stopped'
+  - name: Select the imported disk for the first boot through the API
+    community.proxmox.proxmox_kvm:
+      node: '{{ inventory_hostname }}'
+      vmid: 200
+      update: true
+      boot: order=scsi0
+      state: present
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    when: fedora_current.previous.phase != 'complete' and fedora_current.state == 'stopped'
+  - name: Start the initial disk boot through the community API
+    community.proxmox.proxmox_kvm:
+      node: '{{ inventory_hostname }}'
+      vmid: 200
+      state: started
+      timeout: 120
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    when: fedora_current.previous.phase != 'complete' and fedora_current.state == 'stopped'
+  - name: Verify the installed guest through the trusted Proxmox guest agent
+    ansible.builtin.include_tasks: _guest.yml
+    when: fedora_current.previous.phase != 'complete' or fedora_current.state == 'running'
+  - name: Complete the protected VM record after first-boot validation
+    ansible.builtin.copy:
+      content: '{{ fedora_current.previous | combine({''phase'': ''complete''}) | to_nice_json }} '
+      dest: /var/lib/home-automation/fedora-200/intent.json
+      mode: '0600'
+      follow: false
+    when: fedora_current.previous.phase != 'complete'
+  - name: Verify final owned hardware
+    ansible.builtin.include_tasks: _read.yml
+  - name: Report the permanent development guest
+    ansible.builtin.debug:
+      msg:
+        vmid: 200
+        address: '{{ fedora_dev_vm.address }}'
+        login: '{{ fedora_dev_vm.username }}'
+        state: '{{ fedora_current.state }}'
+        next: Use WireGuard for SSH; configure-fedora-dev-host.yml verifies the guest baseline over SSH.

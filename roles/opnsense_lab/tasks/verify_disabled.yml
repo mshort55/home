@@ -1,0 +1,5 @@
+---
+- name: Verify saved and running scoped lab configuration without writes
+  ansible.builtin.raw: "{{ lab_prefix }} verify {{ lab_payload | to_json | b64encode | quote }}"
+  check_mode: false
+  changed_when: false

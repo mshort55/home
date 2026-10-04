@@ -1,5 +1,7 @@
 # Role architecture
 
+Permanent lab access uses `opnsense_lab` actions `configure`, `verify`, `disable`, and `verify_disabled`, with explicit `zone: bmc` or `dev`. `fedora_dev` provides `prepare`, `create`, `verify`, `start`, and `stop`; `fedora_host` provides `configure`, `verify`, and `connectivity`. See [lab access](playbooks/configure-opnsense-lab.md) and [Fedora provisioning](playbooks/fedora-dev.md). Client preparation queries completed protected zone records separately from immutable WireGuard key allocation.
+
 `playbooks/` contains inventory orchestration only. Each entry point maps a host group and execution settings to a role and supplies an explicit action for a named workflow. Implementations, reusable tasks, optional defaults and formal contracts live under `roles/`. No entry point imports another playbook.
 
 `ansible.cfg` sets `roles_path = ./roles` and `private_role_vars = True`. Dynamic role composition also uses `public: false`. Role parameters and defaults do not become general play variables. Ansible registered variables and facts remain host-scoped; documented workflow outputs below are deliberately shared between collaborating roles.

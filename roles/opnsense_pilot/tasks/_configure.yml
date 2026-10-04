@@ -249,7 +249,7 @@
         home: "{{ (pilot_network.stdout | trim | from_json).home_pilot }}"
   vars:
     pilot_settings: "{{ hostvars[opnsense_guest].opnsense_pilot }}"
-    pilot_code: "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-pilot.php') | b64encode\
+    pilot_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-pilot.php') | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
       \ }}"
     pilot_prefix: printf '%s' {{ pilot_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --
   module_defaults:

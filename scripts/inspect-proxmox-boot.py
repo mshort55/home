@@ -36,7 +36,9 @@ def protected(path: Path, mode: int | None = None) -> None:
 
 
 def main() -> None:
-    node, vmid, guest, kernel = sys.argv[1:]
+    node, vmid, guest, kernel, lab_payload = sys.argv[1:]
+    lab = mapping(json.loads(lab_payload))
+    require(lab.get('action') in ['startup', 'reboot'], 'Unexpected host maintenance action')
     require(os.geteuid() == 0 and socket.gethostname().split('.')[0] == node, 'Wrong maintenance host')
     require(vmid == '100' and re.fullmatch(r'[A-Za-z0-9_-]+', guest) is not None, 'Unexpected firewall identity')
     require(run('systemctl', 'is-enabled', 'pve-guests') == 'enabled', 'Guest boot service is not enabled')
@@ -47,10 +49,22 @@ def main() -> None:
     require(json.loads(run('pvesh', 'get', '/cluster/ha/resources', '--output-format', 'json')) == [],
             'HA guests require a separate maintenance workflow')
     guests: object = json.loads(run('pvesh', 'get', '/cluster/resources', '--type', 'vm', '--output-format', 'json'))
-    require(isinstance(guests, list) and len(guests) == 1, 'This workflow requires only the owned firewall guest')
-    allocation = mapping(cast(list[object], guests)[0])
+    require(isinstance(guests, list), 'Expected a complete guest allocation list')
+    allocations = [mapping(item) for item in cast(list[object], guests)]
+    require(len({item.get('vmid') for item in allocations}) == len(allocations), 'Duplicate guest allocation identity')
+    firewalls = [item for item in allocations if item.get('vmid') == 100]
+    require(len(firewalls) == 1, 'Missing or duplicate firewall allocation')
+    allocation = firewalls[0]
     require(allocation.get('node') == node and allocation.get('vmid') == 100 and allocation.get('type') == 'qemu'
             and allocation.get('name') == guest and allocation.get('status') == 'running', 'Firewall allocation conflicts')
+    for extra in [item for item in allocations if item.get('vmid') != 100]:
+        require(extra.get('vmid') == 200 and extra.get('node') == node and extra.get('type') == 'qemu'
+                and lab.get('allocation') is not None, 'Unowned additional guest requires separate maintenance review')
+        inspected = mapping(json.loads(run(sys.executable, '-c', str(lab['probe']), json.dumps(lab['allocation']), node)))
+        previous = mapping(inspected['previous'])
+        require(inspected.get('exists') is True and previous.get('phase') == 'complete', 'Complete the owned development installation before host maintenance')
+        require(lab.get('action') != 'reboot' or inspected.get('state') == 'stopped',
+                'Stop the development VM with stop-fedora-dev-vm.yml before host reboot; it has manual startup policy')
 
     directory = Path('/var/lib/home-automation/opnsense-100')
     record = directory / 'install.json'

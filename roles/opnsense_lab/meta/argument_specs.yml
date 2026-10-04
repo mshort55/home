@@ -1,0 +1,61 @@
+argument_specs:
+  main:
+    short_description: Dispatch an explicit permanent lab zone action.
+    options:
+      opnsense_lab_options:
+        type: dict
+        required: true
+        description: Explicit zone and action; neither has a default.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - configure
+            - verify
+            - disable
+            - verify_disabled
+            description: Matching task filename.
+          zone:
+            type: str
+            required: true
+            choices:
+            - bmc
+            - dev
+            description: Permanent zone to manage.
+      opnsense_lab:
+        type: dict
+        required: true
+        description: Permanent routed lab allocation.
+        options:
+          dev:
+            type: dict
+            required: true
+            description: DEV allocation.
+            options: &id001
+              address:
+                type: str
+                required: true
+                description: Permanent zone gateway IPv4.
+              subnet:
+                type: str
+                required: true
+                description: Canonical private zone /24.
+              target:
+                type: str
+                required: true
+                description: Named iDRAC or first development host IPv4.
+              hostname:
+                type: str
+                required: true
+                description: Local target hostname.
+          bmc:
+            type: dict
+            required: true
+            description: BMC allocation.
+            options: *id001
+      opnsense_wireguard:
+        type: dict
+        required: true
+        description: Existing immutable WireGuard allocation; validated against its
+          protected record.

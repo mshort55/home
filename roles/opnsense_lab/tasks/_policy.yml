@@ -1,0 +1,83 @@
+- name: Merge only explicitly owned lab policy using OXL
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  module_defaults:
+    group/oxlorg.opnsense.all:
+      firewall: '{{ opn_api.firewall }}'
+      api_key: '{{ opn_api.api_key }}'
+      api_secret: '{{ opn_api.api_secret }}'
+      ssl_verify: true
+      ssl_ca_file: '{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem'
+      api_timeout: 30
+      api_retries: 2
+  block:
+  - name: Merge the bounded zone and tunnel firewall rules
+    oxlorg.opnsense.rule:
+      match_fields:
+      - description
+      description: '{{ item.description }}'
+      sequence: '{{ item.sequence | int }}'
+      enabled: '{{ lab_plan.enabled }}'
+      action: '{{ item.action }}'
+      quick: true
+      interface:
+      - '{{ item.interface }}'
+      interface_invert: false
+      direction: in
+      ip_protocol: inet
+      protocol: '{{ item.protocol }}'
+      source_net: '{{ item.source_net }}'
+      source_invert: false
+      source_port: ''
+      destination_net: '{{ item.destination_net }}'
+      destination_invert: false
+      destination_port: '{{ item.destination_port }}'
+      log: '{{ item.log == ''1'' }}'
+      state_type: keep
+      gateway: ''
+      replyto: ''
+      disable_replyto: false
+      reload: false
+    loop: '{{ lab_plan.rules }}'
+    loop_control:
+      label: '{{ item.description }}'
+    register: lab_rule_changes
+  - name: Merge only the zone DNS access list
+    oxlorg.opnsense.unbound_acl:
+      name: '{{ lab_plan.acl.name }}'
+      description: '{{ lab_plan.acl.description }}'
+      action: allow
+      networks:
+      - '{{ lab_plan.acl.networks }}'
+      enabled: '{{ lab_plan.enabled }}'
+      reload: false
+    register: lab_acl_change
+  - name: Merge the named development host record
+    oxlorg.opnsense.unbound_host:
+      match_fields:
+      - hostname
+      - domain
+      - record_type
+      hostname: '{{ item.hostname }}'
+      domain: '{{ item.domain }}'
+      record_type: A
+      description: '{{ item.description }}'
+      value: '{{ item.server }}'
+      enabled: '{{ lab_plan.enabled }}'
+      reload: false
+    loop: '{{ lab_plan.hosts }}'
+    register: lab_host_changes
+  - name: Retain management and HOME while adding only owned zone DNS listeners
+    oxlorg.opnsense.unbound_general:
+      interfaces: '{{ lab_plan.listeners }}'
+      reload: false
+      enabled: true
+      port: 53
+      outgoing_interfaces:
+      - wan
+      register_dhcp_leases: false
+      register_dhcp_static_mappings: false
+      register_ipv6_link_local: false
+      register_system_records: false
+    register: lab_dns_change

@@ -132,3 +132,9 @@ ansible-playbook playbooks/verify-idrac-network.yml --limit idrac01 \
 Network status/verification are read-only operations and retain rejection of check mode. Preview submits a vendor validation job; it is not a read-only status operation. Network apply still requires Boolean `idrac_network_recovery_ready: true` after staging physical recovery. DHCP rollback retains `idrac_network_mode=dhcp` as an input, independent of action selection. No role sets recovery readiness or manual WAN/NIC-assignment confirmation automatically.
 
 With a local ISO source, media operations run from the native Mac. ISO status disables hostname edits and needs no sudo password; the trusted hostname must already resolve. Mount and eject retain `--ask-become-pass` when hostname preparation requires sudo. VM verification checks resources; guest service verification uses the pilot workflows. Package updates and required host reboot handling remain separate named entry points.
+
+## Permanent lab and Fedora actions
+
+`configure-opnsense-{bmc,dev}.yml`, `verify-opnsense-{bmc,dev}.yml`, `disable-opnsense-{bmc,dev}.yml` and `verify-opnsense-{bmc,dev}-disabled.yml` invoke `opnsense_lab` with an explicit action and zone. `prepare-wireguard-clients.yml` refreshes both existing profiles from completed zone records; it performs no device writes. `verify-idrac-bmc-route.yml` reads the current static interface and gateway without requiring an old import task.
+
+`prepare-fedora-dev.yml`, `create-fedora-dev-vm.yml`, `verify-fedora-dev-vm.yml`, `start-fedora-dev-vm.yml` and `stop-fedora-dev-vm.yml` invoke `fedora_dev`. `configure-fedora-dev-host.yml`, `verify-fedora-dev-host.yml` and `verify-fedora-dev-connectivity.yml` invoke `fedora_host` with `configure`, `verify` and `connectivity`. See [lab access](configure-opnsense-lab.md) and [Fedora provisioning](fedora-dev.md) for dependencies and usage.

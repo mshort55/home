@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
     - not ansible_check_mode
-    - idrac_network_options.task_action in ['preview', 'apply', 'status', 'verify']
+    - idrac_network_options.task_action in ['preview', 'apply', 'status', 'verify', 'verify_current']
     - idrac_network_mode in ['static', 'dhcp']
     - idrac_expected_mac is match('^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
     - idrac_network_options.task_action != 'apply' or (idrac_network_recovery_ready | default(false) | bool)

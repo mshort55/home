@@ -14,7 +14,8 @@ ROLE = "HomeAutomation"
 TOKEN = "controller"
 MARKER = "Managed by configure-proxmox-api.yml"
 OWNERSHIP_MARKERS = {MARKER, "Managed by configure-community-api.yml"}
-PRIVILEGES = sorted("Sys.Audit Datastore.Audit Datastore.AllocateSpace Datastore.AllocateTemplate SDN.Use VM.Allocate VM.Audit VM.Config.CDROM VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.PowerMgmt".split())
+PRIVILEGES = sorted("Sys.Audit Datastore.Audit Datastore.AllocateSpace Datastore.AllocateTemplate SDN.Use VM.Allocate VM.Audit VM.Config.CDROM VM.Config.Cloudinit VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.PowerMgmt".split())
+LEGACY_PRIVILEGES = [privilege for privilege in PRIVILEGES if privilege != "VM.Config.Cloudinit"]
 DIRECTORY = Path("/root/.home-automation-api")
 RECORD = DIRECTORY / "credentials.json"
 
@@ -69,7 +70,8 @@ def main() -> None:
     role = next((r for r in roles if r["roleid"] == ROLE), None)
     if user and (user.get("comment") not in OWNERSHIP_MARKERS or not user.get("enable", 1) or user.get("expire", 0)):
         raise ValueError("Conflicting automation user")
-    if role and sorted(text(role["privs"]).split(",")) != PRIVILEGES:
+    role_upgrade = bool(role and sorted(text(role["privs"]).split(",")) == LEGACY_PRIVILEGES)
+    if role and sorted(text(role["privs"]).split(",")) not in [PRIVILEGES, LEGACY_PRIVILEGES]:
         raise ValueError("Conflicting automation role")
     owned_acls = [a for a in acls if a.get("ugid") == USER]
     if any(a.get("path") != "/" or a.get("roleid") != ROLE or not a.get("propagate") for a in owned_acls):
@@ -80,10 +82,18 @@ def main() -> None:
         raise ValueError("Existing API token needs its original protected record; refusing rotation")
     if RECORD.exists() and not token:
         raise ValueError("Saved API token is absent on the host")
-    changed = not user or not role or not owned_acls or not token
+    if role_upgrade and not (user and token and RECORD.exists() and owned_acls):
+        raise ValueError("Cloud-init privilege upgrade requires the original owned enrollment")
+    if RECORD.exists():
+        existing: dict[str, object] = mapping(json.loads(RECORD.read_text()))
+        if existing["api_host"] != address or existing["node"] != node or existing["api_user"] != USER or existing["api_token_id"] != TOKEN:
+            raise ValueError("Saved API enrollment identity conflicts")
+    changed = not user or not role or not owned_acls or not token or role_upgrade
     if operation == "apply":
         if not role:
             run("pveum", "role", "add", ROLE, "--privs", " ".join(PRIVILEGES))
+        elif role_upgrade:
+            run("pveum", "role", "modify", ROLE, "--privs", " ".join(PRIVILEGES))
         if not user:
             run("pveum", "user", "add", USER, "--comment", MARKER)
         if not owned_acls:

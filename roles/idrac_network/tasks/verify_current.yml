@@ -1,0 +1,27 @@
+---
+- name: Verify current BMC identity and routing without writes
+  vars:
+    manager_path: /redfish/v1/Managers/iDRAC.Embedded.1
+    ethernet_path: /redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/iDRAC.Embedded.1%23NIC.1
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30
+  block:
+    - name: Read the actual dedicated interface and device identity
+      ansible.builtin.include_tasks: _read_state.yml
+    - name: Require the final static BMC address, netmask and return gateway
+      ansible.builtin.assert:
+        that: [idrac_network_mode == 'static', network_already_configured]
+        fail_msg: iDRAC routing differs from inventory; reconcile through the existing reviewed iDRAC network workflow.
+    - name: Report verified BMC identity and route
+      ansible.builtin.debug:
+        msg: Verified the dedicated iDRAC interface, static address, netmask and BMC return gateway through trusted HTTPS.

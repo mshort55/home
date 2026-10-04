@@ -1,0 +1,11 @@
+---
+- name: Configure permanent BMC routing and authenticated administration
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+    - role: opnsense_lab
+      opnsense_lab_options:
+        task_action: configure
+        zone: bmc

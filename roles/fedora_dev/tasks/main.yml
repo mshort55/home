@@ -1,0 +1,28 @@
+---
+- name: Validate the effective permanent Fedora allocation
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+  tags: [always]
+- name: Require the reviewed DEV allocation and installed firewall
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname in groups.get('proxmox_hosts', [])
+      - fedora_dev_vm.vmid == 200
+      - fedora_dev_vm.cores == 4
+      - fedora_dev_vm.memory_mib == 8192
+      - fedora_dev_vm.disk_gib == 80
+      - fedora_dev_vm.vlan == 30
+      - fedora_dev_vm.guest_host in groups.get('fedora_hosts', [])
+      - fedora_dev_vm.address == hostvars[fedora_dev_vm.guest_host].ansible_host ~ '/24'
+      - fedora_dev_vm.username == hostvars[fedora_dev_vm.guest_host].ansible_user
+      - fedora_dev_vm.username is match('^[a-z][a-z0-9_-]{0,30}$')
+      - fedora_dev_vm.name is match('^[a-z][a-z0-9-]{0,62}$')
+      - fedora_dev_vm.storage is match('^[A-Za-z][A-Za-z0-9_-]*$')
+      - fedora_dev_vm.mac is match('^02:(?:[0-9a-f]{2}:){4}[0-9a-f]{2}$')
+      - fedora_dev_vm.gateway == hostvars[opnsense_guest].opnsense_lab.dev.address
+      - fedora_dev_vm.dns == fedora_dev_vm.gateway
+      - fedora_dev_vm.address == hostvars[opnsense_guest].opnsense_lab.dev.target ~ '/24'
+      - fedora_dev_vm.bridge in (proxmox_network.guest_bridges | selectattr('vlan_aware', 'equalto', true) | map(attribute='name') | list)
+- name: Dispatch the explicit Fedora operation
+  ansible.builtin.include_tasks: "{{ fedora_dev_options.task_action }}.yml"
+  tags: [always]

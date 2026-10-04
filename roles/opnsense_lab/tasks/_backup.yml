@@ -1,0 +1,25 @@
+---
+- name: Read the original configuration without displaying secrets
+  ansible.builtin.raw: "/usr/bin/base64 {{ (lab_stage.stdout | trim | from_json).backup | quote }}"
+  register: lab_backup_content
+  changed_when: false
+  no_log: true
+- name: Allocate the protected controller backup directory
+  ansible.builtin.file:
+    path: "{{ inventory_dir }}/backups/{{ inventory_hostname }}-lab-{{ opnsense_lab_options.zone }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  register: lab_backup_dir
+- name: Select the controller backup location
+  ansible.builtin.set_fact:
+    lab_backup_directory: "{{ lab_backup_dir.path }}"
+- name: Export the original configuration privately
+  ansible.builtin.copy:
+    content: "{{ lab_backup_content.stdout | trim | b64decode }}"
+    dest: "{{ lab_backup_directory }}/before.xml"
+    mode: '0600'
+    follow: false
+  delegate_to: localhost
+  no_log: true
+  diff: false

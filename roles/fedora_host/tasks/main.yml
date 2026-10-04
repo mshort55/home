@@ -1,0 +1,15 @@
+---
+- name: Validate the effective Fedora baseline contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+  tags: [always]
+- name: Require the owned development guest and key-only administration path
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname in groups.get('fedora_hosts', [])
+      - inventory_hostname == hostvars[fedora_proxmox_host].fedora_dev_vm.guest_host
+      - ansible_host ~ '/24' == hostvars[fedora_proxmox_host].fedora_dev_vm.address
+      - ansible_user == hostvars[fedora_proxmox_host].fedora_dev_vm.username
+- name: Dispatch the explicit guest baseline action
+  ansible.builtin.include_tasks: "{{ fedora_host_options.task_action }}.yml"
+  tags: [always]

@@ -1,0 +1,43 @@
+#cloud-config
+hostname: {{ fedora_dev_vm.name }}
+fqdn: {{ fedora_dev_vm.name }}.{{ fedora_dev_vm.domain }}
+manage_etc_hosts: true
+disable_root: true
+ssh_pwauth: false
+users:
+  - name: {{ fedora_dev_vm.username }}
+    groups: [wheel]
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    ssh_authorized_keys:
+{% for path in fedora_dev_vm.ssh_public_key_files %}
+      - {{ lookup('ansible.builtin.file', path) | trim | to_json }}
+{% endfor %}
+ssh_keys:
+  ed25519_private: |
+{{ lookup('ansible.builtin.file', fedora_seed_directory ~ '/ssh_host_ed25519_key') | indent(4, true) }}
+  ed25519_public: {{ lookup('ansible.builtin.file', fedora_seed_directory ~ '/ssh_host_ed25519_key.pub') | trim | to_json }}
+package_update: true
+packages: [python3, openssh-server, firewalld, qemu-guest-agent]
+write_files:
+  - path: /etc/ssh/sshd_config.d/00-home-automation.conf
+    permissions: '0600'
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      AllowUsers {{ fedora_dev_vm.username }}
+  - path: /etc/sysctl.d/90-home-automation.conf
+    content: |
+      net.ipv6.conf.all.disable_ipv6=1
+      net.ipv6.conf.default.disable_ipv6=1
+runcmd:
+  - [sysctl, --system]
+  - [systemctl, enable, --now, firewalld]
+  - [firewall-cmd, --permanent, --zone=public, --remove-service=ssh]
+  - [firewall-cmd, --permanent, --zone=public, --add-rich-rule, 'rule family="ipv4" source address="{{ hostvars[opnsense_guest].opnsense_wireguard.peer_address }}/32" service name="ssh" accept']
+  - [firewall-cmd, --reload]
+  - [systemctl, enable, --now, qemu-guest-agent]
+  - [systemctl, restart, sshd]
+  - [sh, -c, 'test "$(getenforce)" = Enforcing && touch /var/lib/cloud/home-automation-ready']

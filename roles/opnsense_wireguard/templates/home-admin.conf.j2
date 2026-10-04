@@ -7,5 +7,5 @@ MTU = {{ wireguard_mtu }}
 [Peer]
 PublicKey = {{ wireguard_material.server.public }}
 Endpoint = {{ opnsense_wireguard.endpoint }}:{{ opnsense_wireguard.port }}
-AllowedIPs = {{ opnsense_wireguard.management_subnet }}, {{ opnsense_wireguard.server_address }}/32
+AllowedIPs = {{ ([opnsense_wireguard.management_subnet, opnsense_wireguard.server_address ~ '/32'] + wireguard_client_routes) | join(', ') }}
 PersistentKeepalive = 25

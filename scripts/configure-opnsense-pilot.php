@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 // Execute through pinned SSH. Plan changes only the in-memory vendor models.
 require_once('config.inc');
+// LAB_EXTENSION_LIBRARY
 
 function requireCondition(bool $condition, string $message): void
 {
@@ -99,7 +100,7 @@ function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$des
     // A separate, protected workflow owns WireGuard rules and its DNS ACL.
     // Preserve only the UUIDs and exact fields recorded by that workflow.
     $retained = [];
-    foreach (['/conf/ansible-wireguard/state.json', '/conf/ansible-wireguard-wifi/state.json'] as $wireguardRecord) {
+    foreach (['/conf/ansible-wireguard/state.json', '/conf/ansible-wireguard-wifi/state.json', '/conf/ansible-lab/dev.json', '/conf/ansible-lab/bmc.json'] as $wireguardRecord) {
       if (is_file($wireguardRecord)) {
         privatePath(dirname($wireguardRecord), true);
         privatePath($wireguardRecord, false);
@@ -251,6 +252,7 @@ try {
         requireCondition(isset($state['home_pilot']) || ($state['phase'] ?? '') === 'complete', 'Complete the management pilot before enabling HOME');
         $input['home_pilot'] = $home;
     }
+    $labRecords=labRecords($xml,$seed);
     foreach ($seed['networks'] as $nic) {
         $iface = $xml->interfaces->{$nic['section']};
         $name = (string)$iface->if;
@@ -261,7 +263,7 @@ try {
             requireCondition(!isset($iface->enable) || (isset($state['home_pilot']) && (string)$iface->ipaddr === $home['address'] && (string)$iface->subnet === '24'), 'Unowned or conflicting enabled HOME interface');
             requireCondition(!isset($iface->gateway) && !isset($iface->bridge) && !isset($iface->blockpriv) && !isset($iface->blockbogons), 'Unexpected HOME interface services');
         } elseif (in_array($nic['section'], ['opt1', 'opt2', 'opt3'], true)) {
-            requireCondition(!isset($iface->enable), 'Optional interfaces must remain disabled in this management pilot');
+            requireCondition(!isset($iface->enable) || in_array($nic['section'], labListeners($labRecords), true), 'Optional interfaces require a completed owned lab workflow');
         }
     }
     requireCondition((string)$xml->interfaces->lan->ipaddr === $address && (string)$xml->interfaces->lan->subnet === '24', 'Management SVI conflicts');
@@ -302,7 +304,7 @@ try {
         $xml->addChild('ntpd');
     }
     // WAN is needed for upstream NTP replies; filter rules expose NTP only on MGMT.
-    setValue($xml->ntpd, 'interface', $home === null ? 'lan,wan' : 'lan,wan,opt1', $changes);
+    setValue($xml->ntpd, 'interface', implode(',', array_merge($home === null ? ['lan','wan'] : ['lan','wan','opt1'], labListeners($labRecords))), $changes);
     setValue($xml->ntpd, 'iburst', implode(' ', $input['ntp_servers']), $changes);
     setValue($xml->ntpd, 'ispool', implode(' ', $input['ntp_servers']), $changes);
     removeValue($xml->ntpd, 'clientmode', $changes);
@@ -379,7 +381,7 @@ try {
 
     $unbound = new \OPNsense\Unbound\Unbound();
     $before = $unbound->getNodeContent();
-    $dnsInterfaces = $home === null ? ['lan'] : ['lan', 'opt1'];
+    $dnsInterfaces = array_merge($home === null ? ['lan'] : ['lan', 'opt1'], labListeners($labRecords));
     $unbound->setNodes(['general'=>['enabled'=>'1', 'port'=>'53', 'active_interface'=>implode(',', $dnsInterfaces), 'outgoing_interface'=>'wan', 'regdhcp'=>'0', 'regdhcpstatic'=>'0', 'noreglladdr6'=>'1', 'noregrecords'=>'1'], 'forwarding'=>['enabled'=>'1'], 'acls'=>['default_action'=>'refuse']]);
     if ($before !== $unbound->getNodeContent()) {
         $changes[] = 'Unbound settings';

@@ -1,0 +1,24 @@
+---
+- name: Validate the effective lab role contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+  tags: [always]
+- name: Require the installed management guest and matching BMC target
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname in groups.get('opnsense_hosts', [])
+      - ansible_host == opnsense_wireguard.management_address
+      - opnsense_lab.bmc.target == hostvars[hostvars[opnsense_proxmox_host].proxmox_idrac_host].idrac_network.address
+      - opnsense_lab.bmc.address == hostvars[hostvars[opnsense_proxmox_host].proxmox_idrac_host].idrac_network.gateway
+      - opnsense_lab.dev.subnet != opnsense_lab.bmc.subnet
+- name: Select the scoped public lab input
+  ansible.builtin.set_fact:
+    lab_payload:
+      zone: "{{ opnsense_lab_options.zone }}"
+      settings: "{{ opnsense_lab[opnsense_lab_options.zone] }}"
+      wireguard: "{{ opnsense_wireguard }}"
+      enabled: "{{ opnsense_lab_options.task_action in ['configure', 'verify'] }}"
+    lab_prefix: "printf '%s' {{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-lab.php') | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
+- name: Dispatch the explicit lab action
+  ansible.builtin.include_tasks: "{{ opnsense_lab_options.task_action }}.yml"
+  tags: [always]

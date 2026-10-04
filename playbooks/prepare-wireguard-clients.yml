@@ -1,0 +1,11 @@
+---
+- name: Refresh both Mac profiles from completed owned routing workflows
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  roles:
+    - role: opnsense_wireguard
+      opnsense_wireguard_options: {task_action: prepare}
+    - role: opnsense_wireguard_wifi
+      opnsense_wireguard_wifi_options: {task_action: prepare}
+      when: opnsense_wireguard_wifi is defined

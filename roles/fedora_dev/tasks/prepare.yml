@@ -1,0 +1,76 @@
+- name: Prepare private controller artifacts without touching Proxmox
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  block:
+  - name: Require approved single-line SSH public keys before preparing private seed material
+    ansible.builtin.assert:
+      that:
+      - 'approved_key is match(''^ssh-ed25519 [A-Za-z0-9+/]+={0,2}(?: [^\n]+)?$'')'
+      fail_msg: Use a single-line Ed25519 public key file; never supply a private key.
+    vars:
+      approved_key: '{{ lookup(''ansible.builtin.file'', item) | trim }}'
+    loop: '{{ fedora_dev_vm.ssh_public_key_files }}'
+  - name: Verify the signed pinned Fedora image or preview missing downloads
+    ansible.builtin.command:
+      argv:
+      - '{{ ansible_playbook_python }}'
+      - '{{ role_path }}/../../scripts/prepare-fedora-cloud.py'
+      - '{{ ''plan'' if ansible_check_mode else ''apply'' }}'
+      - '{{ fedora_image_directory }}'
+    check_mode: false
+    register: fedora_image_preparation
+    changed_when: (fedora_image_preparation.stdout | from_json).changed
+  - name: Inspect the protected bootstrap directory and existing host key
+    ansible.builtin.stat:
+      path: '{{ item }}'
+      follow: false
+    loop:
+    - '{{ fedora_seed_directory }}'
+    - '{{ fedora_seed_directory }}/ssh_host_ed25519_key'
+    - '{{ fedora_seed_directory }}/ssh_host_ed25519_key.pub'
+    - '{{ fedora_seed_directory }}/user-data.yml'
+    register: fedora_seed_files
+    no_log: true
+  - name: Refuse symlink or unprotected bootstrap artifacts
+    ansible.builtin.assert:
+      that:
+      - not item.stat.exists or (not item.stat.islnk and item.stat.mode == ('0700' if item.item == fedora_seed_directory else
+        ('0644' if item.item.endswith('.pub') else '0600')))
+    loop: '{{ fedora_seed_files.results }}'
+    no_log: true
+  - name: Create the protected controller seed directory
+    ansible.builtin.file:
+      path: '{{ fedora_seed_directory }}'
+      state: directory
+      mode: '0700'
+  - name: Create the stable guest host key once
+    ansible.builtin.command:
+      argv:
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ''
+      - -f
+      - '{{ fedora_seed_directory }}/ssh_host_ed25519_key'
+      creates: '{{ fedora_seed_directory }}/ssh_host_ed25519_key'
+    no_log: true
+  - name: Render the private cloud-init bootstrap with approved public keys
+    ansible.builtin.template:
+      src: user-data.yml.j2
+      dest: '{{ fedora_seed_directory }}/user-data.yml'
+      mode: '0600'
+      follow: false
+    no_log: true
+    diff: false
+    when: not ansible_check_mode or fedora_seed_files.results[1].stat.exists
+  - name: Pin the seeded guest public host key before its first network connection
+    ansible.builtin.copy:
+      content: '{{ hostvars[fedora_dev_vm.guest_host].ansible_host }} {{ lookup(''ansible.builtin.file'', fedora_seed_directory
+        ~ ''/ssh_host_ed25519_key.pub'').split()[:2] | join('' '') }} '
+      dest: '{{ fedora_seed_directory }}/known_hosts'
+      mode: '0600'
+      follow: false
+    when: not ansible_check_mode or fedora_seed_files.results[2].stat.exists

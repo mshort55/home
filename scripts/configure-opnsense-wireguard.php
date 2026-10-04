@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once('config.inc');
+// LAB_EXTENSION_LIBRARY
 
 function wgEnsure(bool $condition, string $message): void
 {
@@ -104,7 +105,7 @@ try {
     $homePrefix = wgPrefix($settings['endpoint']);
     wgEnsure(count(array_unique([$tunnelPrefix,$managementPrefix,$homePrefix])) === 3, 'Tunnel overlaps an existing network');
     foreach ([$tunnelPrefix,$managementPrefix,$homePrefix] as $prefix) { wgEnsure(str_starts_with($prefix, '10.'), 'Use private 10/8 networks'); }
-    wgEnsure(!isset($xml->interfaces->opt2->enable) && !isset($xml->interfaces->opt3->enable), 'DEV and BMC require separate routing workflows');
+    $labRecords=labRecords($xml,$seed);
     $wan = shell_exec('/sbin/ifconfig '.escapeshellarg((string)$xml->interfaces->wan->if)) ?? '';
     wgEnsure(preg_match('/inet ([0-9.]+)/', $wan, $wanMatch) === 1 && wgPrefix($wanMatch[1]) !== $tunnelPrefix, 'Tunnel overlaps WAN or WAN is unavailable');
     $directory='/conf/ansible-wireguard'; $record=$directory.'/state.json';

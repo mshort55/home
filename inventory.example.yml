@@ -91,6 +91,24 @@ all:
         pve01:
           ansible_host: 10.77.10.10
           proxmox_idrac_host: idrac01
+          fedora_dev_vm:
+            vmid: 200
+            name: dev01
+            guest_host: dev01
+            cores: 4
+            memory_mib: 8192
+            disk_gib: 80
+            storage: local-lvm
+            bridge: vmbr1
+            vlan: 30
+            mac: '02:77:00:00:c8:00'
+            address: 10.77.30.10/24
+            gateway: 10.77.30.254
+            dns: 10.77.30.254
+            domain: lab.home.arpa
+            username: mjs
+            ssh_public_key_files:
+              - "{{ inventory_dir }}/.cache/proxmox-installer-inputs/admin.pub"
           proxmox_host_repository: no-subscription
           opnsense_guest: opnsense01
           opnsense_vm:
@@ -148,6 +166,9 @@ all:
           opnsense_proxmox_host: pve01
           ansible_host: 10.77.10.254
           # Management pilot; select wan_connected: true on pve01 when using it.
+          opnsense_lab:
+            bmc: {address: 10.77.40.254, subnet: 10.77.40.0/24, target: 10.77.40.10, hostname: idrac01}
+            dev: {address: 10.77.30.254, subnet: 10.77.30.0/24, target: 10.77.30.10, hostname: dev01}
           opnsense_wireguard:
             name: home_admin
             peer_name: admin_mac
@@ -202,3 +223,15 @@ all:
           -o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519
           -o IdentitiesOnly=yes
           -o UserKnownHostsFile={{ (inventory_dir ~ '/.cache/opnsense-bootstrap/' ~ opnsense_proxmox_host ~ '/known_hosts') | quote }}
+    fedora_hosts:
+      hosts:
+        dev01:
+          ansible_host: 10.77.30.10
+          ansible_user: mjs
+          fedora_proxmox_host: pve01
+          ansible_connection: ssh
+          ansible_python_interpreter: /usr/bin/python3
+          ansible_ssh_common_args: >-
+            -o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519
+            -o IdentitiesOnly=yes
+            -o UserKnownHostsFile={{ (inventory_dir ~ '/.cache/fedora-dev/dev01/known_hosts') | quote }}

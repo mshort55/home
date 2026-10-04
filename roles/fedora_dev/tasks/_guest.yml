@@ -1,0 +1,13 @@
+---
+- name: Wait for cloud-init readiness through the hypervisor guest agent
+  ansible.builtin.command:
+    argv: [qm, guest, exec, '200', --, /bin/sh, -c, 'test -f /var/lib/cloud/home-automation-ready && test "$(getenforce)" = Enforcing && systemctl is-active firewalld sshd qemu-guest-agent && ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key']
+  changed_when: false
+  register: fedora_guest_check
+  retries: 60
+  delay: 10
+  until: fedora_guest_check.rc == 0 and (fedora_guest_check.stdout | from_json).exitcode | default(1) == 0
+- name: Match the installed guest host key to the controller's seeded identity
+  ansible.builtin.assert:
+    that:
+      - (lookup('ansible.builtin.file', fedora_seed_directory ~ '/ssh_host_ed25519_key.pub').split()[:2] | join(' ')) in (fedora_guest_check.stdout | from_json)['out-data']

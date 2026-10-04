@@ -1,0 +1,9 @@
+---
+- name: Start the permanent Fedora development VM
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+    - role: fedora_dev
+      fedora_dev_options: {task_action: start}

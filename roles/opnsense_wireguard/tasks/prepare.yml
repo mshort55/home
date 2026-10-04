@@ -13,12 +13,24 @@
     name: wireguard_material
   when: wireguard_keys_result.exists
   no_log: true
+- name: Read completed owned lab routes before rendering client profiles
+  ansible.builtin.raw: "printf '%s' {{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-lab.php') | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php -- routes e30="
+  register: wireguard_client_lab_routes
+  changed_when: false
+  check_mode: false
+  when: opnsense_lab is defined
+- name: Select routes separately from the immutable key allocation
+  ansible.builtin.set_fact:
+    wireguard_client_routes: "{{ (wireguard_client_lab_routes.stdout | trim | from_json).routes if opnsense_lab is defined else [] }}"
 - name: Render the private Mac client configuration
   ansible.builtin.template:
     src: home-admin.conf.j2
     dest: "{{ wireguard_key_directory }}/home-admin.conf"
     mode: '0600'
     follow: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
   when: wireguard_keys_result.exists
   no_log: true
   diff: false
@@ -28,4 +40,4 @@
       encrypted_keys: "{{ wireguard_key_directory }}/keys.vault.yml"
       mac_client: "{{ wireguard_key_directory }}/home-admin.conf"
       endpoint: "{{ opnsense_wireguard.endpoint }}:{{ opnsense_wireguard.port }}"
-      routes: ["{{ opnsense_wireguard.management_subnet }}", "{{ opnsense_wireguard.server_address }}/32"]
+      routes: "{{ [opnsense_wireguard.management_subnet, opnsense_wireguard.server_address ~ '/32'] + wireguard_client_routes }}"

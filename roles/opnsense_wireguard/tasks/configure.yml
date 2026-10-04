@@ -1,7 +1,7 @@
 ---
 - name: Reconcile local HOME WireGuard administration
   vars:
-    wireguard_prefix: "printf '%s' {{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-wireguard.php') | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
+    wireguard_prefix: "printf '%s' {{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-wireguard.php') | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
   block:
     - name: Load the bounded inputs and protected key material
       ansible.builtin.include_tasks: _load.yml
@@ -30,7 +30,7 @@
           changes: "{{ wireguard_plan.changes }}"
           endpoint: "{{ opnsense_wireguard.endpoint }}:{{ opnsense_wireguard.port }}"
           runtime_checks: "{{ wireguard_plan.runtime_checks }}"
-          access: Named firewall, Proxmox and switch management services only; no HOME, DEV, BMC or internet tunnel access
+          access: Named MGMT services; separately owned lab workflows govern any DEV/BMC access; no HOME or internet tunnel access
     - name: Finish the preview before configuration or service writes
       ansible.builtin.meta: end_role
       when: ansible_check_mode

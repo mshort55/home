@@ -38,3 +38,5 @@ Inspect each preview and stop if a run fails. The bridge workflow verifies an un
 After guest installation, run [OPNsense API enrollment](configure-opnsense-api.md) separately before applying its pilot policy. Local Proxmox ISO preparation and iDRAC boot precede API enrollment and retain their native workflows.
 
 Reference: [Proxmox collection](https://docs.ansible.com/projects/ansible/latest/collections/community/proxmox/index.html).
+
+The Fedora cloud-init workflow adds `VM.Config.Cloudinit`. Enrollment permits only the exact original owned privilege set to upgrade to the new expected set, retaining the existing account/token/secret. It continues refusing unrelated privilege changes. Rerun this entry point before creating the Fedora guest; no storage-administration privileges are added.

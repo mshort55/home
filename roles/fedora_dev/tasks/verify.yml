@@ -1,0 +1,9 @@
+---
+- name: Verify owned VM hardware and installation record without writes
+  ansible.builtin.include_tasks: _read.yml
+- name: Require a completed permanent guest
+  ansible.builtin.assert:
+    that: [fedora_current.exists, fedora_current.has_disk, fedora_current.previous.phase == 'complete']
+- name: Verify guest identity and security when running
+  ansible.builtin.include_tasks: _guest.yml
+  when: fedora_current.state == 'running'

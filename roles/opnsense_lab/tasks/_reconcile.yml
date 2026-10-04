@@ -1,0 +1,91 @@
+- name: Load the already enrolled community API
+  ansible.builtin.include_role:
+    name: community_api
+    public: false
+  vars:
+    community_api_options:
+      task_action: load
+    community_api_host: '{{ inventory_hostname }}'
+    community_api_var: opn_api
+- name: Preview the permanent zone without changing the device
+  ansible.builtin.raw: '{{ lab_prefix }} plan {{ lab_payload | to_json | b64encode | quote }}'
+  check_mode: false
+  changed_when: false
+  register: lab_preview
+- name: Select the scoped plan
+  ansible.builtin.set_fact:
+    lab_plan: '{{ lab_preview.stdout | trim | from_json }}'
+- name: Preview supported policy resources through OXL
+  ansible.builtin.include_tasks:
+    file: _policy.yml
+    apply:
+      check_mode: true
+- name: Report the bounded lab plan
+  ansible.builtin.debug:
+    msg:
+      zone: '{{ opnsense_lab_options.zone }}'
+      enabled: '{{ lab_plan.enabled }}'
+      changes: '{{ lab_plan.changes }}'
+      runtime_checks: '{{ lab_plan.runtime_checks }}'
+- name: Finish check mode before backup or device writes
+  ansible.builtin.meta: end_role
+  when: ansible_check_mode
+- name: Record intent and preserve the original configuration before writes
+  ansible.builtin.raw: '{{ lab_prefix }} stage {{ lab_payload | to_json | b64encode | quote }}'
+  register: lab_stage
+  changed_when: lab_stage.rc == 0 and (lab_stage.stdout | trim | from_json).changed
+- name: Save only the owned rule and DNS resources through OXL
+  ansible.builtin.include_tasks: _policy.yml
+- name: Load firewall policy before enabling routing
+  oxlorg.opnsense.reload: &id001
+    firewall: '{{ opn_api.firewall }}'
+    api_key: '{{ opn_api.api_key }}'
+    api_secret: '{{ opn_api.api_secret }}'
+    ssl_verify: true
+    ssl_ca_file: '{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem'
+    target: rule
+  delegate_to: localhost
+  vars: &id002
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  when: lab_plan.reload_required or lab_rule_changes.changed
+- name: Apply only the owned native interface and NTP listeners
+  ansible.builtin.raw: '{{ lab_prefix }} activate {{ lab_payload | to_json | b64encode | quote }}'
+  register: lab_activation
+  changed_when: lab_activation.rc == 0 and (lab_activation.stdout | trim | from_json).changed
+- name: Refresh automatic NAT and firewall addresses after the native interface transition
+  oxlorg.opnsense.reload: *id001
+  delegate_to: localhost
+  vars: *id002
+  when: lab_plan.reload_required or lab_activation.changed
+- name: Reload DNS after its scoped interfaces are active
+  oxlorg.opnsense.reload:
+    firewall: '{{ opn_api.firewall }}'
+    api_key: '{{ opn_api.api_key }}'
+    api_secret: '{{ opn_api.api_secret }}'
+    ssl_verify: true
+    ssl_ca_file: '{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem'
+    target: unbound
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  when: lab_plan.reload_required or lab_acl_change.changed or lab_host_changes.changed or lab_dns_change.changed
+- name: Load the saved native time listeners after an interrupted or changed apply
+  ansible.builtin.raw: /usr/local/sbin/pluginctl -s ntpd restart
+  changed_when: true
+  when: lab_plan.reload_required or lab_activation.changed
+- name: Verify saved and loaded state before completing the transaction
+  ansible.builtin.raw: '{{ lab_prefix }} complete {{ lab_payload | to_json | b64encode | quote }}'
+  register: lab_complete
+  changed_when: lab_complete.rc == 0 and (lab_complete.stdout | trim | from_json).changed
+  retries: 6
+  delay: 5
+  until: lab_complete is succeeded
+- name: Export the protected original configuration to this controller
+  ansible.builtin.include_tasks: _backup.yml
+- name: Report the completed zone and profile refresh workflow
+  ansible.builtin.debug:
+    msg:
+      zone: '{{ opnsense_lab_options.zone }}'
+      enabled: '{{ lab_plan.enabled }}'
+      backup: '{{ lab_backup_directory }}'
+      clients: Run prepare-wireguard-clients.yml and re-import both Mac profiles after changing active zones.

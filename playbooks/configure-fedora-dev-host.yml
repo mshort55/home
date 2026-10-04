@@ -1,0 +1,8 @@
+---
+- name: Configure the permanent Fedora SSH baseline through WireGuard
+  hosts: fedora_hosts
+  gather_facts: false
+  become: true
+  roles:
+    - role: fedora_host
+      fedora_host_options: {task_action: configure}

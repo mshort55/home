@@ -1,0 +1,21 @@
+argument_specs:
+  main:
+    short_description: Configure or verify the headless Fedora security baseline.
+    options:
+      fedora_host_options:
+        type: dict
+        required: true
+        description: Explicit guest baseline action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - configure
+            - verify
+            - connectivity
+            description: Matching guest baseline task file.
+      fedora_proxmox_host:
+        type: str
+        required: true
+        description: Owning Proxmox inventory host.

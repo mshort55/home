@@ -1,4 +1,3 @@
----
 argument_specs:
   main:
     short_description: Validate and dispatch explicit WireGuard actions.
@@ -52,7 +51,7 @@ argument_specs:
           management_subnet:
             type: str
             required: true
-            description: Installed MGMT /24; the only routed client network.
+            description: Installed MGMT /24; completed lab workflows may add client routes separately.
           management_address:
             type: str
             required: true
@@ -71,14 +70,16 @@ argument_specs:
             description: Named switch management target.
       wireguard_key_directory:
         type: path
-        default: '{{ (role_path ~ ''/../..'') | realpath }}/.cache/wireguard/{{ inventory_hostname
-          }}'
-        description: Private controller directory holding encrypted keys and the Mac
-          import file.
+        default: '{{ (role_path ~ ''/../..'') | realpath }}/.cache/wireguard/{{ inventory_hostname }}'
+        description: Private controller directory holding encrypted keys and the Mac import file.
       wireguard_mtu:
         type: int
         default: 1420
         description: "Tunnel and Mac MTU; constrained to 1280\u20131500."
+      opnsense_lab:
+        type: dict
+        required: false
+        description: Optional permanent lab inventory; client routes are read from completed protected guest records.
   prepare:
     short_description: WireGuard prepare.
     options:

@@ -1,0 +1,30 @@
+---
+- name: Verify the guest baseline before network acceptance
+  ansible.builtin.include_tasks: verify.yml
+- name: Probe guest DNS, public HTTPS and denied initiated cross-zone connections
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import json, socket, sys, urllib.request
+        settings = json.loads(sys.argv[1])
+        answers = {item[4][0] for item in socket.getaddrinfo(settings['dns_name'], None, socket.AF_INET)}
+        if answers != {settings['proxmox']}:
+            raise SystemExit('Local DNS does not resolve the expected Proxmox identity')
+        with urllib.request.urlopen('https://example.com', timeout=15) as response:
+            if not 200 <= response.status < 400:
+                raise SystemExit('Guest public HTTPS did not succeed')
+        blocked = []
+        for address, port in settings['denied']:
+            try:
+                connection = socket.create_connection((address, port), timeout=3)
+            except OSError:
+                blocked.append(address)
+            else:
+                connection.close()
+                raise SystemExit('Guest initiated a forbidden connection to ' + address)
+        print(json.dumps({'dns': 'verified', 'https': 'verified', 'denied_targets': blocked}))
+      - "{{ {'dns_name': 'pve01.' ~ hostvars[fedora_proxmox_host].fedora_dev_vm.domain, 'proxmox': hostvars[fedora_proxmox_host].ansible_host, 'denied': [[hostvars[fedora_proxmox_host].ansible_host, 22], [hostvars[hostvars[fedora_proxmox_host].opnsense_guest].opnsense_lab.bmc.target, 443], [hostvars[hostvars[fedora_proxmox_host].opnsense_guest].opnsense_home_pilot.address, 443], [hostvars[hostvars[fedora_proxmox_host].opnsense_guest].ansible_host, 443]]} | to_json }}"
+  changed_when: false
+  check_mode: false

@@ -1,0 +1,22 @@
+---
+- name: Verify ownership before the explicit power transition
+  ansible.builtin.include_tasks: _read.yml
+- name: Require the completed owned Fedora installation
+  ansible.builtin.assert:
+    that: [fedora_current.exists, fedora_current.previous.phase == 'complete']
+- name: Apply only the requested guest power state
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api.api_host }}"
+    api_user: "{{ pve_api.api_user }}"
+    api_token_id: "{{ pve_api.api_token_id }}"
+    api_token_secret: "{{ pve_api.api_token_secret }}"
+    validate_certs: true
+    ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+    node: "{{ inventory_hostname }}"
+    vmid: 200
+    state: started
+    force: false
+    timeout: 120
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

@@ -69,6 +69,7 @@
       - "{{ opnsense_vm.vmid | string }}"
       - "{{ opnsense_guest }}"
       - "{{ boot_before.latest_installed_kernel }}"
+      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py')} | to_json }}"
     changed_when: false
     check_mode: false
     register: boot_identity_read
@@ -202,6 +203,7 @@
       - "{{ opnsense_vm.vmid | string }}"
       - "{{ opnsense_guest }}"
       - "{{ boot_before.latest_installed_kernel }}"
+      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py')} | to_json }}"
     changed_when: false
   - name: Reboot only when requested and required by kernel or package state
     ansible.builtin.reboot:
@@ -245,6 +247,7 @@
       - "{{ opnsense_vm.vmid | string }}"
       - "{{ opnsense_guest }}"
       - "{{ boot_after.latest_installed_kernel }}"
+      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py')} | to_json }}"
     changed_when: false
     register: boot_identity_after_read
   - name: Verify whether the host boot identity changed
@@ -275,7 +278,7 @@
     opnsense_owner_marker: Managed by create-opnsense-vm.yml; vmid={{ opnsense_vm.vmid }}
     boot_package_probe: "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-proxmox-packages.py') }}"
     boot_probe: "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-proxmox-boot.py') }}"
-    boot_pilot_code: "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-pilot.php') | b64encode\
+    boot_pilot_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-pilot.php') | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
       \ }}"
     boot_pilot_prefix: printf '%s' {{ boot_pilot_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --
   module_defaults:

@@ -1,0 +1,97 @@
+argument_specs:
+  main:
+    short_description: Validate and dispatch permanent Fedora VM operations.
+    options:
+      fedora_dev_options:
+        type: dict
+        required: true
+        description: Explicit VM operation; no default.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - prepare
+            - create
+            - verify
+            - start
+            - stop
+            description: Matching action task file.
+      fedora_dev_vm:
+        type: dict
+        required: true
+        description: Permanent Fedora allocation.
+        options:
+          vmid:
+            type: int
+            required: true
+            description: Permanent VM ID 200.
+          name:
+            type: str
+            required: true
+            description: Owned VM hostname.
+          guest_host:
+            type: str
+            required: true
+            description: Fedora inventory host.
+          cores:
+            type: int
+            required: true
+            description: Four virtual CPU cores.
+          memory_mib:
+            type: int
+            required: true
+            description: 8192 MiB guest RAM.
+          disk_gib:
+            type: int
+            required: true
+            description: 80 GiB system disk.
+          storage:
+            type: str
+            required: true
+            description: Existing image storage.
+          bridge:
+            type: str
+            required: true
+            description: Existing VLAN-aware data bridge.
+          vlan:
+            type: int
+            required: true
+            description: Single DEV VLAN tag 30.
+          mac:
+            type: str
+            required: true
+            description: Stable guest VirtIO MAC.
+          address:
+            type: str
+            required: true
+            description: Static DEV IPv4 CIDR.
+          gateway:
+            type: str
+            required: true
+            description: DEV gateway IPv4.
+          dns:
+            type: str
+            required: true
+            description: DEV resolver IPv4.
+          domain:
+            type: str
+            required: true
+            description: Local DNS domain.
+          username:
+            type: str
+            required: true
+            description: Named key-only SSH user.
+          ssh_public_key_files:
+            type: list
+            required: true
+            description: Approved controller public key files; no private keys.
+            elements: path
+      fedora_image_directory:
+        type: path
+        default: '{{ inventory_dir }}/.cache/fedora-cloud'
+        description: Protected controller Fedora image cache.
+      fedora_seed_directory:
+        type: path
+        default: '{{ inventory_dir }}/.cache/fedora-dev/{{ fedora_dev_vm.name }}'
+        description: Protected host key, cloud-init seed and guest trust cache.

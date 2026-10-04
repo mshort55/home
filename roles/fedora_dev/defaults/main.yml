@@ -1,0 +1,3 @@
+---
+fedora_image_directory: "{{ inventory_dir }}/.cache/fedora-cloud"
+fedora_seed_directory: "{{ inventory_dir }}/.cache/fedora-dev/{{ fedora_dev_vm.name }}"

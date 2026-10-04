@@ -1,0 +1,106 @@
+- name: Ensure the headless baseline packages are installed
+  ansible.builtin.dnf:
+    name:
+    - python3
+    - openssh-server
+    - firewalld
+    - qemu-guest-agent
+    state: present
+- name: Persist the bounded IPv4-only guest configuration
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/90-home-automation.conf
+    content: 'net.ipv6.conf.all.disable_ipv6=1
+
+      net.ipv6.conf.default.disable_ipv6=1
+
+      '
+    owner: root
+    group: root
+    mode: '0644'
+  register: fedora_sysctl_change
+- name: Read the current IPv6 forwarding surface
+  ansible.builtin.command:
+    argv:
+    - cat
+    - /proc/sys/net/ipv6/conf/all/disable_ipv6
+  changed_when: false
+  check_mode: false
+  register: fedora_ipv6_before
+- name: Apply the owned IPv4-only guest setting when changed or drifted
+  ansible.builtin.command:
+    argv:
+    - sysctl
+    - --system
+  when: fedora_sysctl_change.changed or fedora_ipv6_before.stdout != '1'
+- name: Enforce named-user key-only SSH
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/00-home-automation.conf
+    content: 'PasswordAuthentication no
+
+      KbdInteractiveAuthentication no
+
+      PermitRootLogin no
+
+      AllowUsers {{ ansible_user }}
+
+      '
+    owner: root
+    group: root
+    mode: '0600'
+    validate: /usr/sbin/sshd -t -f %s
+  register: fedora_ssh_change
+- name: Start and enable the guest firewall and agent
+  ansible.builtin.systemd_service:
+    name: '{{ item }}'
+    enabled: true
+    state: started
+  loop:
+  - firewalld
+  - qemu-guest-agent
+  - sshd
+- name: Read permanent public-zone SSH policy
+  ansible.builtin.command:
+    argv:
+    - firewall-cmd
+    - --permanent
+    - --zone=public
+    - --list-all
+  changed_when: false
+  check_mode: false
+  register: fedora_firewall_before
+- name: Remove broad SSH service access when present
+  ansible.builtin.command:
+    argv:
+    - firewall-cmd
+    - --permanent
+    - --zone=public
+    - --remove-service=ssh
+  when: (fedora_firewall_before.stdout | regex_search('(?m)^  services:.*\bssh\b')) is not none
+  register: fedora_firewall_remove
+- name: Permit SSH only from the authenticated laptop tunnel address
+  ansible.builtin.command:
+    argv:
+    - firewall-cmd
+    - --permanent
+    - --zone=public
+    - --add-rich-rule
+    - '{{ fedora_ssh_rule }}'
+  vars:
+    fedora_ssh_rule: rule family="ipv4" source address="{{ hostvars[hostvars[fedora_proxmox_host].opnsense_guest].opnsense_wireguard.peer_address
+      }}/32" service name="ssh" accept
+  when: fedora_ssh_rule not in fedora_firewall_before.stdout
+  register: fedora_firewall_add
+- name: Reload only changed firewall policy
+  ansible.builtin.command:
+    argv:
+    - firewall-cmd
+    - --reload
+  when: fedora_firewall_remove.changed or fedora_firewall_add.changed
+- name: Reload changed SSH settings
+  ansible.builtin.systemd_service:
+    name: sshd
+    state: reloaded
+  when: fedora_ssh_change.changed
+- name: Verify the saved and running headless baseline
+  ansible.builtin.include_tasks: verify.yml
+  when: not ansible_check_mode

@@ -1,0 +1,72 @@
+- name: Read guest identity, security, firewall and installed network state
+  ansible.builtin.command:
+    argv: '{{ item }}'
+  loop:
+  - - hostname
+    - -s
+  - - getenforce
+  - - systemctl
+    - is-active
+    - sshd
+    - firewalld
+    - qemu-guest-agent
+  - - /usr/sbin/sshd
+    - -T
+  - - firewall-cmd
+    - --zone=public
+    - --list-all
+  - - firewall-cmd
+    - --permanent
+    - --zone=public
+    - --list-all
+  - - ip
+    - -j
+    - address
+    - show
+  - - ip
+    - -j
+    - route
+    - show
+    - default
+  - - cat
+    - /proc/sys/net/ipv6/conf/all/disable_ipv6
+  - - cat
+    - /var/lib/cloud/instance/result.json
+  - - firewall-cmd
+    - --zone=public
+    - --list-rich-rules
+  - - firewall-cmd
+    - --permanent
+    - --zone=public
+    - --list-rich-rules
+  - - firewall-cmd
+    - --get-default-zone
+  register: fedora_security
+  changed_when: false
+  check_mode: false
+- name: Require the installed identity and restrictive SSH baseline
+  ansible.builtin.assert:
+    that:
+    - fedora_security.results[0].stdout == inventory_hostname
+    - fedora_security.results[1].stdout == 'Enforcing'
+    - fedora_security.results[2].stdout_lines == ['active', 'active', 'active']
+    - '''passwordauthentication no'' in fedora_security.results[3].stdout_lines'
+    - '''kbdinteractiveauthentication no'' in fedora_security.results[3].stdout_lines'
+    - '''permitrootlogin no'' in fedora_security.results[3].stdout_lines'
+    - '''allowusers '' ~ ansible_user in fedora_security.results[3].stdout_lines'
+    - fedora_ssh_rule in fedora_security.results[4].stdout
+    - fedora_ssh_rule in fedora_security.results[5].stdout
+    - (fedora_security.results[4].stdout | regex_search('(?m)^  services:.*\bssh\b')) is none
+    - (fedora_security.results[5].stdout | regex_search('(?m)^  services:.*\bssh\b')) is none
+    - fedora_security.results[8].stdout == '1'
+    - (fedora_security.results[9].stdout | from_json).v1.errors | length == 0
+    - (fedora_security.results[7].stdout | from_json | length) == 1
+    - (fedora_security.results[7].stdout | from_json)[0].gateway == hostvars[fedora_proxmox_host].fedora_dev_vm.gateway
+    - ansible_host in (fedora_security.results[6].stdout | from_json | map(attribute='addr_info') | flatten | selectattr('family',
+      'equalto', 'inet') | map(attribute='local') | list)
+    - fedora_security.results[10].stdout_lines == [fedora_ssh_rule]
+    - fedora_security.results[11].stdout_lines == [fedora_ssh_rule]
+    - fedora_security.results[12].stdout == 'public'
+  vars:
+    fedora_ssh_rule: rule family="ipv4" source address="{{ hostvars[hostvars[fedora_proxmox_host].opnsense_guest].opnsense_wireguard.peer_address
+      }}/32" service name="ssh" accept
