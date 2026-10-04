@@ -99,22 +99,30 @@ function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$des
     // A separate, protected workflow owns WireGuard rules and its DNS ACL.
     // Preserve only the UUIDs and exact fields recorded by that workflow.
     $retained = [];
-    $wireguardRecord = '/conf/ansible-wireguard/state.json';
-    if (is_file($wireguardRecord)) {
-        privatePath('/conf/ansible-wireguard', true);
+    foreach (['/conf/ansible-wireguard/state.json', '/conf/ansible-wireguard-wifi/state.json'] as $wireguardRecord) {
+      if (is_file($wireguardRecord)) {
+        privatePath(dirname($wireguardRecord), true);
         privatePath($wireguardRecord, false);
         $wireguard = json_decode(file_get_contents($wireguardRecord), true, 512, JSON_THROW_ON_ERROR);
         global $seed;
-        requireCondition(($wireguard['version'] ?? null) === 1 && $wireguard['seed_id'] === $seed['seed_id'] && $wireguard['phase'] === 'complete', 'Complete or reconcile the owned WireGuard workflow first');
-        foreach ($wireguard['objects'][$label] ?? [] as $object) {
+        $wifiRecord = str_contains($wireguardRecord, 'wireguard-wifi');
+        requireCondition(($wireguard['version'] ?? null) === 1 && $wireguard['seed_id'] === $seed['seed_id'] && in_array($wireguard['phase'], $wifiRecord ? ['complete','absent'] : ['complete'], true), 'Complete or remove the owned WireGuard/Wi-Fi workflow first');
+        if ($wifiRecord && $wireguard['phase'] === 'complete') {
+            $wan = shell_exec('/sbin/ifconfig '.escapeshellarg((string)\OPNsense\Core\Config::getInstance()->object()->interfaces->wan->if)) ?? '';
+            $route = shell_exec('/sbin/route -n get default') ?? '';
+            requireCondition(preg_match('/\binet '.preg_quote($wireguard['input']['wifi']['wan_address'], '/').' netmask 0xffffff00\b/', $wan) === 1 && preg_match('/gateway:\s+'.preg_quote($wireguard['input']['wifi']['wan_gateway'], '/').'\b/', $route) === 1, 'Remove the Wi-Fi exception before changing the private WAN');
+        }
+        $owned = $wifiRecord ? ($label === 'filter rules' && $wireguard['phase'] === 'complete' ? [$wireguard['object']] : []) : ($wireguard['objects'][$label] ?? []);
+        foreach ($owned as $object) {
             $identity = $object['values'][$field];
             requireCondition(isset($existing[$identity]) && $existing[$identity]['uuid'] === $object['uuid'], 'Missing or replaced owned WireGuard ' . $label);
             foreach ($object['values'] as $name => $value) {
-                requireCondition(($existing[$identity]['values'][$name] ?? '') === $value, 'Owned WireGuard policy drift; run configure-opnsense-wireguard.yml');
+                requireCondition(($existing[$identity]['values'][$name] ?? '') === $value, 'Owned WireGuard policy drift; run its WireGuard or private Wi-Fi configuration workflow');
             }
             $retained[$object['uuid']] = $existing[$identity]['values'];
             unset($existing[$identity]);
         }
+      }
     }
     requireCondition(count($existing) === 0, 'Unmanaged ' . $label . ' entry requires separate review');
     $desired = $remapped;

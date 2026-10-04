@@ -1,0 +1,7 @@
+---
+- name: Validate the owned Wi-Fi allocation and original tunnel
+  ansible.builtin.include_tasks: _plan.yml
+- name: Verify the saved and loaded private Wi-Fi rule without writes
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} verify {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  check_mode: false
+  changed_when: false

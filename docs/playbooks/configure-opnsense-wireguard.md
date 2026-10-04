@@ -10,6 +10,8 @@ Complete the installed management and HOME pilots. Run infrastructure commands w
 
 Policy permits the laptop to reach firewall SSH/HTTPS/DNS/NTP/ICMP, Proxmox SSH/UI/ICMP and switch SSH/ICMP. All other tunnel traffic is blocked. HOME gains only a UDP handshake allowance to its firewall gateway. MGMT also permits ICMP from the named switch to its firewall gateway, allowing the gateway workflow to verify reachability. Existing HOME internet and isolation remain in place. DEV and BMC routing, WAN ingress, full tunneling, allocation changes and key rotation require separate workflows.
 
+The optional [private-WAN Wi-Fi workflow](configure-opnsense-wireguard-wifi.md) adds a source-restricted UDP handshake entry from the existing household Wi-Fi, with its own required removal before ISP attachment. It retains this role's HOME endpoint, keys and named management permissions. Management/HOME and WireGuard reconciliation preserve its exact completed ownership record; incomplete Wi-Fi changes require that workflow to finish or remove them first.
+
 ## Enroll and prepare
 
 Enrollment adds `page-wireguard-config` to the restricted account's existing privileges, preserving its API key and certificate:

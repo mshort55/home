@@ -1,0 +1,78 @@
+---
+- name: Require verified FortiOS HTTPS and disabled connection logging
+  ansible.builtin.assert:
+    that:
+      - ansible_connection == 'ansible.netcommon.httpapi'
+      - ansible_network_os == 'fortinet.fortios.fortios'
+      - ansible_httpapi_use_ssl | bool
+      - ansible_httpapi_validate_certs | bool
+      - not (ansible_persistent_log_messages | default(false) | bool)
+      - fortigate_pilot_vdom == 'root'
+      - fortigate_controller_endpoint.hostname == ansible_host
+- name: Verify controller resolution before opening the Fortinet session
+  ansible.builtin.include_role:
+    name: fortigate_controller
+    public: false
+  vars:
+    fortigate_controller_options:
+      task_action: verify
+- name: Read the complete existing DHCP server without writes
+  fortinet.fortios.fortios_configuration_fact:
+    vdom: "{{ fortigate_pilot_vdom }}"
+    enable_log: false
+    selector: system.dhcp_server
+    params:
+      id: "{{ fortigate_pilot_dhcp.server_id }}"
+  check_mode: false
+  changed_when: false
+  register: fortigate_dhcp_read
+  no_log: true
+- name: Read active leases on the reviewed household interface
+  fortinet.fortios.fortios_monitor_fact:
+    vdom: "{{ fortigate_pilot_vdom }}"
+    enable_log: false
+    selector: system_dhcp
+    params:
+      interface: "{{ fortigate_pilot_dhcp.interface }}"
+  check_mode: false
+  changed_when: false
+  register: fortigate_dhcp_leases
+  no_log: true
+- name: Require explicit success from both FortiOS response formats
+  ansible.builtin.assert:
+    that:
+      - fortigate_dhcp_meta is mapping
+      - fortigate_dhcp_meta.status is defined or fortigate_dhcp_meta.http_status is defined
+      - fortigate_dhcp_meta.status | default('success') == 'success'
+      - fortigate_dhcp_meta.http_status | default(200) == 200
+      - fortigate_dhcp_meta.results is defined
+    fail_msg: FortiOS did not return an explicit successful DHCP response; no configuration was changed.
+  loop:
+    - "{{ fortigate_dhcp_read.meta }}"
+    - "{{ fortigate_dhcp_leases.meta }}"
+  loop_control:
+    loop_var: fortigate_dhcp_meta
+  no_log: true
+- name: Require complete DHCP server and lease collections
+  ansible.builtin.assert:
+    that:
+      - fortigate_dhcp_read.meta.results is sequence
+      - fortigate_dhcp_read.meta.results is not mapping
+      - fortigate_dhcp_read.meta.results is not string
+      - fortigate_dhcp_read.meta.results | length == 1
+      - fortigate_dhcp_read.meta.results[0] is mapping
+      - fortigate_dhcp_read.meta.revision is defined
+      - fortigate_dhcp_read.meta.revision is string
+      - fortigate_dhcp_read.meta.revision | length > 0
+      - fortigate_dhcp_leases.meta.results is sequence
+      - fortigate_dhcp_leases.meta.results is not mapping
+      - fortigate_dhcp_leases.meta.results is not string
+    fail_msg: DHCP server or lease response is incomplete; no configuration was changed.
+  no_log: true
+- name: Plan the two reservations while preserving every existing entry
+  fortigate_dhcp_plan:
+    server: "{{ fortigate_dhcp_read.meta.results[0] }}"
+    leases: "{{ fortigate_dhcp_leases.meta.results }}"
+    settings: "{{ fortigate_pilot_dhcp }}"
+  register: fortigate_dhcp_plan_result
+  changed_when: false

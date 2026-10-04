@@ -10,6 +10,7 @@ Role argument schemas validate the action and typed options before dispatch. The
 |---|---|---|---|
 | [apply-idrac-network.yml](../../playbooks/apply-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `apply` |
 | [backup-fortigate.yml](../../playbooks/backup-fortigate.yml) | `fortigates` | [fortigate_backup](../../roles/fortigate_backup/tasks/main.yml) | `backup` |
+| [prepare-fortigate-controller.yml](../../playbooks/prepare-fortigate-controller.yml) | `fortigates` (local controller tasks) | [fortigate_controller](../../roles/fortigate_controller/tasks/main.yml) | `prepare` |
 | [backup-idrac.yml](../../playbooks/backup-idrac.yml) | `idracs` | [idrac_backup](../../roles/idrac_backup/tasks/main.yml) | `export` |
 | [backup-switch.yml](../../playbooks/backup-switch.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `backup` |
 | [boot-idrac-iso.yml](../../playbooks/boot-idrac-iso.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | `boot` |
@@ -35,6 +36,13 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [configure-switch-gateway.yml](../../playbooks/configure-switch-gateway.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `gateway` |
 | [prepare-wireguard-client.yml](../../playbooks/prepare-wireguard-client.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
 | [verify-opnsense-wireguard.yml](../../playbooks/verify-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `verify` |
+| [configure-fortigate-pilot-reservations.yml](../../playbooks/configure-fortigate-pilot-reservations.yml) | `fortigates` | [fortigate_pilot_dhcp](../../roles/fortigate_pilot_dhcp/tasks/main.yml) | `configure` |
+| [verify-fortigate-pilot-reservations.yml](../../playbooks/verify-fortigate-pilot-reservations.yml) | `fortigates` | [fortigate_pilot_dhcp](../../roles/fortigate_pilot_dhcp/tasks/main.yml) | `verify` |
+| [inspect-opnsense-wireguard-wifi.yml](../../playbooks/inspect-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `inspect` |
+| [configure-opnsense-wireguard-wifi.yml](../../playbooks/configure-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `configure` |
+| [verify-opnsense-wireguard-wifi.yml](../../playbooks/verify-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `verify` |
+| [remove-opnsense-wireguard-wifi.yml](../../playbooks/remove-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `remove` |
+| [verify-opnsense-wireguard-wifi-absent.yml](../../playbooks/verify-opnsense-wireguard-wifi-absent.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `verify_absent` |
 | [create-opnsense-vm.yml](../../playbooks/create-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | `create` |
 | [eject-idrac-iso.yml](../../playbooks/eject-idrac-iso.yml) | `idracs` | [idrac_iso](../../roles/idrac_iso/tasks/main.yml) | `eject` |
 | [install-opnsense.yml](../../playbooks/install-opnsense.yml) | `proxmox_hosts` | [opnsense_install](../../roles/opnsense_install/tasks/main.yml) | `install` |
@@ -87,6 +95,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `cisco_switch_options` | `backup`, `management`, `ports`, `gateway` |
 | `community_api_options` | `load`, `prepare` |
 | `fortigate_backup_options` | `backup` |
+| `fortigate_controller_options` | `prepare`, `verify` |
 | `idrac_backup_options` | `export` |
 | `idrac_boot_options` | `boot`, `verify`, `uefi` |
 | `idrac_iso_options` | `mount`, `eject`, `status` |
@@ -97,6 +106,8 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `opnsense_media_options` | `download`, `bootstrap` |
 | `opnsense_pilot_options` | `management`, `home` |
 | `opnsense_wireguard_options` | `prepare`, `configure`, `verify` |
+| `opnsense_wireguard_wifi_options` | `inspect`, `configure`, `verify`, `remove`, `verify_absent` |
+| `fortigate_pilot_dhcp_options` | `configure`, `verify` |
 | `opnsense_vm_options` | `describe`, `create`, `verify` |
 | `proxmox_api_options` | `enroll` |
 | `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |

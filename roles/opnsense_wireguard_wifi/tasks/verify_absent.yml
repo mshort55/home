@@ -1,0 +1,5 @@
+---
+- name: Require no saved or loaded Wi-Fi pilot ingress rule or transport states
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} verify_absent {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  check_mode: false
+  changed_when: false

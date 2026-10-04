@@ -1,0 +1,10 @@
+---
+- name: Verify absent the temporary private-WAN Wi-Fi tunnel entry
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+  - role: opnsense_wireguard_wifi
+    opnsense_wireguard_wifi_options:
+      task_action: verify_absent

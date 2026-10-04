@@ -1,0 +1,4 @@
+---
+wireguard_wifi_key_directory: "{{ wireguard_key_directory | default((role_path ~ '/../..') | realpath ~ '/.cache/wireguard/' ~ inventory_hostname) }}"
+wireguard_wifi_fortigate_host: fortigate01
+vault_file: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"

@@ -1,0 +1,27 @@
+---
+- name: Resolve the trusted Fortinet hostname on this controller
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -c
+      - >-
+        import json, socket, sys;
+        print(json.dumps(sorted({r[4][0] for r in socket.getaddrinfo(sys.argv[1], None, socket.AF_INET)})))
+      - "{{ fortigate_controller_endpoint.hostname }}"
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_connection: ansible.builtin.local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: fortigate_controller_resolution
+  check_mode: false
+  changed_when: false
+  failed_when: false
+- name: Require the reviewed address before any authenticated device request
+  ansible.builtin.assert:
+    that:
+      - fortigate_controller_resolution.rc == 0
+      - (fortigate_controller_resolution.stdout | from_json) == [fortigate_controller_endpoint.address]
+    fail_msg: >-
+      The Fortinet certificate hostname does not resolve uniquely to the reviewed address on this controller.
+      Run playbooks/prepare-fortigate-controller.yml --limit fortigate01 --ask-become-pass from this same environment.

@@ -1,0 +1,28 @@
+---
+argument_specs:
+  main:
+    short_description: Prepare or verify the controller's Fortinet certificate hostname.
+    options:
+      fortigate_controller_options:
+        type: dict
+        required: true
+        description: Explicit controller operation; there is no default action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices: [prepare, verify]
+            description: Select the matching task file.
+      fortigate_controller_endpoint:
+        type: dict
+        required: true
+        description: Reviewed certificate hostname and current device IPv4 address.
+        options:
+          hostname:
+            type: str
+            required: true
+            description: The hostname used by the verified HTTPS connection.
+          address:
+            type: str
+            required: true
+            description: The device's reviewed IPv4 address, never a replacement TLS identity.

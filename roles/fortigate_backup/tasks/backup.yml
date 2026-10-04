@@ -13,7 +13,15 @@
       - ansible_httpapi_use_ssl | bool
       - ansible_httpapi_validate_certs | bool
       - not (ansible_persistent_log_messages | default(false) | bool)
+      - fortigate_controller_endpoint.hostname == ansible_host
       fail_msg: Configure the documented verified HTTPS connection before collecting credentials or configuration.
+  - name: Verify controller resolution before opening the Fortinet session
+    ansible.builtin.include_role:
+      name: fortigate_controller
+      public: false
+    vars:
+      fortigate_controller_options:
+        task_action: verify
   - name: Collect a global configuration export in an authenticated session
     block:
     - name: Read the device configuration backup endpoint

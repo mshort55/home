@@ -1,0 +1,24 @@
+---
+- name: Validate the effective private Wi-Fi role contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+  tags: [always]
+- name: Validate the selected private Wi-Fi action contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs[opnsense_wireguard_wifi_options.task_action].options }}"
+  tags: [always]
+- name: Require the enrolled management guest
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname in groups.get('opnsense_hosts', [])
+      - ansible_host == opnsense_wireguard.management_address
+      - wireguard_wifi_key_directory is match('^/')
+- name: Build the public Wi-Fi helper payload
+  ansible.builtin.set_fact:
+    wireguard_wifi_payload:
+      wireguard: "{{ opnsense_wireguard }}"
+      wifi: "{{ opnsense_wireguard_wifi | default(none) }}"
+    wireguard_wifi_prefix: "printf '%s' {{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-wireguard-wifi.php') | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
+- name: Dispatch the explicit private Wi-Fi action
+  ansible.builtin.include_tasks: "{{ opnsense_wireguard_wifi_options.task_action }}.yml"
+  tags: [always]

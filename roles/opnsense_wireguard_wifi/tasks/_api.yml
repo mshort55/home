@@ -1,0 +1,10 @@
+---
+- name: Load the enrolled OPNsense API without changing enrollment
+  ansible.builtin.include_role:
+    name: community_api
+    public: false
+  vars:
+    community_api_options:
+      task_action: load
+    community_api_host: "{{ inventory_hostname }}"
+    community_api_var: opn_api

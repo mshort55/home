@@ -1,0 +1,35 @@
+---
+- name: Merge only the owned private WAN UDP handshake rule
+  oxlorg.opnsense.rule:
+    firewall: "{{ opn_api.firewall }}"
+    api_key: "{{ opn_api.api_key }}"
+    api_secret: "{{ opn_api.api_secret }}"
+    ssl_verify: true
+    ssl_ca_file: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+    match_fields: [description]
+    description: "{{ wireguard_wifi_plan.rule.description }}"
+    sequence: "{{ wireguard_wifi_plan.rule.sequence | int }}"
+    enabled: true
+    action: pass
+    quick: true
+    interface: [wan]
+    interface_invert: false
+    direction: in
+    ip_protocol: inet
+    protocol: UDP
+    source_net: "{{ opnsense_wireguard_wifi.wifi_address }}/32"
+    source_invert: false
+    source_port: ''
+    destination_net: "{{ opnsense_wireguard_wifi.wan_address }}/32"
+    destination_invert: false
+    destination_port: "{{ opnsense_wireguard.port | string }}"
+    gateway: ''
+    replyto: ''
+    disable_replyto: true
+    log: true
+    state_type: keep
+    reload: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: wireguard_wifi_rule_change

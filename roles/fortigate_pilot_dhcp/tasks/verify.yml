@@ -1,0 +1,7 @@
+---
+- name: Read and validate the owned reservations
+  ansible.builtin.include_tasks: _read.yml
+- name: Require both matching reservations
+  ansible.builtin.assert:
+    that: not fortigate_dhcp_plan_result.needs_change
+    fail_msg: Run configure-fortigate-pilot-reservations.yml first.

@@ -1,0 +1,12 @@
+---
+- name: Load only the saved firewall policy through OXL
+  oxlorg.opnsense.reload:
+    firewall: "{{ opn_api.firewall }}"
+    api_key: "{{ opn_api.api_key }}"
+    api_secret: "{{ opn_api.api_secret }}"
+    ssl_verify: true
+    ssl_ca_file: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+    target: rule
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"

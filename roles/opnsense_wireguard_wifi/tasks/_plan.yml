@@ -1,0 +1,51 @@
+---
+- name: Require the declared private pilot gateway and WAN NIC
+  ansible.builtin.assert:
+    that:
+      - opnsense_wireguard_wifi.wan_gateway == opnsense_pilot.wan_gateway
+      - opnsense_wireguard_wifi.wan_mac | lower == (hostvars[opnsense_proxmox_host].opnsense_vm.networks | selectattr('role', 'equalto', 'WAN') | map(attribute='mac') | first | lower)
+      - wireguard_wifi_key_directory is match('^/')
+      - wireguard_wifi_fortigate_host in groups.get('fortigates', [])
+      - opnsense_wireguard_wifi.wan_address == (hostvars[wireguard_wifi_fortigate_host].fortigate_pilot_dhcp.reservations | selectattr('role', 'equalto', 'pilot_wan') | map(attribute='address') | first)
+      - opnsense_wireguard_wifi.wifi_address == (hostvars[wireguard_wifi_fortigate_host].fortigate_pilot_dhcp.reservations | selectattr('role', 'equalto', 'wifi_admin') | map(attribute='address') | first)
+      - opnsense_wireguard_wifi.wan_mac | lower == (hostvars[wireguard_wifi_fortigate_host].fortigate_pilot_dhcp.reservations | selectattr('role', 'equalto', 'pilot_wan') | map(attribute='mac') | first | lower)
+    fail_msg: Define the reserved Wi-Fi transport using the installed pilot gateway and WAN MAC.
+- name: Verify both current reservations through the trusted Fortinet API
+  ansible.builtin.include_role:
+    name: fortigate_pilot_dhcp
+    public: false
+    apply:
+      delegate_to: "{{ wireguard_wifi_fortigate_host }}"
+  vars:
+    fortigate_pilot_dhcp_options:
+      task_action: verify
+    fortigate_pilot_dhcp: "{{ hostvars[wireguard_wifi_fortigate_host].fortigate_pilot_dhcp }}"
+    fortigate_controller_endpoint: "{{ hostvars[wireguard_wifi_fortigate_host].fortigate_controller_endpoint }}"
+    ansible_host: "{{ hostvars[wireguard_wifi_fortigate_host].ansible_host }}"
+    ansible_connection: "{{ hostvars[wireguard_wifi_fortigate_host].ansible_connection }}"
+    ansible_network_os: "{{ hostvars[wireguard_wifi_fortigate_host].ansible_network_os }}"
+    ansible_user: "{{ vault_devices[wireguard_wifi_fortigate_host].username }}"
+    ansible_password: "{{ vault_devices[wireguard_wifi_fortigate_host].password }}"
+    ansible_httpapi_use_ssl: true
+    ansible_httpapi_validate_certs: true
+    ansible_httpapi_ca_path: "{{ hostvars[wireguard_wifi_fortigate_host].ansible_httpapi_ca_path }}"
+    ansible_httpapi_port: "{{ hostvars[wireguard_wifi_fortigate_host].ansible_httpapi_port }}"
+    ansible_httpapi_use_proxy: false
+    ansible_persistent_log_messages: false
+- name: Verify the existing HOME tunnel and management policy without writes
+  ansible.builtin.include_role:
+    name: opnsense_wireguard
+    public: false
+  vars:
+    opnsense_wireguard_options:
+      task_action: verify
+- name: Load the enrolled API for the scoped ingress operation
+  ansible.builtin.include_tasks: _api.yml
+- name: Preview the exact private Wi-Fi ingress rule and runtime
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} plan {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  register: wireguard_wifi_preview
+  check_mode: false
+  changed_when: false
+- name: Select the reviewed ingress plan
+  ansible.builtin.set_fact:
+    wireguard_wifi_plan: "{{ wireguard_wifi_preview.stdout | trim | from_json }}"

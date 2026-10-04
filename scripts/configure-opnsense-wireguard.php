@@ -159,6 +159,22 @@ try {
     $rules[]=wgRule('default deny',900,'any','any','any','','block');
     $acl=['enabled'=>'1','name'=>'WG_ADMIN','action'=>'allow','description'=>'Home automation: WG DNS ACL','networks'=>$source];
     $filter=new \OPNsense\Firewall\Filter(); $unbound=new \OPNsense\Unbound\Unbound(); $objects=[];
+    // The separate Wi-Fi transport owns one WAN rule, never tunnel allocation.
+    $wifiPath='/conf/ansible-wireguard-wifi/state.json';
+    if (is_file($wifiPath)) {
+        wgProtect(dirname($wifiPath), true); wgProtect($wifiPath);
+        $wifi=json_decode(file_get_contents($wifiPath), true, 512, JSON_THROW_ON_ERROR);
+        wgEnsure(($wifi['version'] ?? null) === 1 && $wifi['seed_id'] === $seed['seed_id'], 'Wi-Fi record belongs to another installed guest');
+        wgEnsure($operation === 'verify' || in_array($wifi['phase'], ['complete','absent'], true), 'Complete or remove the interrupted Wi-Fi workflow first');
+        if ($wifi['phase'] === 'complete' && $operation !== 'verify') {
+            wgEnsure($wifi['input']['wireguard'] === $settings, 'Wi-Fi transport references another WireGuard allocation');
+            $wifiFound=false;
+            foreach ($filter->rules->rule->iterateItems() as $id=>$node) {
+                if ($id === $wifi['object']['uuid']) { wgEnsure(wgSame($node->getNodeContent(), $wifi['object']['values']), 'Owned Wi-Fi rule drift; run configure-opnsense-wireguard-wifi.yml'); $wifiFound=true; }
+            }
+            wgEnsure($wifiFound, 'Missing Wi-Fi rule; run configure-opnsense-wireguard-wifi.yml');
+        }
+    }
     foreach (['filter rules'=>[$filter->rules->rule,$rules,'description'],'DNS access lists'=>[$unbound->acls->acl,[$acl],'name']] as $label=>[$container,$desired,$identity]) {
         $found=[];
         foreach ($container->iterateItems() as $uuid=>$node) { $key=(string)$node->{$identity}; wgEnsure(!isset($found[$key]), 'Duplicate policy identity'); $found[$key]=['uuid'=>$uuid,'values'=>$node->getNodeContent()]; }

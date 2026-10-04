@@ -1,0 +1,3 @@
+---
+fortigate_pilot_vdom: root
+vault_file: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"

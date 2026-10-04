@@ -41,6 +41,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [cisco_switch](../roles/cisco_switch/tasks/main.yml) | `backup`, `management`, `ports`, `gateway` | [defaults](../roles/cisco_switch/defaults/main.yml) | [schema](../roles/cisco_switch/meta/argument_specs.yml) |
 | [community_api](../roles/community_api/tasks/main.yml) | `load`, `prepare` | [defaults](../roles/community_api/defaults/main.yml) | [schema](../roles/community_api/meta/argument_specs.yml) |
 | [fortigate_backup](../roles/fortigate_backup/tasks/main.yml) | `backup` | [defaults](../roles/fortigate_backup/defaults/main.yml) | [schema](../roles/fortigate_backup/meta/argument_specs.yml) |
+| [fortigate_controller](../roles/fortigate_controller/tasks/main.yml) | `prepare`, `verify` | [defaults](../roles/fortigate_controller/defaults/main.yml) | [schema](../roles/fortigate_controller/meta/argument_specs.yml) |
 | [idrac_backup](../roles/idrac_backup/tasks/main.yml) | `export` | [defaults](../roles/idrac_backup/defaults/main.yml) | [schema](../roles/idrac_backup/meta/argument_specs.yml) |
 | [idrac_boot](../roles/idrac_boot/tasks/main.yml) | `boot`, `verify`, `uefi` | [defaults](../roles/idrac_boot/defaults/main.yml) | [schema](../roles/idrac_boot/meta/argument_specs.yml) |
 | [idrac_iso](../roles/idrac_iso/tasks/main.yml) | `mount`, `eject`, `status` | [defaults](../roles/idrac_iso/defaults/main.yml) | [schema](../roles/idrac_iso/meta/argument_specs.yml) |
@@ -104,6 +105,15 @@ roles/
     tasks/
       backup.yml
       main.yml
+  fortigate_controller/
+    defaults/
+      main.yml
+    meta/
+      argument_specs.yml
+    tasks/
+      main.yml
+      prepare.yml
+      verify.yml
   idrac_backup/
     defaults/
       main.yml

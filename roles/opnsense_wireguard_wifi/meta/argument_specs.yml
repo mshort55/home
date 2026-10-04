@@ -1,0 +1,153 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch private-WAN Wi-Fi WireGuard actions.
+    options:
+      opnsense_wireguard_wifi_options:
+        type: dict
+        description: Explicit temporary Wi-Fi action; no default.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the corresponding action file.
+            required: true
+            choices:
+            - inspect
+            - configure
+            - verify
+            - remove
+            - verify_absent
+      opnsense_wireguard:
+        type: dict
+        description: Existing installed HOME WireGuard allocation; validated by its
+          role.
+        required: true
+      wireguard_wifi_key_directory:
+        type: path
+        description: Existing protected key directory; configure renders only the
+          additional Mac profile.
+        default: '{{ wireguard_key_directory | default((role_path ~ ''/../..'') |
+          realpath ~ ''/.cache/wireguard/'' ~ inventory_hostname) }}'
+      wireguard_wifi_fortigate_host:
+        type: str
+        default: fortigate01
+        description: Inventory Fortinet host owning both pilot reservations.
+      opnsense_wireguard_wifi:
+        type: dict
+        description: Reserved private-WAN Wi-Fi transport; never a public WAN allowance.
+        required: false
+        options:
+          wan_address:
+            type: str
+            description: Reserved current private DHCP WAN IPv4.
+            required: true
+          wifi_address:
+            type: str
+            description: Reserved Mac Wi-Fi IPv4; source is exactly its /32.
+            required: true
+          wan_gateway:
+            type: str
+            description: Reviewed Fortinet pilot gateway.
+            required: true
+          wan_mac:
+            type: str
+            description: Installed WAN vNIC MAC; must match Proxmox inventory.
+            required: true
+      vault_file:
+        type: path
+        default: '{{ (role_path ~ ''/../..'') | realpath }}/secrets/vault.yml'
+        description: Encrypted controller credential file loaded by configure/verify
+          entry points.
+  inspect:
+    short_description: Private Wi-Fi inspect.
+    options:
+      opnsense_wireguard_wifi_options:
+        type: dict
+        description: Explicit action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Matching action task file.
+            required: true
+            choices:
+            - inspect
+  configure:
+    short_description: Private Wi-Fi configure.
+    options:
+      opnsense_wireguard_wifi_options:
+        type: dict
+        description: Explicit action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Matching action task file.
+            required: true
+            choices:
+            - configure
+      opnsense_wireguard_wifi: &id001
+        type: dict
+        description: Reserved private-WAN Wi-Fi transport; never a public WAN allowance.
+        required: true
+        options:
+          wan_address:
+            type: str
+            description: Reserved current private DHCP WAN IPv4.
+            required: true
+          wifi_address:
+            type: str
+            description: Reserved Mac Wi-Fi IPv4; source is exactly its /32.
+            required: true
+          wan_gateway:
+            type: str
+            description: Reviewed Fortinet pilot gateway.
+            required: true
+          wan_mac:
+            type: str
+            description: Installed WAN vNIC MAC; must match Proxmox inventory.
+            required: true
+  verify:
+    short_description: Private Wi-Fi verify.
+    options:
+      opnsense_wireguard_wifi_options:
+        type: dict
+        description: Explicit action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Matching action task file.
+            required: true
+            choices:
+            - verify
+      opnsense_wireguard_wifi: *id001
+  remove:
+    short_description: Private Wi-Fi remove.
+    options:
+      opnsense_wireguard_wifi_options:
+        type: dict
+        description: Explicit action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Matching action task file.
+            required: true
+            choices:
+            - remove
+  verify_absent:
+    short_description: Private Wi-Fi verify_absent.
+    options:
+      opnsense_wireguard_wifi_options:
+        type: dict
+        description: Explicit action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Matching action task file.
+            required: true
+            choices:
+            - verify_absent

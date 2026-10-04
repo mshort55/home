@@ -1,0 +1,43 @@
+---
+- name: Validate the existing encrypted keys without rotation
+  wireguard_keys:
+    directory: "{{ wireguard_wifi_key_directory }}"
+    identity: "{{ inventory_hostname }}"
+    settings: "{{ opnsense_wireguard }}"
+  check_mode: true
+- name: Load the existing private peer identity
+  ansible.builtin.include_vars:
+    file: "{{ wireguard_wifi_key_directory }}/keys.vault.yml"
+    name: wireguard_wifi_material
+  no_log: true
+- name: Inspect an existing Wi-Fi import file without following links
+  ansible.builtin.stat:
+    path: "{{ wireguard_wifi_key_directory }}/home-admin-wifi.conf"
+    follow: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: wireguard_wifi_client_file
+  no_log: true
+- name: Refuse unprotected or symlink Wi-Fi import files
+  ansible.builtin.assert:
+    that:
+      - not wireguard_wifi_client_file.stat.exists or (wireguard_wifi_client_file.stat.isreg | default(false) and not wireguard_wifi_client_file.stat.islnk | default(false) and wireguard_wifi_client_file.stat.mode == '0600')
+  no_log: true
+- name: Render only the additional protected Mac profile
+  ansible.builtin.template:
+    src: home-admin-wifi.conf.j2
+    dest: "{{ wireguard_wifi_key_directory }}/home-admin-wifi.conf"
+    mode: '0600'
+    follow: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  no_log: true
+  diff: false
+- name: Report the additional import file and retained wired profile
+  ansible.builtin.debug:
+    msg:
+      wifi_client: "{{ wireguard_wifi_key_directory }}/home-admin-wifi.conf"
+      wired_client: "{{ wireguard_wifi_key_directory }}/home-admin.conf"
+      usage: Activate only one profile at a time; Wi-Fi grants the same named management services.

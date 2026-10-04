@@ -1,0 +1,28 @@
+---
+- name: Select the protected controller copy of the original configuration
+  ansible.builtin.set_fact:
+    wireguard_wifi_backup_directory: "{{ inventory_dir }}/backups/{{ inventory_hostname }}-wireguard-wifi-{{ (wireguard_wifi_complete.stdout | trim | from_json).backup | basename | regex_replace('^before-', '') | regex_replace('\\.xml$', '') }}"
+- name: Read the original configuration without displaying contents
+  ansible.builtin.raw: "/usr/bin/base64 {{ (wireguard_wifi_complete.stdout | trim | from_json).backup | quote }}"
+  changed_when: false
+  register: wireguard_wifi_backup_bytes
+  no_log: true
+- name: Create the protected controller backup directory
+  ansible.builtin.file:
+    path: "{{ wireguard_wifi_backup_directory }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+- name: Preserve the exact original configuration privately
+  ansible.builtin.copy:
+    content: "{{ wireguard_wifi_backup_bytes.stdout | b64decode }}"
+    dest: "{{ wireguard_wifi_backup_directory }}/before.xml"
+    mode: '0600'
+    follow: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  no_log: true
+  diff: false

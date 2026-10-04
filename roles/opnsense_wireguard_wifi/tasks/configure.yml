@@ -1,0 +1,47 @@
+---
+- name: Load and validate the existing administration identity
+  ansible.builtin.include_tasks: _plan.yml
+- name: Preview the scoped API rule without writes
+  ansible.builtin.include_tasks:
+    file: _rule.yml
+    apply:
+      check_mode: true
+- name: Report the temporary Wi-Fi transport preview
+  ansible.builtin.debug:
+    msg:
+      source: "{{ opnsense_wireguard_wifi.wifi_address }}/32"
+      endpoint: "{{ opnsense_wireguard_wifi.wan_address }}:{{ opnsense_wireguard.port }}"
+      reload_required: "{{ wireguard_wifi_plan.reload_required }}"
+      removal: Run remove-opnsense-wireguard-wifi.yml and verify-opnsense-wireguard-wifi-absent.yml before ISP attachment.
+- name: Validate and preview the additional protected client before device writes
+  ansible.builtin.include_tasks:
+    file: _client.yml
+    apply:
+      check_mode: true
+- name: Finish the read-only Wi-Fi preview
+  ansible.builtin.meta: end_role
+  when: ansible_check_mode
+- name: Preserve the configuration and record intent before API writes
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} stage {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  register: wireguard_wifi_stage
+  changed_when: (wireguard_wifi_stage.stdout | trim | from_json).changed
+- name: Merge the owned private WAN handshake rule
+  ansible.builtin.include_tasks: _rule.yml
+- name: Record the saved API rule UUID before firewall reload
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} stage {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  register: wireguard_wifi_saved
+  changed_when: (wireguard_wifi_saved.stdout | trim | from_json).changed
+- name: Apply new or interrupted Wi-Fi ingress configuration
+  ansible.builtin.include_tasks: _reload.yml
+  when: wireguard_wifi_rule_change.changed or (wireguard_wifi_saved.stdout | trim | from_json).reload_required
+- name: Verify exact saved and loaded ingress before completing
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} complete {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  register: wireguard_wifi_complete
+  changed_when: wireguard_wifi_complete.rc == 0 and (wireguard_wifi_complete.stdout | trim | from_json).changed
+  retries: 6
+  delay: 5
+  until: wireguard_wifi_complete is succeeded
+- name: Export the protected pre-change configuration
+  ansible.builtin.include_tasks: _backup.yml
+- name: Render the additional Mac profile using the existing keys
+  ansible.builtin.include_tasks: _client.yml

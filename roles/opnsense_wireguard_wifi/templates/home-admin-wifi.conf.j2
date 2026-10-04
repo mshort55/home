@@ -1,0 +1,11 @@
+[Interface]
+PrivateKey = {{ wireguard_wifi_material.client.private }}
+Address = {{ opnsense_wireguard.peer_address }}/32
+DNS = {{ opnsense_wireguard.management_address }}
+MTU = {{ wireguard_wifi_plan.mtu }}
+
+[Peer]
+PublicKey = {{ wireguard_wifi_material.server.public }}
+Endpoint = {{ opnsense_wireguard_wifi.wan_address }}:{{ opnsense_wireguard.port }}
+AllowedIPs = {{ opnsense_wireguard.management_subnet }}, {{ opnsense_wireguard.server_address }}/32
+PersistentKeepalive = 25

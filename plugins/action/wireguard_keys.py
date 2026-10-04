@@ -92,11 +92,12 @@ class ActionModule(ActionBase):
         exists = path.exists() or path.is_symlink()
         if directory.exists():
             protect(directory, 0o700, True)
-        client_file = directory / 'home-admin.conf'
-        if client_file.exists() or client_file.is_symlink():
-            protect(client_file, 0o600)
-            if not exists:
-                raise AnsibleActionFail('Restore the original encrypted keys; refusing to replace an existing Mac client identity.')
+        for filename in ('home-admin.conf', 'home-admin-wifi.conf'):
+            client_file = directory / filename
+            if client_file.exists() or client_file.is_symlink():
+                protect(client_file, 0o600)
+                if not exists:
+                    raise AnsibleActionFail('Restore the original encrypted keys; refusing to replace an existing Mac client identity.')
         if exists:
             protect(path, 0o600)
             ciphertext = path.read_bytes()

@@ -1,0 +1,9 @@
+---
+- name: Inspect the current private WAN transport without keys or writes
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} inspect {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  register: wireguard_wifi_inspection
+  check_mode: false
+  changed_when: false
+- name: Report public WAN and HOME endpoint identities
+  ansible.builtin.debug:
+    msg: "{{ wireguard_wifi_inspection.stdout | trim | from_json }}"

@@ -1,0 +1,139 @@
+---
+- name: Read and validate the reservation scope
+  ansible.builtin.include_tasks: _read.yml
+- name: Preserve Fortinet before a reservation change
+  ansible.builtin.include_role:
+    name: fortigate_backup
+    public: false
+  vars:
+    fortigate_backup_options:
+      task_action: backup
+  when: fortigate_dhcp_plan_result.needs_change and not ansible_check_mode
+- name: Retain the exact planned reservation collection
+  ansible.builtin.set_fact:
+    fortigate_dhcp_expected_reservations: "{{ fortigate_dhcp_plan_result.reservations }}"
+  no_log: true
+- name: Recheck the DHCP server immediately before writing
+  when: fortigate_dhcp_plan_result.needs_change and not ansible_check_mode
+  block:
+    - name: Read the latest server through the trusted API
+      fortinet.fortios.fortios_configuration_fact:
+        vdom: "{{ fortigate_pilot_vdom }}"
+        enable_log: false
+        selector: system.dhcp_server
+        params:
+          id: "{{ fortigate_pilot_dhcp.server_id }}"
+      register: fortigate_dhcp_recheck
+      no_log: true
+    - name: Require a successful complete recheck response
+      ansible.builtin.assert:
+        that:
+          - fortigate_dhcp_recheck.meta is mapping
+          - fortigate_dhcp_recheck.meta.status is defined or fortigate_dhcp_recheck.meta.http_status is defined
+          - fortigate_dhcp_recheck.meta.status | default('success') == 'success'
+          - fortigate_dhcp_recheck.meta.http_status | default(200) == 200
+          - fortigate_dhcp_recheck.meta.results is sequence
+          - fortigate_dhcp_recheck.meta.results is not mapping
+          - fortigate_dhcp_recheck.meta.results is not string
+          - fortigate_dhcp_recheck.meta.results | length == 1
+          - fortigate_dhcp_recheck.meta.results[0] is mapping
+          - fortigate_dhcp_recheck.meta.revision is defined
+          - fortigate_dhcp_recheck.meta.revision is string
+          - fortigate_dhcp_recheck.meta.revision | length > 0
+        fail_msg: The DHCP recheck response is unsuccessful or incomplete; no reservations were written.
+      no_log: true
+    - name: Compare the complete original and latest server before writing
+      block:
+        - name: Refuse concurrent DHCP changes
+          ansible.builtin.assert:
+            that:
+              # FortiOS re-encodes encrypted secrets on reads. The revision guards secret changes.
+              - fortigate_dhcp_recheck.meta.revision == fortigate_dhcp_read.meta.revision
+              - fortigate_dhcp_recheck.meta.results[0].keys() | list | sort == fortigate_dhcp_read.meta.results[0].keys() | list | sort
+              - (fortigate_dhcp_recheck.meta.results[0] | dict2items | rejectattr('key', 'equalto', 'ddns-key') | items2dict) == (fortigate_dhcp_read.meta.results[0] | dict2items | rejectattr('key', 'equalto', 'ddns-key') | items2dict)
+            fail_msg: DHCP server responses differ; no reservations were written.
+          no_log: true
+      rescue:
+        - name: Preserve both DHCP reads privately alongside the pre-change backup
+          ansible.builtin.copy:
+            dest: "{{ backup_directory.path }}/{{ item.name }}.json"
+            content: "{{ item.response | to_nice_json }}"
+            mode: '0600'
+          loop:
+            - name: dhcp-before
+              response: "{{ fortigate_dhcp_read.meta }}"
+            - name: dhcp-recheck
+              response: "{{ fortigate_dhcp_recheck.meta }}"
+          delegate_to: localhost
+          no_log: true
+          diff: false
+        - name: Initialize the safe DHCP field difference summary
+          ansible.builtin.set_fact:
+            fortigate_dhcp_changed_fields: []
+        - name: Identify differing top-level field names without exposing values
+          ansible.builtin.set_fact:
+            fortigate_dhcp_changed_fields: "{{ fortigate_dhcp_changed_fields + [item] }}"
+          loop: "{{ (fortigate_dhcp_read.meta.results[0].keys() | list) | union(fortigate_dhcp_recheck.meta.results[0].keys() | list) | sort }}"
+          when: >-
+            item not in fortigate_dhcp_read.meta.results[0] or
+            item not in fortigate_dhcp_recheck.meta.results[0] or
+            fortigate_dhcp_read.meta.results[0][item] != fortigate_dhcp_recheck.meta.results[0][item]
+          no_log: true
+        - name: Report the protected diagnostics and stop before writing
+          ansible.builtin.fail:
+            msg: >-
+              DHCP comparison failed before writing reservations.
+              Configuration revision changed: {{ fortigate_dhcp_recheck.meta.revision != fortigate_dhcp_read.meta.revision }}.
+              Differing fields:
+              {{ fortigate_dhcp_changed_fields | join(', ') | default('(none; comparison/type issue)', true) }}.
+              Protected responses: {{ backup_directory.path }}/dhcp-before.json and dhcp-recheck.json.
+- name: Set only the merged reservation collection on the existing server
+  fortinet.fortios.fortios_system_dhcp_server:
+    vdom: "{{ fortigate_pilot_vdom }}"
+    enable_log: false
+    state: present
+    system_dhcp_server:
+      id: "{{ fortigate_pilot_dhcp.server_id }}"
+      reserved_address: "{{ fortigate_dhcp_plan_result.reservations }}"
+  when: fortigate_dhcp_plan_result.needs_change
+  no_log: true
+  diff: false
+- name: Verify reservation read-back and preserved DHCP settings
+  when: not ansible_check_mode
+  block:
+    - name: Retain the complete original server outside reservation fields
+      ansible.builtin.set_fact:
+        fortigate_dhcp_original: "{{ fortigate_dhcp_read.meta.results[0] }}"
+      no_log: true
+    - name: Read back the DHCP server and reservations
+      ansible.builtin.include_tasks: _read.yml
+    - name: Require exact reservations and unchanged remaining server fields
+      ansible.builtin.assert:
+        that:
+          - not fortigate_dhcp_plan_result.needs_change
+          - fortigate_dhcp_plan_result.reservations | map(attribute='id') | list | sort == fortigate_dhcp_expected_reservations | map(attribute='id') | list | sort
+          - fortigate_dhcp_original.keys() | list | sort == fortigate_dhcp_read.meta.results[0].keys() | list | sort
+          # Only reserved-address is submitted; ddns-key ciphertext cannot be compared across reads.
+          - (fortigate_dhcp_original | dict2items | rejectattr('key', 'in', ['reserved-address', 'ddns-key']) | items2dict) == (fortigate_dhcp_read.meta.results[0] | dict2items | rejectattr('key', 'in', ['reserved-address', 'ddns-key']) | items2dict)
+        fail_msg: DHCP read-back differs from the bounded reservation change.
+      no_log: true
+    - name: Verify every planned reservation field while allowing new firmware defaults
+      ansible.builtin.assert:
+        that:
+          - observed_reservations | length == 1
+          - (observed_reservations[0] | dict2items | selectattr('key', 'in', expected_reservation.keys() | list) | items2dict) == expected_reservation
+        fail_msg: A planned reservation field changed during DHCP read-back.
+      vars:
+        observed_reservations: "{{ fortigate_dhcp_plan_result.reservations | selectattr('id', 'equalto', expected_reservation.id) | list }}"
+      loop: "{{ fortigate_dhcp_expected_reservations }}"
+      loop_control:
+        loop_var: expected_reservation
+      no_log: true
+- name: Report the bounded reservation operation
+  ansible.builtin.debug:
+    msg:
+      operation: "{{ 'Previewed' if ansible_check_mode else 'Verified' }} pilot WAN and Mac Wi-Fi reservations"
+      server: "{{ fortigate_pilot_dhcp.server_id }}"
+      interface: "{{ fortigate_pilot_dhcp.interface }}"
+      reservations: "{{ fortigate_pilot_dhcp.reservations }}"
+      preserved: Existing reservations, pools, DNS and gateway

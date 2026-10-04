@@ -89,4 +89,5 @@ Entry points orchestrate roles with explicit, role-scoped `task_action` paramete
 | OPNsense management DNS/NTP, restricted update access and private WAN pilot | [Configure OPNsense pilot](docs/playbooks/configure-opnsense-pilot.md) |
 | Isolated HOME VLAN with Kea DHCP, DNS and filtered internet access | [Configure OPNsense HOME pilot](docs/playbooks/configure-opnsense-home.md) |
 | HOME WireGuard administration, encrypted keys and Mac import | [Configure WireGuard](docs/playbooks/configure-opnsense-wireguard.md) |
+| Temporary WireGuard access from existing Wi-Fi, reserved DHCP leases and removal before ISP cutover | [Configure private-WAN Wi-Fi access](docs/playbooks/configure-opnsense-wireguard-wifi.md) |
 | Switch management return route | [Configure switch gateway](docs/playbooks/configure-switch-gateway.md) |

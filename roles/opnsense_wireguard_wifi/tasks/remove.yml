@@ -1,0 +1,66 @@
+---
+- name: Load the enrolled API for scoped removal
+  ansible.builtin.include_tasks: _api.yml
+- name: Plan removal using the protected record without requiring the old WAN lease
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} plan_remove {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  register: wireguard_wifi_removal
+  check_mode: false
+  changed_when: false
+- name: Report removal preview
+  ansible.builtin.debug:
+    msg: "{{ wireguard_wifi_removal.stdout | trim | from_json }}"
+- name: Finish the read-only removal preview
+  ansible.builtin.meta: end_role
+  when: ansible_check_mode
+- name: Record removal intent before deleting an owned rule
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} stage_remove {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  register: wireguard_wifi_removal_stage
+  changed_when: (wireguard_wifi_removal_stage.stdout | trim | from_json).changed
+- name: Remove only the named owned Wi-Fi handshake rule through OXL
+  oxlorg.opnsense.rule:
+    firewall: "{{ opn_api.firewall }}"
+    api_key: "{{ opn_api.api_key }}"
+    api_secret: "{{ opn_api.api_secret }}"
+    ssl_verify: true
+    ssl_ca_file: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+    match_fields: [description]
+    description: 'Home automation: WG private Wi-Fi handshake'
+    state: absent
+    reload: false
+  when: not (wireguard_wifi_removal.stdout | trim | from_json).rule_absent
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+- name: Load removal or reconcile an interrupted removal
+  ansible.builtin.include_tasks: _reload.yml
+  when: (wireguard_wifi_removal_stage.stdout | trim | from_json).reload_required
+- name: Clear only states from the owned rule and verify its removal
+  ansible.builtin.raw: "{{ wireguard_wifi_prefix }} complete_remove {{ wireguard_wifi_payload | to_json | b64encode | quote }}"
+  register: wireguard_wifi_removed
+  changed_when: wireguard_wifi_removed.rc == 0 and (wireguard_wifi_removed.stdout | trim | from_json).changed
+  retries: 6
+  delay: 5
+  until: wireguard_wifi_removed is succeeded
+- name: Inspect the controller artifact directory before removing the import file
+  ansible.builtin.stat:
+    path: "{{ wireguard_wifi_key_directory }}"
+    follow: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: wireguard_wifi_removal_directory
+  no_log: true
+- name: Refuse a symlink or unprotected controller artifact directory
+  ansible.builtin.assert:
+    that:
+      - not wireguard_wifi_removal_directory.stat.exists or (wireguard_wifi_removal_directory.stat.isdir | default(false) and not wireguard_wifi_removal_directory.stat.islnk | default(false) and wireguard_wifi_removal_directory.stat.mode == '0700')
+  no_log: true
+- name: Remove only the obsolete Wi-Fi client import file
+  ansible.builtin.file:
+    path: "{{ wireguard_wifi_key_directory }}/home-admin-wifi.conf"
+    state: absent
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+- name: Verify absence before ISP attachment
+  ansible.builtin.include_tasks: verify_absent.yml

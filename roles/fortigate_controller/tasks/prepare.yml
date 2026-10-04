@@ -1,0 +1,43 @@
+---
+- name: Prepare only the controller's certificate hostname mapping
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_connection: ansible.builtin.local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  block:
+    - name: Read the controller hosts file
+      ansible.builtin.slurp:
+        src: /etc/hosts
+      register: fortigate_controller_hosts
+      check_mode: false
+      no_log: true
+    - name: Select active entries for the exact certificate hostname
+      ansible.builtin.set_fact:
+        fortigate_controller_host_lines: >-
+          {{ (fortigate_controller_hosts.content | b64decode).splitlines()
+             | select('search', '(?i)^\s*[^#\s]+\s+([^#]*\s)?' ~
+                      (fortigate_controller_endpoint.hostname | regex_escape) ~ '(\s|$)') | list }}
+      no_log: true
+    - name: Refuse ambiguous or conflicting existing hostname mappings
+      ansible.builtin.assert:
+        that:
+          - fortigate_controller_host_lines | length <= 1
+          - fortigate_controller_host_lines | length == 0 or fortigate_controller_host_lines[0].split('#')[0].split() | length == 2
+          - fortigate_controller_host_lines | length == 0 or fortigate_controller_host_lines[0].split()[0] == fortigate_controller_endpoint.address
+        fail_msg: A duplicate, shared-alias or conflicting mapping exists; review it before managing this hostname.
+    - name: Set the dedicated controller hostname mapping
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ fortigate_controller_endpoint.address }} {{ fortigate_controller_endpoint.hostname }}"
+        state: present
+        backup: false
+        # Container runtimes bind-mount this file; allow fallback if atomic rename is unavailable.
+        unsafe_writes: true
+      become: true
+      become_method: sudo
+      become_user: root
+      when: fortigate_controller_host_lines | length == 0
+    - name: Verify actual controller resolution after preparation
+      ansible.builtin.include_tasks: verify.yml
+      when: not ansible_check_mode

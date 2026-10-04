@@ -1,0 +1,13 @@
+---
+- name: Configure the temporary private-WAN Wi-Fi tunnel entry
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+  - role: opnsense_wireguard_wifi
+    opnsense_wireguard_wifi_options:
+      task_action: configure
+  vars_files:
+  - '{{ vault_file | default(((playbook_dir ~ ''/..'') | realpath) ~ ''/secrets/vault.yml'')
+    }}'

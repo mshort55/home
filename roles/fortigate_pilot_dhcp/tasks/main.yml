@@ -1,0 +1,8 @@
+---
+- name: Validate the effective DHCP reservation contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+  tags: [always]
+- name: Dispatch the explicit DHCP reservation action
+  ansible.builtin.include_tasks: "{{ fortigate_pilot_dhcp_options.task_action }}.yml"
+  tags: [always]

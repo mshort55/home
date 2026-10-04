@@ -1,0 +1,12 @@
+---
+- name: Reserve the existing private WAN and Mac Wi-Fi leases
+  hosts: fortigates
+  gather_facts: false
+  become: false
+  serial: 1
+  vars_files:
+    - "{{ vault_file | default(((playbook_dir ~ '/..') | realpath) ~ '/secrets/vault.yml') }}"
+  roles:
+    - role: fortigate_pilot_dhcp
+      fortigate_pilot_dhcp_options:
+        task_action: configure

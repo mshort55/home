@@ -1,0 +1,75 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch bounded Fortinet reservation actions.
+    options:
+      fortigate_pilot_dhcp_options:
+        type: dict
+        description: Explicit reservation action; no default.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the action task file.
+            required: true
+            choices:
+            - configure
+            - verify
+      fortigate_pilot_vdom:
+        type: str
+        description: Reviewed FortiOS VDOM.
+        default: root
+        choices:
+        - root
+      fortigate_pilot_dhcp:
+        type: dict
+        description: Existing DHCP server and two stable pilot reservations.
+        required: true
+        options:
+          server_id:
+            type: int
+            description: Existing server identifier; never create a server.
+            required: true
+          interface:
+            type: str
+            description: Existing household DHCP interface.
+            required: true
+          subnet:
+            type: str
+            description: Private household IPv4 /24.
+            required: true
+          gateway:
+            type: str
+            description: Existing Fortinet DHCP gateway.
+            required: true
+          reservations:
+            type: list
+            description: Exactly the pilot WAN and Mac Wi-Fi reservations; existing
+              leases must match.
+            required: true
+            elements: dict
+            options:
+              role:
+                type: str
+                description: Stable owned reservation purpose.
+                required: true
+                choices:
+                - pilot_wan
+                - wifi_admin
+              id:
+                type: int
+                description: Explicit unused reservation ID.
+                required: true
+              address:
+                type: str
+                description: Current leased IPv4 address in the existing pool.
+                required: true
+              mac:
+                type: str
+                description: Stable active MAC address.
+                required: true
+      vault_file:
+        type: path
+        default: '{{ (role_path ~ ''/../..'') | realpath }}/secrets/vault.yml'
+        description: Encrypted controller credential file loaded by configure/verify
+          entry points.

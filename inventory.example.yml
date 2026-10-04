@@ -45,8 +45,19 @@ all:
     fortigates:
       hosts:
         fortigate01:
+          fortigate_pilot_dhcp:
+            server_id: 1
+            interface: lan
+            subnet: 10.77.55.0/24
+            gateway: 10.77.55.254
+            reservations:
+              - {role: pilot_wan, id: 9001, address: 10.77.55.132, mac: '02:77:00:00:64:00'}
+              - {role: wifi_admin, id: 9002, address: 10.77.55.128, mac: '02:77:00:00:00:80'}
           # Must resolve to the device and match its verified TLS certificate.
           ansible_host: firewall.example.test
+          fortigate_controller_endpoint:
+            hostname: firewall.example.test
+            address: 10.77.55.254
       vars:
         ansible_connection: ansible.netcommon.httpapi
         ansible_network_os: fortinet.fortios.fortios
@@ -150,6 +161,11 @@ all:
             proxmox_address: 10.77.10.10
             switch_host: switch01
             switch_address: 10.77.10.2
+          opnsense_wireguard_wifi:
+            wan_address: 10.77.55.132
+            wifi_address: 10.77.55.128
+            wan_gateway: 10.77.55.254
+            wan_mac: '02:77:00:00:64:00'
           opnsense_home_pilot:
             address: 10.77.200.254
             subnet: 10.77.200.0/24
