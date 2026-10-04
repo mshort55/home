@@ -1,0 +1,35 @@
+---
+- name: Preview, submit, inspect or verify a bounded iDRAC IPv4 transition
+  block:
+  - name: Run read state
+    ansible.builtin.include_tasks: _read_state.yml
+  - name: Run profile preflight
+    ansible.builtin.include_tasks: _profile_preflight.yml
+  - name: Run preview profile
+    ansible.builtin.include_tasks: _preview_profile.yml
+  - name: Report the completed preview and profile location
+    ansible.builtin.debug:
+      msg: 'Profile validation succeeded without applying settings. Private record: {{ network_directory.path }}'
+  vars:
+    manager_path: /redfish/v1/Managers/iDRAC.Embedded.1
+    ethernet_path: /redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/iDRAC.Embedded.1%23NIC.1
+    preview_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ImportSystemConfigurationPreview
+    import_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ImportSystemConfiguration
+    network_task_details: "{{ (network_verify_task.json | default({})).get('Oem', {}).get('Dell', {}) }}"
+    network_task_messages: "{{ (network_verify_task.json | default({})).get('Messages', []) | map(attribute='Message', default='')\
+      \ | join(' ') }}"
+    network_waiting_for_reboot: |-
+      {{ (network_task_messages ~ ' ' ~ network_task_details.get('Message', ''))
+         is search('(?i)waiting\s+(?:for|on)\s+(?:a\s+)?(?:system\s+)?reboot') }}
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30

@@ -1,0 +1,15 @@
+---
+- name: 'cisco_switch: ports'
+  hosts: cisco_switches
+  gather_facts: false
+  become: true
+  serial: 1
+  become_method: enable
+  vars_files:
+  - "{{ vault_file | default(((playbook_dir ~ '/..') | realpath) ~ '/secrets/vault.yml') }}"
+  roles:
+  - role: cisco_switch
+    cisco_switch_options:
+      task_action: ports
+    switch_port_roles:
+    - home_pilot

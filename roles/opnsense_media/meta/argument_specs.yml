@@ -1,0 +1,162 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch opnsense_media actions.
+    options:
+      opnsense_media_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - download
+            - bootstrap
+      opnsense_guest:
+        type: str
+        description: Inventory guest hostname for bootstrap configuration.
+      opnsense_vm:
+        type: dict
+        description: Owned hardware and disconnected bootstrap network allocation.
+        options: &id001
+          vmid:
+            type: int
+            description: Owned numeric VM ID (100).
+            required: true
+          name:
+            type: str
+            description: Owned VM hostname.
+            required: true
+          cores:
+            type: int
+            description: Four virtual CPU cores.
+            required: true
+          memory_mib:
+            type: int
+            description: 8192 MiB of fixed guest RAM.
+            required: true
+          disk_gib:
+            type: int
+            description: 32 GiB system disk.
+            required: true
+          disk_storage:
+            type: str
+            description: Existing LVM-thin storage ID.
+            required: true
+          iso_storage:
+            type: str
+            description: Existing directory ISO storage ID.
+            required: true
+          onboot:
+            type: bool
+            description: Desired installed-guest host-startup behavior.
+            required: true
+          wan_connected:
+            type: bool
+            description: Desired pilot WAN link state.
+            required: true
+          networks:
+            type: list
+            description: Five ordered, stable VirtIO MAC-to-role mappings.
+            elements: dict
+            required: true
+            options:
+              device:
+                type: str
+                description: Proxmox network key.
+                required: true
+                choices:
+                - net0
+                - net1
+                - net2
+                - net3
+                - net4
+              role:
+                type: str
+                description: Assigned guest network role.
+                required: true
+                choices:
+                - WAN
+                - MGMT
+                - HOME
+                - DEV
+                - BMC
+              mac:
+                type: str
+                description: Stable guest MAC address.
+                required: true
+              bridge:
+                type: str
+                description: Existing data bridge.
+                required: true
+              tag:
+                type: int
+                description: Explicit non-WAN VLAN tag; absent on WAN.
+      opnsense_iso_cache:
+        type: path
+        description: Optional opnsense_media setting; preserves the existing workflow value.
+        default: "{{ inventory_dir }}/.cache/iso/opnsense-{{ opnsense_release.version }}"
+      opnsense_release:
+        type: dict
+        description: Optional opnsense_media setting; preserves the existing workflow value.
+        default: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../files/opnsense/release.yml') | from_yaml).opnsense_release\
+          \ }}"
+      opnsense_bootstrap_dir:
+        type: path
+        description: Optional opnsense_media setting; preserves the existing workflow value.
+        default: "{{ inventory_dir }}/.cache/opnsense-bootstrap/{{ inventory_hostname }}"
+      opnsense_builder_context:
+        type: path
+        description: Optional opnsense_media setting; preserves the existing workflow value.
+        default: "{{ (role_path ~ '/../..') | realpath }}/containers/opnsense-installer"
+      opnsense_container_runtime:
+        type: str
+        description: Optional opnsense_media setting; preserves the existing workflow value.
+        default: docker
+        choices:
+        - docker
+        - podman
+      vault_file:
+        type: path
+        description: Encrypted controller credential source.
+        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+  download:
+    short_description: 'opnsense_media: download.'
+    options:
+      opnsense_media_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - download
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+  bootstrap:
+    short_description: 'opnsense_media: bootstrap.'
+    options:
+      opnsense_media_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - bootstrap
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_guest:
+        type: str
+        description: Inventory guest hostname for bootstrap configuration.
+        required: true
+      opnsense_vm:
+        type: dict
+        description: Owned hardware and disconnected bootstrap network allocation.
+        required: true
+        options: *id001

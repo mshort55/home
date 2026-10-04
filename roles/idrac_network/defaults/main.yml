@@ -1,0 +1,5 @@
+---
+vault_file: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+backup_root: "{{ (role_path ~ '/../..') | realpath }}/backups"
+idrac_network_mode: static
+idrac_network_recovery_ready: false

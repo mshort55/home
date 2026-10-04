@@ -1,0 +1,154 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch opnsense_pilot actions.
+    options:
+      opnsense_pilot_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - management
+            - home
+      opnsense_guest:
+        type: str
+        description: Inventory guest containing management and HOME pilot settings.
+      opnsense_vm:
+        type: dict
+        description: Owned VM hardware and desired WAN link state.
+        options: &id001
+          vmid:
+            type: int
+            description: Owned numeric VM ID (100).
+            required: true
+          name:
+            type: str
+            description: Owned VM hostname.
+            required: true
+          cores:
+            type: int
+            description: Four virtual CPU cores.
+            required: true
+          memory_mib:
+            type: int
+            description: 8192 MiB of fixed guest RAM.
+            required: true
+          disk_gib:
+            type: int
+            description: 32 GiB system disk.
+            required: true
+          disk_storage:
+            type: str
+            description: Existing LVM-thin storage ID.
+            required: true
+          iso_storage:
+            type: str
+            description: Existing directory ISO storage ID.
+            required: true
+          onboot:
+            type: bool
+            description: Desired installed-guest host-startup behavior.
+            required: true
+          wan_connected:
+            type: bool
+            description: Desired pilot WAN link state.
+            required: true
+          networks:
+            type: list
+            description: Five ordered, stable VirtIO MAC-to-role mappings.
+            elements: dict
+            required: true
+            options:
+              device:
+                type: str
+                description: Proxmox network key.
+                required: true
+                choices:
+                - net0
+                - net1
+                - net2
+                - net3
+                - net4
+              role:
+                type: str
+                description: Assigned guest network role.
+                required: true
+                choices:
+                - WAN
+                - MGMT
+                - HOME
+                - DEV
+                - BMC
+              mac:
+                type: str
+                description: Stable guest MAC address.
+                required: true
+              bridge:
+                type: str
+                description: Existing data bridge.
+                required: true
+              tag:
+                type: int
+                description: Explicit non-WAN VLAN tag; absent on WAN.
+      proxmox_network:
+        type: dict
+        description: Installed bridge identities.
+  management:
+    short_description: 'opnsense_pilot: management.'
+    options:
+      opnsense_pilot_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - management
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_guest:
+        type: str
+        description: Inventory guest containing management and HOME pilot settings.
+        required: true
+      opnsense_vm:
+        type: dict
+        description: Owned VM hardware and desired WAN link state.
+        required: true
+        options: *id001
+      proxmox_network:
+        type: dict
+        description: Installed bridge identities.
+        required: true
+  home:
+    short_description: 'opnsense_pilot: home.'
+    options:
+      opnsense_pilot_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - home
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_guest:
+        type: str
+        description: Inventory guest containing management and HOME pilot settings.
+        required: true
+      opnsense_vm:
+        type: dict
+        description: Owned VM hardware and desired WAN link state.
+        required: true
+        options: *id001
+      proxmox_network:
+        type: dict
+        description: Installed bridge identities.
+        required: true

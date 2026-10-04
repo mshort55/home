@@ -1,0 +1,244 @@
+---
+- name: Set UEFI boot mode on the uninstalled server
+  block:
+  - name: Require a real maintenance run
+    ansible.builtin.assert:
+      that: not ansible_check_mode
+      fail_msg: This maintenance playbook restarts the uninstalled server; use syntax-check for offline validation.
+  - name: Read current BIOS, pending settings, system and jobs
+    ansible.builtin.uri:
+      url: https://{{ ansible_host }}{{ item }}
+      status_code: 200
+    loop: "{{ [bios_path, settings_path, system_path, jobs_path] }}"
+    register: uefi_before
+    no_log: true
+  - name: Require expected settings and a complete bounded job collection
+    ansible.builtin.assert:
+      that:
+      - uefi_before.results[0].json.Attributes.BootMode in ['Bios', 'Uefi']
+      - uefi_before.results[0].json['@Redfish.Settings'].SettingsObject['@odata.id'] == settings_path
+      - uefi_before.results[1].json.Attributes is mapping
+      - uefi_before.results[2].json.Bios['@odata.id'] == bios_path
+      - uefi_before.results[3].json.Members | length <= 64
+      - uefi_before.results[3].json['Members@odata.count'] == uefi_before.results[3].json.Members | length
+      - '''Members@odata.nextLink'' not in uefi_before.results[3].json'
+    no_log: true
+  - name: Refuse any pending BIOS differences before scheduling a job
+    ansible.builtin.assert:
+      that:
+      - item.key in uefi_before.results[0].json.Attributes
+      - item.value == uefi_before.results[0].json.Attributes[item.key]
+      fail_msg: Pending BIOS changes exist; inspect them before running this maintenance playbook again.
+    loop: "{{ uefi_before.results[1].json.Attributes | dict2items }}"
+    no_log: true
+  - name: Validate job links before sending credentials
+    ansible.builtin.assert:
+      that:
+      - item['@odata.id'] is match('^/redfish/v1/Managers/iDRAC[.]Embedded[.]1/Jobs/[A-Za-z0-9_-]+$')
+    loop: "{{ uefi_before.results[3].json.Members }}"
+    no_log: true
+  - name: Read existing job states
+    ansible.builtin.uri:
+      url: https://{{ ansible_host }}{{ item['@odata.id'] }}
+      status_code: 200
+    loop: "{{ uefi_before.results[3].json.Members }}"
+    register: uefi_jobs
+    no_log: true
+  - name: Refuse to restart with unfinished or unrecognized jobs
+    ansible.builtin.assert:
+      that: item.json.JobState in ['Completed', 'Failed', 'RebootCompleted', 'Completed with Errors']
+      fail_msg: A job is unfinished or its state is unknown; inspect the job queue first.
+    loop: "{{ uefi_jobs.results }}"
+    no_log: true
+  - name: Report an already configured server
+    ansible.builtin.debug:
+      msg: UEFI is already configured with no pending BIOS differences; no change or reboot is needed.
+    when: uefi_before.results[0].json.Attributes.BootMode == 'Uefi'
+  - name: Finish without changes when already configured
+    ansible.builtin.meta: end_role
+    when: uefi_before.results[0].json.Attributes.BootMode == 'Uefi'
+  - name: Require the advertised restart action on the powered-on server
+    ansible.builtin.assert:
+      that:
+      - uefi_before.results[2].json.PowerState == 'On'
+      - uefi_before.results[2].json.Actions['#ComputerSystem.Reset'].target == reset_path
+      - '''ForceRestart'' in uefi_before.results[2].json.Actions[''#ComputerSystem.Reset''][''ResetType@Redfish.AllowableValues'']'
+    no_log: true
+  - name: Create private maintenance parent
+    ansible.builtin.file:
+      path: "{{ backup_root }}"
+      state: directory
+      mode: '0700'
+  - name: Allocate a maintenance record directory
+    ansible.builtin.tempfile:
+      state: directory
+      path: "{{ backup_root }}"
+      prefix: "{{ inventory_hostname }}-uefi-{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-"
+    register: uefi_directory
+  - name: Save pre-change BIOS and job observations
+    ansible.builtin.copy:
+      dest: "{{ uefi_directory.path }}/before.json"
+      mode: '0600'
+      content: |
+        {{ {'resources': uefi_before.results | map(attribute='json') | list, 'jobs': uefi_jobs.results | map(attribute='json') | list} | to_nice_json }}
+    no_log: true
+    diff: false
+  - name: Record intent before issuing non-retried writes
+    ansible.builtin.copy:
+      dest: "{{ uefi_directory.path }}/intent.json"
+      mode: '0600'
+      content: '{"attribute":"BootMode","value":"Uefi","restart":"ForceRestart","status":"started"}'
+  - name: Set only the pending UEFI boot attribute
+    ansible.builtin.uri:
+      url: https://{{ ansible_host }}{{ settings_path }}
+      method: PATCH
+      body_format: json
+      body:
+        Attributes:
+          BootMode: Uefi
+      status_code:
+      - 200
+      - 204
+    changed_when: true
+    no_log: true
+  - name: Read back pending settings before creating the BIOS job
+    ansible.builtin.uri:
+      url: https://{{ ansible_host }}{{ settings_path }}
+      status_code: 200
+    register: uefi_pending
+    no_log: true
+  - name: Require the intended pending boot mode
+    ansible.builtin.assert:
+      that: uefi_pending.json.Attributes.BootMode == 'Uefi'
+    no_log: true
+  - name: Refuse unrelated pending changes discovered after the write
+    ansible.builtin.assert:
+      that: item.key == 'BootMode' or item.value == uefi_before.results[0].json.Attributes.get(item.key)
+    loop: "{{ uefi_pending.json.Attributes | dict2items }}"
+    no_log: true
+  - name: Create the BIOS configuration job once
+    ansible.builtin.uri:
+      url: https://{{ ansible_host }}{{ jobs_path }}
+      method: POST
+      body_format: json
+      body:
+        TargetSettingsURI: "{{ settings_path }}"
+      status_code:
+      - 200
+      - 201
+      - 202
+    register: uefi_submission
+    changed_when: true
+    no_log: true
+  - name: Preserve the submitted job before restarting
+    ansible.builtin.copy:
+      dest: "{{ uefi_directory.path }}/job-submission.json"
+      mode: '0600'
+      content: |
+        {{ {'location': uefi_submission.location | default(''), 'body': uefi_submission.json | default({})} | to_nice_json }}
+    no_log: true
+    diff: false
+  - name: Require a job location on the authenticated iDRAC origin
+    ansible.builtin.assert:
+      that:
+      - uefi_submission.location is defined
+      - uefi_submission.location is match('^(https://' ~ (ansible_host | regex_escape) ~ ')?/redfish/v1/Managers/iDRAC[.]Embedded[.]1/Jobs/[A-Za-z0-9_-]+$')
+    no_log: true
+  - name: Normalize the verified job URL
+    ansible.builtin.set_fact:
+      uefi_job_url: "{{ uefi_submission.location if uefi_submission.location.startswith('https://') else 'https://' ~ ansible_host\
+        \ ~ uefi_submission.location }}"
+    no_log: true
+  - name: Apply and verify the scheduled BIOS job
+    block:
+    - name: Wait until the BIOS job is scheduled
+      ansible.builtin.uri:
+        url: "{{ uefi_job_url }}"
+        status_code: 200
+      register: uefi_job
+      until: uefi_job.status | default(0) != 200 or (uefi_job.json | default({})).get('JobState', '') in ['Scheduled', 'Completed',
+        'Failed', 'Completed with Errors']
+      retries: 30
+      delay: 5
+      no_log: true
+    - name: Require scheduling success before restart
+      ansible.builtin.assert:
+        that: uefi_job.json.JobState == 'Scheduled'
+        fail_msg: BIOS job did not schedule cleanly; inspect the private maintenance record.
+      no_log: true
+    - name: Restart the uninstalled server once to apply UEFI
+      ansible.builtin.uri:
+        url: https://{{ ansible_host }}{{ reset_path }}
+        method: POST
+        body_format: json
+        body:
+          ResetType: ForceRestart
+        status_code:
+        - 200
+        - 202
+        - 204
+      changed_when: true
+      no_log: true
+    - name: Wait for BIOS configuration completion
+      ansible.builtin.uri:
+        url: "{{ uefi_job_url }}"
+        status_code: 200
+      register: uefi_job
+      until: uefi_job.status | default(0) != 200 or (uefi_job.json | default({})).get('JobState', '') in ['Completed', 'Failed',
+        'Completed with Errors']
+      retries: 90
+      delay: 10
+      no_log: true
+    - name: Require successful BIOS job completion
+      ansible.builtin.assert:
+        that: uefi_job.json.JobState == 'Completed'
+      no_log: true
+    always:
+    - name: Preserve the last job response even after failure
+      ansible.builtin.copy:
+        dest: "{{ uefi_directory.path }}/job-status.json"
+        mode: '0600'
+        content: |
+          {{ {'http_status': uefi_job.status | default(0), 'body': uefi_job.json | default({})} | to_nice_json }}
+      no_log: true
+      diff: false
+  - name: Read actual BIOS attributes after completion
+    ansible.builtin.uri:
+      url: https://{{ ansible_host }}{{ bios_path }}
+      status_code: 200
+    register: uefi_after
+    no_log: true
+  - name: Require UEFI in the applied BIOS attributes
+    ansible.builtin.assert:
+      that: uefi_after.json.Attributes.BootMode == 'Uefi'
+    no_log: true
+  - name: Save verified BIOS read-back
+    ansible.builtin.copy:
+      dest: "{{ uefi_directory.path }}/after.json"
+      mode: '0600'
+      content: |
+        {{ uefi_after.json | to_nice_json }}
+    no_log: true
+    diff: false
+  - name: Report verified UEFI and record location
+    ansible.builtin.debug:
+      msg: 'UEFI applied and verified. Maintenance records: {{ uefi_directory.path }}. Run snapshot-idrac.yml for a full post-change
+        snapshot.'
+  vars:
+    system_path: /redfish/v1/Systems/System.Embedded.1
+    bios_path: /redfish/v1/Systems/System.Embedded.1/Bios
+    settings_path: /redfish/v1/Systems/System.Embedded.1/Bios/Settings
+    jobs_path: /redfish/v1/Managers/iDRAC.Embedded.1/Jobs
+    reset_path: /redfish/v1/Systems/System.Embedded.1/Actions/ComputerSystem.Reset
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30

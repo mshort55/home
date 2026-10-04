@@ -1,0 +1,163 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch idrac_network actions.
+    options:
+      idrac_network_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - preview
+            - apply
+            - status
+            - verify
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+      idrac_network:
+        type: dict
+        description: Desired static IPv4 address, mask and gateway.
+        options:
+          address:
+            type: str
+            description: Canonical static IPv4 address.
+            required: true
+          netmask:
+            type: str
+            description: Canonical static IPv4 netmask.
+            required: true
+          gateway:
+            type: str
+            description: Canonical static IPv4 gateway.
+            required: true
+      idrac_network_task_path:
+        type: str
+        description: Original accepted task path; required for status/verify.
+      idrac_network_recovery_ready:
+        type: bool
+        description: Physical destination-subnet recovery has been staged; required true for apply.
+        default: false
+      idrac_tls_ciphers:
+        type: list
+        description: Optional legacy TLS cipher allowlist; omitted uses controller defaults.
+        elements: str
+      vault_file:
+        type: path
+        description: Encrypted controller credential source.
+        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+      backup_root:
+        type: path
+        description: Private controller backup parent.
+        default: "{{ (role_path ~ '/../..') | realpath }}/backups"
+      idrac_network_mode:
+        type: str
+        description: Optional idrac_network setting; preserves the existing workflow value.
+        default: static
+        choices:
+        - static
+        - dhcp
+  preview:
+    short_description: 'idrac_network: preview.'
+    options:
+      idrac_network_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - preview
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true
+  apply:
+    short_description: 'idrac_network: apply.'
+    options:
+      idrac_network_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - apply
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true
+  status:
+    short_description: 'idrac_network: status.'
+    options:
+      idrac_network_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - status
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true
+      idrac_network_task_path:
+        type: str
+        description: Original accepted task path; required for status/verify.
+        required: true
+  verify:
+    short_description: 'idrac_network: verify.'
+    options:
+      idrac_network_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - verify
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true
+      idrac_network_task_path:
+        type: str
+        description: Original accepted task path; required for status/verify.
+        required: true

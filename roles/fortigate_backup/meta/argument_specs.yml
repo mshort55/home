@@ -1,0 +1,38 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch fortigate_backup actions.
+    options:
+      fortigate_backup_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - backup
+      backup_root:
+        type: path
+        description: Private controller backup parent.
+        default: "{{ (role_path ~ '/../..') | realpath }}/backups"
+      vault_file:
+        type: path
+        description: Encrypted controller credential source.
+        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+  backup:
+    short_description: 'fortigate_backup: backup.'
+    options:
+      fortigate_backup_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - backup
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict

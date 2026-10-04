@@ -1,0 +1,50 @@
+---
+- name: Find advertised profile preview and import actions
+  ansible.builtin.set_fact:
+    network_preview_actions: "{{ network_before.results[0].json.Actions.Oem | dict2items | selectattr('key', 'search', '#OemManager.ImportSystemConfigurationPreview$')\
+      \ | map(attribute='value') | list }}"
+    network_import_actions: "{{ network_before.results[0].json.Actions.Oem | dict2items | selectattr('key', 'search', '#OemManager.ImportSystemConfiguration$')\
+      \ | map(attribute='value') | list }}"
+  no_log: true
+- name: Require local profile preview and iDRAC import support
+  ansible.builtin.assert:
+    that:
+    - network_preview_actions | length == 1
+    - network_import_actions | length == 1
+    - network_preview_actions[0].target == preview_path
+    - network_import_actions[0].target == import_path
+    - '''ImportBuffer'' in network_preview_actions[0][''ImportSystemConfigurationPreview@Redfish.AllowableValues'']'
+    - '''ImportBuffer'' in network_import_actions[0][''ImportSystemConfiguration@Redfish.AllowableValues'']'
+    - '''ALL'' in network_preview_actions[0].ShareParameters[''Target@Redfish.AllowableValues'']'
+    - '''IDRAC'' in network_import_actions[0].ShareParameters[''Target@Redfish.AllowableValues'']'
+  no_log: true
+- name: Read existing job collection before profile submission
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}{{ manager_path }}/Jobs
+    status_code: 200
+  register: network_jobs
+  no_log: true
+- name: Require a complete bounded job collection
+  ansible.builtin.assert:
+    that:
+    - network_jobs.json.Members | length <= 64
+    - network_jobs.json['Members@odata.count'] == network_jobs.json.Members | length
+    - '''Members@odata.nextLink'' not in network_jobs.json'
+  no_log: true
+- name: Validate job paths before sending credentials
+  ansible.builtin.assert:
+    that: item['@odata.id'] is match('^/redfish/v1/Managers/iDRAC[.]Embedded[.]1/Jobs/[A-Za-z0-9_-]+$')
+  loop: "{{ network_jobs.json.Members }}"
+  no_log: true
+- name: Read existing job states
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}{{ item['@odata.id'] }}
+    status_code: 200
+  loop: "{{ network_jobs.json.Members }}"
+  register: network_job_states
+  no_log: true
+- name: Refuse profile submission with unfinished or unrecognized jobs
+  ansible.builtin.assert:
+    that: item.json.JobState in ['Completed', 'Failed', 'RebootCompleted', 'Completed with Errors']
+  loop: "{{ network_job_states.results }}"
+  no_log: true

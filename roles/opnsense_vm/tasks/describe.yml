@@ -1,0 +1,3 @@
+---
+- name: Build the owned desired VM description
+  ansible.builtin.include_tasks: _describe.yml

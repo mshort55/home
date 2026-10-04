@@ -1,0 +1,8 @@
+---
+- name: 'opnsense_vm: explicit action'
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+  - role: opnsense_vm

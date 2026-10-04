@@ -1,0 +1,74 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch idrac_snapshot actions.
+    options:
+      idrac_snapshot_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - snapshot
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+      idrac_tls_ciphers:
+        type: list
+        description: Optional legacy TLS cipher allowlist; omitted uses controller defaults.
+        elements: str
+      backup_root:
+        type: path
+        description: Private controller backup parent.
+        default: "{{ (role_path ~ '/../..') | realpath }}/backups"
+      vault_file:
+        type: path
+        description: Encrypted controller credential source.
+        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+      idrac_resources:
+        type: list
+        description: Optional idrac_snapshot setting; preserves the existing workflow value.
+        default:
+        - name: manager
+          path: /redfish/v1/Managers/iDRAC.Embedded.1
+        - name: system
+          path: /redfish/v1/Systems/System.Embedded.1
+        - name: bios
+          path: /redfish/v1/Systems/System.Embedded.1/Bios
+        - name: chassis
+          path: /redfish/v1/Chassis/System.Embedded.1
+        - name: power
+          path: /redfish/v1/Chassis/System.Embedded.1/Power
+        - name: thermal
+          path: /redfish/v1/Chassis/System.Embedded.1/Thermal
+        - name: virtual_media
+          path: /redfish/v1/Managers/iDRAC.Embedded.1/VirtualMedia/CD
+        - name: jobs
+          path: /redfish/v1/Managers/iDRAC.Embedded.1/Jobs
+        - name: tasks
+          path: /redfish/v1/TaskService/Tasks
+        - name: lifecycle_log_entries
+          path: /redfish/v1/Managers/iDRAC.Embedded.1/Logs/Lclog
+        elements: dict
+  snapshot:
+    short_description: 'idrac_snapshot: snapshot.'
+    options:
+      idrac_snapshot_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - snapshot
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true

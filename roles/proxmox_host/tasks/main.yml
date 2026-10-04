@@ -1,0 +1,16 @@
+---
+- name: Validate the selected proxmox_host action contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs[proxmox_host_options.task_action].options\
+      \ }}"
+    validate_args_context:
+      name: proxmox_host
+      type: role
+      argument_spec_name: "{{ proxmox_host_options.task_action }}"
+  tags:
+  - always
+- name: Dispatch the explicit proxmox_host action
+  ansible.builtin.include_tasks:
+    file: "{{ proxmox_host_options.task_action }}.yml"
+  tags:
+  - always

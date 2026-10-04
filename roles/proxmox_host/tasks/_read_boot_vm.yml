@@ -1,0 +1,28 @@
+---
+- name: Read current and pending firewall hardware through the trusted community API
+  community.proxmox.proxmox_vm_info:
+    vmid: "{{ opnsense_vm.vmid }}"
+    config: "{{ item }}"
+    network: false
+  loop:
+  - current
+  - pending
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: boot_vm_read
+  retries: 12
+  delay: 5
+  until: boot_vm_read is succeeded
+- name: Require the owned running firewall with no pending configuration
+  ansible.builtin.assert:
+    that:
+    - boot_vm_read.results[0].proxmox_vms | length == 1
+    - boot_vm_read.results[1].proxmox_vms | length == 1
+    - boot_vm_read.results[0].proxmox_vms[0].node == inventory_hostname
+    - boot_vm_read.results[0].proxmox_vms[0].name == opnsense_vm.name
+    - boot_vm_read.results[0].proxmox_vms[0].status == 'running'
+    - boot_vm_read.results[0].proxmox_vms[0].config == boot_vm_read.results[1].proxmox_vms[0].config
+- name: Select the current firewall hardware
+  ansible.builtin.set_fact:
+    boot_vm_config: "{{ boot_vm_read.results[0].proxmox_vms[0].config }}"

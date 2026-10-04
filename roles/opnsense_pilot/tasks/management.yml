@@ -1,0 +1,13 @@
+---
+- name: Run opnsense_vm verify
+  ansible.builtin.include_role:
+    name: opnsense_vm
+    public: false
+  vars:
+    opnsense_vm_options:
+      task_action: verify
+    opnsense_verify_wan_state: false
+  tags:
+  - always
+- name: Run the validated action workflow
+  ansible.builtin.include_tasks: _configure.yml

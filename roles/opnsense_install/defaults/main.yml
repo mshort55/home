@@ -1,0 +1,3 @@
+---
+opnsense_bootstrap_dir: "{{ inventory_dir }}/.cache/opnsense-bootstrap/{{ inventory_hostname }}"
+opnsense_install_record_dir: /var/lib/home-automation/opnsense-100

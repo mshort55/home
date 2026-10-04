@@ -1,6 +1,6 @@
 # Prepare switch management and recovery VLANs
 
-[configure-switch-management.yml](../../playbooks/configure-switch-management.yml) creates the inventory-owned VLAN objects, disables switch IPv4 routing, and adds/enables the management SVI. The legacy management SVI/address remains available during transition. This workflow owns VLAN/SVI/routing configuration; [the existing shared port playbook](configure-switch-ports.md) owns access ports and static trunks, including recovery and server ports.
+[configure-switch-management.yml](../../playbooks/configure-switch-management.yml) creates the inventory-owned VLAN objects, disables switch IPv4 routing, and adds/enables the management SVI. The legacy management SVI/address remains available during transition. This workflow owns VLAN/SVI/routing configuration; [the existing switch role](configure-switch-ports.md) owns access ports and static trunks, including recovery and server ports.
 
 ## Scope and prerequisites
 
@@ -25,13 +25,11 @@ The workflow merges VLANs, disables routing, verifies routing is off, then adds 
 
 Resource facts are accessed through `ansible_facts['network_resources']`; repository configuration disables deprecated top-level fact injection explicitly. The pinned `ios_config` module emits a generic idempotency reminder whenever it proposes/applies configuration lines, including `no ip routing`. This is not a deprecation or a failed diff. The routing task runs only when fresh configuration shows routing enabled, and normal apply verifies routing is disabled before adding the SVI. Keep warnings enabled.
 
-After a successful management apply, preview/apply only the two recovery roles through the shared port playbook:
+After a successful management apply, preview/apply only the two recovery roles through the switch role:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/configure-switch-ports.yml \
-  -e '{"switch_port_roles":["recovery_mgmt","recovery_bmc"]}' --check
-.venv/bin/ansible-playbook playbooks/configure-switch-ports.yml \
-  -e '{"switch_port_roles":["recovery_mgmt","recovery_bmc"]}'
+.venv/bin/ansible-playbook playbooks/configure-switch-recovery-ports.yml --check
+.venv/bin/ansible-playbook playbooks/configure-switch-recovery-ports.yml
 ```
 
 The port workflow requires real VLANs to exist; a management check-mode preview does not create them. A new SVI can remain protocol-down until a member port has link. Configure the MGMT recovery laptop with its reserved static /24 address and no gateway/DNS, disable Wi-Fi/tunnels/bridging for the recovery test, and connect to its designated MGMT jack. Verify ICMP and authenticated SSH to the new switch address using trusted host-key verification. Verify household service again. Restore the laptop's normal network settings after testing.

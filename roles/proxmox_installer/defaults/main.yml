@@ -1,0 +1,5 @@
+---
+vault_file: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+pve_container_runtime: docker
+pve_builder_context: "{{ (role_path ~ '/../..') | realpath }}/containers/proxmox-installer"
+pve_artifact_root: "{{ inventory_dir }}/.cache/proxmox-installer"

@@ -1,0 +1,10 @@
+---
+- name: 'opnsense_vm: verify'
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+  - role: opnsense_vm
+    opnsense_vm_options:
+      task_action: verify

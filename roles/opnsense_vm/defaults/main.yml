@@ -1,0 +1,8 @@
+---
+opnsense_iso_cache: "{{ inventory_dir }}/.cache/iso/opnsense-{{ opnsense_release.version }}"
+opnsense_release: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../files/opnsense/release.yml') | from_yaml).opnsense_release\
+  \ }}"
+opnsense_verify_wan_state: true
+opnsense_iso_volume: "{{ opnsense_vm.iso_storage }}:iso/{{ opnsense_release.filename }}"
+opnsense_owner_marker: Managed by create-opnsense-vm.yml; vmid={{ opnsense_vm.vmid }}
+opnsense_wan_assignment_confirmed: false

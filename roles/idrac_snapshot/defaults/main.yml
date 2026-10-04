@@ -1,0 +1,24 @@
+---
+backup_root: "{{ (role_path ~ '/../..') | realpath }}/backups"
+vault_file: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+idrac_resources:
+- name: manager
+  path: /redfish/v1/Managers/iDRAC.Embedded.1
+- name: system
+  path: /redfish/v1/Systems/System.Embedded.1
+- name: bios
+  path: /redfish/v1/Systems/System.Embedded.1/Bios
+- name: chassis
+  path: /redfish/v1/Chassis/System.Embedded.1
+- name: power
+  path: /redfish/v1/Chassis/System.Embedded.1/Power
+- name: thermal
+  path: /redfish/v1/Chassis/System.Embedded.1/Thermal
+- name: virtual_media
+  path: /redfish/v1/Managers/iDRAC.Embedded.1/VirtualMedia/CD
+- name: jobs
+  path: /redfish/v1/Managers/iDRAC.Embedded.1/Jobs
+- name: tasks
+  path: /redfish/v1/TaskService/Tasks
+- name: lifecycle_log_entries
+  path: /redfish/v1/Managers/iDRAC.Embedded.1/Logs/Lclog

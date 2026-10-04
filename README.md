@@ -56,10 +56,15 @@ Read the workflow's documentation before invoking it. Validate syntax first, rev
 
 Playbooks run only when explicitly invoked; Git pushes do not apply configuration. Use the documented read-back and recovery procedures to verify changes and reconcile manual device changes before subsequent applies.
 
+## Role architecture
+
+Entry points orchestrate roles with explicit, role-scoped `task_action` parameters. See the [role architecture, contracts and complete directory layout](docs/roles.md) and [entry-point mapping](docs/playbooks/entry-points.md). Optional fallbacks live in role defaults; action selection has no default.
+
 ## Workflow documentation
 
 | Workflow | Documentation |
 |---|---|
+| Named operation entry points and their inputs | [Playbook entry points](docs/playbooks/entry-points.md) |
 | Shared credential management | [Ansible Vault CLI](docs/credentials.md) |
 | Cisco configuration backup | [Switch backup](docs/playbooks/backup-switch.md) |
 | Switch access ports and static trunks, including iDRAC and server roles | [Configure managed ports](docs/playbooks/configure-switch-ports.md) |

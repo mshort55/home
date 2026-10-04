@@ -1,0 +1,16 @@
+---
+- name: Validate the selected opnsense_install action contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs[opnsense_install_options.task_action].options\
+      \ }}"
+    validate_args_context:
+      name: opnsense_install
+      type: role
+      argument_spec_name: "{{ opnsense_install_options.task_action }}"
+  tags:
+  - always
+- name: Dispatch the explicit opnsense_install action
+  ansible.builtin.include_tasks:
+    file: "{{ opnsense_install_options.task_action }}.yml"
+  tags:
+  - always

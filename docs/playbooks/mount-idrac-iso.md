@@ -2,7 +2,7 @@
 
 Playbook: [mount-idrac-iso.yml](../../playbooks/mount-idrac-iso.yml).
 
-Host a checksum-verified ISO on the native Mac and attach it read-only to iDRAC8's virtual DVD. The same workflow accepts an original installation ISO or an ISO containing unattended-install answers. Operations are `mount` (default), `status` and `eject`. Mounting does not change boot settings, restart the host or start an installer.
+Host a checksum-verified ISO on the native Mac and attach it read-only to iDRAC8's virtual DVD. The same workflow accepts an original installation ISO or an ISO containing unattended-install answers. The `mount-idrac-iso.yml`, `status-idrac-iso.yml` and `eject-idrac-iso.yml` entry points select `mount`, `status` and `eject`. They invoke the [idrac_iso role](../../roles/idrac_iso/tasks/main.yml), which requires `idrac_iso_options.task_action` and has no default action. The generic `manage-idrac-iso.yml` entry point requires this parameter dictionary explicitly. Mounting does not change boot settings, restart the host or start an installer.
 
 ## Native Mac setup and prerequisites
 
@@ -58,21 +58,19 @@ Use the observed RAID logical-disk device with `udevadm info --query=property --
 
 ## Inspect, eject and switch images
 
-Read-only status does not start or stop hosting:
+`status-idrac-iso.yml` invokes `idrac_iso` with `task_action: status` and hostname edits disabled. The trusted inventory hostname must already resolve. It does not start or stop hosting and needs no sudo password; with the default local source, run it from the native Mac environment:
 
 ```bash
-.venv-macos/bin/ansible-playbook playbooks/mount-idrac-iso.yml --limit idrac01 --ask-become-pass \
-  -e idrac_iso_operation=status
+.venv-macos/bin/ansible-playbook playbooks/status-idrac-iso.yml --limit idrac01
 ```
 
 Once the host no longer needs the DVD, eject it using the same source inputs:
 
 ```bash
-.venv-macos/bin/ansible-playbook playbooks/mount-idrac-iso.yml --limit idrac01 --ask-become-pass \
-  -e idrac_iso_operation=eject
+.venv-macos/bin/ansible-playbook playbooks/eject-idrac-iso.yml --limit idrac01 --ask-become-pass
 ```
 
-Ejection requires the attached image URL to match the selected image. After verified ejection, the playbook stops its local server. Repeating ejection with empty media also cleans up a remaining local job. Never eject while an installer is reading the DVD.
+`eject-idrac-iso.yml` invokes `idrac_iso` with `task_action: eject`. Ejection requires the attached image URL to match the selected image. After verified ejection, the playbook stops its local server. Repeating ejection with empty media also cleans up a remaining local job. Never eject while an installer is reading the DVD.
 
 To use a preconfigured ISO, first eject the original image, then update `idrac_iso_path` and `idrac_iso_sha256` in private inventory and run the mount command again. A prepared unattended ISO may install automatically when booted; this playbook only mounts it.
 

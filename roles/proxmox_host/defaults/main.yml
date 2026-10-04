@@ -1,0 +1,5 @@
+---
+proxmox_host_cache_valid_time: 3600
+opnsense_release: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../files/opnsense/release.yml') | from_yaml).opnsense_release\
+  \ }}"
+pve_bridge_file: /etc/network/interfaces.d/ansible-guest-bridges

@@ -1,0 +1,16 @@
+---
+- name: Validate the selected community_api action contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs[community_api_options.task_action].options\
+      \ }}"
+    validate_args_context:
+      name: community_api
+      type: role
+      argument_spec_name: "{{ community_api_options.task_action }}"
+  tags:
+  - always
+- name: Dispatch the explicit community_api action
+  ansible.builtin.include_tasks:
+    file: "{{ community_api_options.task_action }}.yml"
+  tags:
+  - always

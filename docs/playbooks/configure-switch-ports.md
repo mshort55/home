@@ -28,8 +28,8 @@ Actual assignments live in Git-ignored private inventory. `inventory.example.yml
 Run from `/Repos/home`; Vault prompts locally. Preview or apply all inventory ports:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/configure-switch-ports.yml --check
-.venv/bin/ansible-playbook playbooks/configure-switch-ports.yml
+.venv/bin/ansible-playbook playbooks/configure-switch-all-ports.yml --check
+.venv/bin/ansible-playbook playbooks/configure-switch-all-ports.yml
 ```
 
 Prefer explicit role selection during a staged migration. For server preparation, first preview and apply the VLAN workflow with MGMT/BMC/HOME/DEV/UNUSED in `switch_vlans`, then select only the three server roles:
@@ -37,24 +37,28 @@ Prefer explicit role selection during a staged migration. For server preparation
 ```bash
 .venv/bin/ansible-playbook playbooks/configure-switch-management.yml --check
 .venv/bin/ansible-playbook playbooks/configure-switch-management.yml
-.venv/bin/ansible-playbook playbooks/configure-switch-ports.yml \
-  -e '{"switch_port_roles":["server_mgmt","server_lan","pilot_wan"]}' --check
-.venv/bin/ansible-playbook playbooks/configure-switch-ports.yml \
-  -e '{"switch_port_roles":["server_mgmt","server_lan","pilot_wan"]}'
+.venv/bin/ansible-playbook playbooks/configure-switch-server-ports.yml --check
+.venv/bin/ansible-playbook playbooks/configure-switch-server-ports.yml
 ```
 
 Review each preview before its apply. A VLAN check-mode run does not create VLANs and cannot satisfy the port playbook's prerequisite. Inspect the selected physical jacks for unexpected attachments before applying. Prepare server ports with their cables disconnected; connect and identify server NICs by permanent MAC afterward. Pilot WAN is an access port on the existing household network; the ISP handoff remains attached to the current firewall. A direct ISP connection requires a separate cable move and compatible firewall WAN configuration.
 
-Recovery roles remain selectable through the same entry point:
+The named recovery entry point selects only `recovery_mgmt` and `recovery_bmc`:
 
 ```bash
-.venv/bin/ansible-playbook playbooks/configure-switch-ports.yml \
-  -e '{"switch_port_roles":["recovery_mgmt","recovery_bmc"]}' --check
+.venv/bin/ansible-playbook playbooks/configure-switch-recovery-ports.yml --check
+```
+
+`configure-switch-server-ports.yml` selects `server_mgmt`, `server_lan` and `pilot_wan`. `configure-switch-home-pilot-port.yml` selects only `home_pilot`. `configure-switch-idrac-port.yml` selects only `idrac`; `configure-switch-all-ports.yml` explicitly selects every inventory role. These entry points invoke the `cisco_switch` role with `task_action: ports`, retaining its backups, checks, read-back and save behavior. Interface numbers and VLANs still come from inventory. For custom role groups, use `configure-switch-ports.yml` with `cisco_switch_options: {task_action: ports}` and `switch_port_roles`. This selector is required and must be a nonempty list of unique, known role strings. Its role contract and initial scope assertion validate the selection before collecting a backup; missing scope never selects all ports implicitly.
+
+```bash
+.venv/bin/ansible-playbook playbooks/configure-switch-home-pilot-port.yml --check
+.venv/bin/ansible-playbook playbooks/configure-switch-home-pilot-port.yml
 ```
 
 ## Verification and failure handling
 
-Normal runs first invoke the existing switch backup workflow, then refuse unrelated running/startup differences beyond the known certificate-storage representation. Fresh interface/VLAN facts and selected raw interface configuration must pass the preflight guards before any write.
+After validating the explicit role scope, normal runs invoke the existing switch backup workflow, then refuse unrelated running/startup differences beyond the known certificate-storage representation. Fresh interface/VLAN facts and selected raw interface configuration must pass the preflight guards before any write.
 
 Access settings use `state: merged`. Selected trunks use `state: replaced` with current non-owned layer-two settings copied into their input. This is necessary because a merge would union the allowed VLAN lists. Descriptions and administrative state use `ios_interfaces` with `state: merged`.
 

@@ -1,0 +1,52 @@
+---
+- name: Read native local platform and Python details
+  ansible.builtin.setup:
+    gather_subset:
+    - min
+- name: Require execution as the logged-in native Mac user
+  ansible.builtin.assert:
+    that:
+    - ansible_facts.system == 'Darwin'
+    - ansible_facts.user_uid > 0
+    fail_msg: Run local image hosting from a native Mac terminal with its Mac Python environment, not the Linux container.
+- name: Validate the local hostname mapping inputs
+  ansible.builtin.assert:
+    that:
+    - idrac_iso_manage_hosts is boolean
+    - ansible_host is match('^[A-Za-z0-9][A-Za-z0-9.-]*$')
+    - idrac_network.address is match('^(?:[0-9]{1,3}[.]){3}[0-9]{1,3}$')
+    - idrac_network.address.split('.') | map('int') | max <= 255
+    fail_msg: Local hosting requires a certificate hostname and the known current iDRAC IPv4 address.
+- name: Read native Mac hosts mappings
+  ansible.builtin.slurp:
+    src: /etc/hosts
+  register: iso_hosts_file
+  when: idrac_iso_manage_hosts
+  no_log: true
+- name: Select existing entries for the certificate hostname
+  ansible.builtin.set_fact:
+    iso_matching_hosts_lines: |-
+      {{ (iso_hosts_file.content | b64decode).splitlines() |
+         select('search', '^\s*[^#\s]+\s+([^#]*\s)?' ~
+                (ansible_host | regex_escape) ~ '(\s|$)') | list }}
+  when: idrac_iso_manage_hosts
+  no_log: true
+- name: Refuse duplicate or shared-alias entries before editing hosts
+  ansible.builtin.assert:
+    that:
+    - iso_matching_hosts_lines | length <= 1
+    - iso_matching_hosts_lines | length == 0 or iso_matching_hosts_lines[0].split('#')[0].split() | length == 2
+    fail_msg: The native hosts file has duplicate or shared-alias entries for iDRAC. Reconcile those entries before applying
+      a dedicated mapping.
+  when: idrac_iso_manage_hosts
+- name: Set only the native iDRAC certificate hostname mapping
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: ^\s*[^#\s]+\s+{{ ansible_host | regex_escape }}(?:\s*#.*)?\s*$
+    line: "{{ idrac_network.address }} {{ ansible_host }}"
+    state: present
+    backup: false
+  become: true
+  when:
+  - idrac_iso_manage_hosts
+  - iso_matching_hosts_lines | length == 0 or iso_matching_hosts_lines[0].split('#')[0].split()[0] != idrac_network.address

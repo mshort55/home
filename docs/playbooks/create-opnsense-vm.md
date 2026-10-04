@@ -2,6 +2,8 @@
 
 `playbooks/create-opnsense-vm.yml` stages the verified DVD ISO and creates VM 100 through `community.proxmox` over verified HTTPS. It allocates one 32 GiB system disk and one EFI variable disk on LVM-thin storage, attaches installation media and leaves the new VM stopped. It does not install the guest OS, start/stop a VM or change the switch/host network configuration.
 
+`create-opnsense-vm.yml` invokes the [opnsense_vm role](../../roles/opnsense_vm/tasks/main.yml) with `task_action: create`; `verify-opnsense-vm.yml` selects `verify`. Both use the optional Boolean `opnsense_verify_wan_state`, default true. The generic `manage-opnsense-vm.yml` requires `opnsense_vm_options.task_action` explicitly. Installation and pilot roles include VM verification with their own role-scoped parameters.
+
 ## Prerequisites
 
 - Run [ISO preparation](prepare-opnsense-iso.md) normally on the same controller first. VM creation requires its completion manifest and exact matching ISO bytes.
@@ -46,9 +48,17 @@ ansible-playbook playbooks/create-opnsense-vm.yml --limit pve01 --check
 
 The first preview reads the host and local ISO, checks bridges/storage/ID availability, and reports the desired hardware and network definitions. It uploads no ISO and allocates no disks. A normal creation uploads the ISO with `proxmox_template`, checks its remote SHA-256 and size, then invokes `proxmox_kvm` once. `proxmox_vm_info` reads current and pending configuration and `proxmox_nic` applies the bounded WAN link transition. Readback validates ownership, hardware, disk ownership/size, NIC mappings, boot order and stopped state. The repeat preview should report `changed=0`.
 
-An existing matching VM is verified rather than recreated. Its disks are never reformatted, resized or replaced by this playbook. An ejected/removed DVD is accepted and not reattached. A running VM is not stopped. The named bootstrap DVD produced by the installation workflow is also accepted, without reattaching it. With `opnsense_verify_only: true`, an existing matching VM is required and all staging/creation/WAN mutations are skipped; the installation playbook uses this mode for its preflight. Conflicting hardware, an unrelated ownership marker, extra devices or pending VM configuration changes cause failure before writes. `scripts/validate-opnsense-vm.py` compares parsed properties rather than relying on their printed order.
+An existing matching VM is verified rather than recreated. Its disks are never reformatted, resized or replaced by this playbook. An ejected/removed DVD is accepted and not reattached. A running VM is not stopped. The named bootstrap DVD produced by the installation workflow is also accepted, without reattaching it. With `opnsense_vm_options.task_action: verify`, an existing matching VM is required and all staging/creation/WAN mutations are skipped; the installation playbook uses this mode for its preflight. Conflicting hardware, an unrelated ownership marker, extra devices or pending VM configuration changes cause failure before writes. `scripts/validate-opnsense-vm.py` compares parsed properties rather than relying on their printed order.
 
-The [management pilot workflow](configure-opnsense-pilot.md) additionally uses `opnsense_verify_wan_state: false` during its read-only preflight. This permits a planned WAN link difference while still validating all other hardware. The default is `true`, which requires the desired WAN state to match during verification-only use. Interface-assignment confirmation applies to WAN writes, not to a read-only preflight.
+The [management pilot workflow](configure-opnsense-pilot.md) additionally uses `opnsense_verify_wan_state: false` during its read-only preflight. This permits a planned WAN link difference while still validating all other hardware. The creation and verification entry points explicitly supply `true`, requiring the desired WAN state to match during verification-only use. Interface-assignment confirmation applies to WAN writes, not to a read-only preflight.
+
+## Verify an existing VM
+
+`verify-opnsense-vm.yml` invokes `opnsense_vm` with `task_action: verify` and the default `opnsense_verify_wan_state: true`. It requires an existing owned VM and verifies its hardware and desired WAN link state without staging media, allocating disks or changing the VM. This verifies VM resources; guest policy and service verification use the pilot workflow.
+
+```bash
+ansible-playbook playbooks/verify-opnsense-vm.yml --limit pve01
+```
 
 ## Installation and interface assignment
 
@@ -69,7 +79,7 @@ ansible-playbook playbooks/create-opnsense-vm.yml --limit pve01 \
   -e '{"opnsense_wan_assignment_confirmed":true}'
 ```
 
-For an existing owned VM, the only configuration change this entry point supports is its WAN link state. All other NIC/hardware settings must still match before `qm set --net0` is allowed. Confirmation is required only when changing a disconnected WAN to connected; it is unnecessary on converged repeats. Setting `wan_connected: false` disconnects WAN through the same playbook without a confirmation override. Neither transition starts or stops the VM.
+For an existing owned VM, the only configuration change this entry point supports is its WAN link state. All other NIC/hardware settings must still match before the community API WAN-link update is allowed. Confirmation is required only when changing a disconnected WAN to connected; it is unnecessary on converged repeats. Setting `wan_connected: false` disconnects WAN through the same playbook without a confirmation override. Neither transition starts or stops the VM.
 
 ## Interrupted creation
 

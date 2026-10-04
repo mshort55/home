@@ -1,0 +1,163 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch cisco_switch actions.
+    options:
+      cisco_switch_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - backup
+            - management
+            - ports
+      switch_ports:
+        type: list
+        description: Inventory-owned access and trunk definitions.
+        elements: dict
+        options: &id002
+          role:
+            type: str
+            description: Unique inventory role.
+            required: true
+          name:
+            type: str
+            description: Physical GigabitEthernet interface.
+            required: true
+          description:
+            type: str
+            description: Owned interface description.
+            required: true
+          enabled:
+            type: bool
+            description: Desired administrative state.
+            required: true
+          mode:
+            type: str
+            description: Port mode; omitted means access.
+            choices:
+            - access
+            - trunk
+            default: access
+          allow_mode_change:
+            type: bool
+            description: A reviewed access/trunk conversion is allowed.
+            default: false
+          access_vlan:
+            type: int
+            description: Access VLAN; required for access ports.
+          native_vlan:
+            type: int
+            description: Trunk native VLAN; required for trunks.
+          allowed_vlans:
+            type: list
+            description: Exact allowed trunk VLANs; required for trunks.
+            elements: int
+      switch_management:
+        type: dict
+        description: Management and retained legacy SVI inputs.
+      switch_vlans:
+        type: list
+        description: Inventory-owned VLAN definitions.
+        elements: dict
+        options: &id001
+          vlan_id:
+            type: int
+            description: Numeric VLAN ID.
+            required: true
+          name:
+            type: str
+            description: Owned VLAN name.
+            required: true
+          state:
+            type: str
+            description: Desired VLAN state.
+            default: active
+            choices:
+            - active
+          shutdown:
+            type: str
+            description: Desired administrative VLAN state.
+            default: disabled
+            choices:
+            - disabled
+      switch_port_roles:
+        type: list
+        description: Explicit selected inventory roles; required for ports.
+        elements: str
+      backup_root:
+        type: path
+        description: Private controller backup parent.
+        default: "{{ (role_path ~ '/../..') | realpath }}/backups"
+      vault_file:
+        type: path
+        description: Encrypted controller credential source.
+        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+  backup:
+    short_description: 'cisco_switch: backup.'
+    options:
+      cisco_switch_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - backup
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+  management:
+    short_description: 'cisco_switch: management.'
+    options:
+      cisco_switch_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - management
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      switch_management:
+        type: dict
+        description: Management and retained legacy SVI inputs.
+        required: true
+      switch_vlans:
+        type: list
+        description: Inventory-owned VLAN definitions.
+        elements: dict
+        required: true
+        options: *id001
+  ports:
+    short_description: 'cisco_switch: ports.'
+    options:
+      cisco_switch_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - ports
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      switch_ports:
+        type: list
+        description: Inventory-owned access and trunk definitions.
+        elements: dict
+        required: true
+        options: *id002
+      switch_port_roles:
+        type: list
+        description: Explicit selected inventory roles; required for ports.
+        elements: str
+        required: true

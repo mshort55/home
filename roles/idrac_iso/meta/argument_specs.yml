@@ -1,0 +1,145 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch idrac_iso actions.
+    options:
+      idrac_iso_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - mount
+            - eject
+            - status
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+      idrac_iso_path:
+        type: path
+        description: Absolute controller ISO path for local hosting.
+      idrac_iso_sha256:
+        type: str
+        description: Exact lowercase image SHA-256 for local hosting.
+      idrac_iso_bind_address:
+        type: str
+        description: Native Mac BMC Ethernet IPv4 address.
+      idrac_iso_url:
+        type: str
+        description: HTTP(S) image URL for URL-source mode.
+      idrac_network:
+        type: dict
+        description: iDRAC IPv4 identity used by local host preparation.
+        options:
+          address:
+            type: str
+            description: Canonical static IPv4 address.
+            required: true
+          netmask:
+            type: str
+            description: Canonical static IPv4 netmask.
+            required: true
+          gateway:
+            type: str
+            description: Canonical static IPv4 gateway.
+            required: true
+      idrac_tls_ciphers:
+        type: list
+        description: Optional legacy TLS cipher allowlist; omitted uses controller defaults.
+        elements: str
+      vault_file:
+        type: path
+        description: Encrypted controller credential source.
+        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+      backup_root:
+        type: path
+        description: Private controller backup parent.
+        default: "{{ (role_path ~ '/../..') | realpath }}/backups"
+      idrac_iso_source:
+        type: str
+        description: Read-only image source.
+        default: local
+        choices:
+        - local
+        - url
+      idrac_iso_manage_hosts:
+        type: bool
+        description: Manage only the trusted iDRAC certificate hostname on the native Mac.
+        default: true
+      idrac_iso_port:
+        type: int
+        description: Native Mac read-only image server TCP port.
+        default: 8080
+  mount:
+    short_description: 'idrac_iso: mount.'
+    options:
+      idrac_iso_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - mount
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true
+  eject:
+    short_description: 'idrac_iso: eject.'
+    options:
+      idrac_iso_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - eject
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true
+  status:
+    short_description: 'idrac_iso: status.'
+    options:
+      idrac_iso_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - status
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true

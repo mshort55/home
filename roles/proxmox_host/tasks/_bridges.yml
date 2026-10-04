@@ -1,0 +1,389 @@
+---
+- name: Add Proxmox guest bridges while preserving installed management networking
+  block:
+  - name: Load the enrolled Proxmox API
+    vars:
+      community_api_host: "{{ inventory_hostname }}"
+      community_api_var: pve_api
+      community_api_options:
+        task_action: load
+    ansible.builtin.include_role:
+      name: community_api
+      public: false
+    tags:
+    - always
+  - name: Read pending network changes through the community API
+    community.proxmox.proxmox_node_network_info:
+      node: "{{ pve_api.node }}"
+      check_changes: true
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    register: pve_api_pending
+  - name: Refuse pending API network changes
+    ansible.builtin.assert:
+      that:
+      - not pve_api_pending.has_pending_changes
+  - name: Read node network resources through the community API
+    community.proxmox.proxmox_node_network_info:
+      node: "{{ pve_api.node }}"
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    register: pve_api_network
+  - name: Require distinct bridge and physical port definitions
+    ansible.builtin.assert:
+      that:
+      - ansible_user == 'root'
+      - proxmox_network is mapping
+      - proxmox_network.management is mapping
+      - proxmox_network.management.bridge is match('^vmbr[0-9]+$')
+      - proxmox_network.management.port is match('^eno[0-9]+$')
+      - proxmox_network.management.mac is match('^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$')
+      - proxmox_network.management.address is string
+      - proxmox_network.management.gateway is string
+      - proxmox_network.guest_bridges is sequence and proxmox_network.guest_bridges is not string
+      - proxmox_network.guest_bridges | length > 0
+      - bridge_names | unique | length == bridge_names | length
+      - bridge_ports | unique | length == bridge_ports | length
+      - proxmox_network.management.bridge not in bridge_names
+      - proxmox_network.management.port not in bridge_ports
+      fail_msg: Supply root SSH access and distinct management and guest bridge definitions.
+    vars:
+      bridge_names: "{{ proxmox_network.guest_bridges | map(attribute='name') | list }}"
+      bridge_ports: "{{ proxmox_network.guest_bridges | map(attribute='port') | list }}"
+  - name: Validate guest bridge inputs
+    ansible.builtin.assert:
+      that:
+      - item.name is match('^vmbr[0-9]+$')
+      - item.port is match('^eno[0-9]+$')
+      - item.mac is match('^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$')
+      - item.vlan_aware is boolean
+      - not item.vlan_aware or (item.vlans | default([]) | length > 0)
+      - item.vlan_aware or item.vlans | default([]) | length == 0
+      - item.vlans | default([]) is sequence and item.vlans | default([]) is not string
+      - item.vlans | default([]) | unique | length == item.vlans | default([]) | length
+      fail_msg: Use physical eno ports, vmbr bridge names, observed MACs and an explicit VLAN-awareness boolean.
+    loop: "{{ proxmox_network.guest_bridges }}"
+    loop_control:
+      label: "{{ item.name }}"
+  - name: Validate tagged VLAN numbers
+    ansible.builtin.assert:
+      that:
+      - item.1 is integer
+      - item.1 >= 2 and item.1 <= 4094
+    loop: "{{ proxmox_network.guest_bridges | subelements('vlans', skip_missing=true) }}"
+    loop_control:
+      label: "{{ item.0.name }} VLAN {{ item.1 }}"
+  - name: Read Proxmox version and installed network configuration
+    ansible.builtin.command:
+      argv: "{{ item }}"
+    loop:
+    - - pveversion
+    - - ifquery
+      - --all
+      - --format
+      - json
+    - "{{ ['ifquery', '--format', 'json', proxmox_network.management.port] + (proxmox_network.guest_bridges | map(attribute='port')\
+      \ | list) }}"
+    - - ip
+      - -j
+      - address
+      - show
+    register: pve_network_reads
+    changed_when: false
+    check_mode: false
+  - name: Decode network readback and render the owned bridge file
+    ansible.builtin.set_fact:
+      pve_current_config: "{{ pve_network_reads.results[1].stdout | from_json }}"
+      pve_port_config: "{{ pve_network_reads.results[2].stdout | from_json }}"
+      pve_current_addresses: "{{ pve_network_reads.results[3].stdout | from_json }}"
+      pve_bridge_content: "{{ lookup('ansible.builtin.template', 'proxmox-guest-bridges.j2') }}"
+  - name: Inspect main configuration, owned file and pending GUI configuration
+    ansible.builtin.stat:
+      path: "{{ item }}"
+      follow: false
+      checksum_algorithm: sha256
+    loop:
+    - /etc/network/interfaces
+    - "{{ pve_bridge_file }}"
+    - /etc/network/interfaces.new
+    register: pve_network_files
+  - name: List additional network definitions and existing guests
+    ansible.builtin.find:
+      paths: "{{ item }}"
+      file_type: any
+      hidden: true
+      recurse: false
+    loop:
+    - /etc/network/interfaces.d
+    - /etc/pve/qemu-server
+    - /etc/pve/lxc
+    register: pve_network_directories
+  - name: Read the main network file without changing it
+    ansible.builtin.slurp:
+      src: /etc/network/interfaces
+    register: pve_main_network
+  - name: Read an existing owned snippet before considering a replacement
+    ansible.builtin.slurp:
+      src: "{{ pve_bridge_file }}"
+    register: pve_existing_snippet
+    when: pve_network_files.results[1].stat.exists
+  - name: Require ownership of an existing bridge snippet
+    ansible.builtin.assert:
+      that:
+      - (pve_existing_snippet.content | b64decode).startswith('# Managed by configure-proxmox-bridges.yml.\n')
+      fail_msg: The destination file is not owned by this workflow; review it before replacing it.
+    when: pve_network_files.results[1].stat.exists
+  - name: Require the installed Proxmox management configuration and a bounded reload scope
+    ansible.builtin.assert:
+      that:
+      - pve_network_reads.results[0].stdout.startswith('pve-manager/')
+      - (pve_api_network.proxmox_node_networks | selectattr('iface', 'equalto', proxmox_network.management.bridge) | first).address
+        == proxmox_network.management.address.split('/')[0]
+      - pve_network_files.results[0].stat.isreg | default(false)
+      - not pve_network_files.results[0].stat.islnk | default(false)
+      - not pve_network_files.results[2].stat.exists
+      - pve_network_directories.results[0].files | map(attribute='path') | difference([pve_bridge_file]) | length == 0
+      - not pve_network_files.results[1].stat.exists or (pve_network_files.results[1].stat.isreg | default(false) and not
+        pve_network_files.results[1].stat.islnk | default(false))
+      - pve_main_network.content | b64decode is search('(?m)^source /etc/network/interfaces[.]d/[*]\s*$')
+      - pve_current_config | map(attribute='name') | difference(['lo', proxmox_network.management.bridge] + bridge_names)
+        | length == 0
+      - management_config | length == 1
+      - management_config[0].addr_method == 'static'
+      - management_config[0].config == expected_management_config
+      - management_link | length == 1
+      - management_link[0].master | default('') == proxmox_network.management.bridge
+      - management_link[0].address == proxmox_network.management.mac
+      - management_port_config | length == 1
+      - management_port_config[0].addr_method == 'manual'
+      - management_port_config[0].addr_family == 'inet'
+      - management_port_config[0].config == {}
+      - not management_port_config[0].auto
+      - management_addresses | selectattr('family', 'equalto', 'inet') | list | length == 1
+      - management_addresses | selectattr('family', 'equalto', 'inet') | map(attribute='local') | list == [proxmox_network.management.address.split('/')[0]]
+      - management_addresses | selectattr('family', 'equalto', 'inet') | map(attribute='prefixlen') | list == [proxmox_network.management.address.split('/')[1]
+        | int]
+      fail_msg: This workflow requires the installed management bridge, no pending GUI changes and no unrelated network snippets
+        or auto interfaces. Review conflicts separately.
+    vars:
+      bridge_names: "{{ proxmox_network.guest_bridges | map(attribute='name') | list }}"
+      management_config: "{{ pve_current_config | selectattr('name', 'equalto', proxmox_network.management.bridge) | list\
+        \ }}"
+      expected_management_config:
+        address: "{{ proxmox_network.management.address }}"
+        gateway: "{{ proxmox_network.management.gateway }}"
+        bridge-ports: "{{ proxmox_network.management.port }}"
+        bridge-stp: 'off'
+        bridge-fd: '0'
+      management_link: "{{ pve_current_addresses | selectattr('ifname', 'equalto', proxmox_network.management.port) | list\
+        \ }}"
+      management_port_config: "{{ pve_port_config | selectattr('name', 'equalto', proxmox_network.management.port) | list\
+        \ }}"
+      management_addresses: "{{ (pve_current_addresses | selectattr('ifname', 'equalto', proxmox_network.management.bridge)\
+        \ | first).addr_info }}"
+  - name: Refuse physical NIC identity, addressing and bridge membership conflicts
+    ansible.builtin.assert:
+      that:
+      - link | length == 1
+      - link[0].address == item.mac
+      - link[0].master | default(item.name) == item.name
+      - link[0].addr_info | rejectattr('scope', 'equalto', 'link') | list | length == 0
+      - port_config | length == 1
+      - port_config[0].addr_method == 'manual'
+      - port_config[0].addr_family == 'inet'
+      - port_config[0].config == {}
+      - not port_config[0].auto
+      - existing_bridge | length == 0 or pve_network_files.results[1].stat.exists
+      - existing_bridge | length == 0 or (existing_bridge | first).config['bridge-ports'] == item.port
+      - pve_main_network.content | b64decode is not search('(?m)^iface ' + item.name + '\s')
+      fail_msg: A guest NIC identity or existing configuration conflicts with the requested bridge.
+    loop: "{{ proxmox_network.guest_bridges }}"
+    loop_control:
+      label: "{{ item.name }} on {{ item.port }}"
+    vars:
+      link: "{{ pve_current_addresses | selectattr('ifname', 'equalto', item.port) | list }}"
+      port_config: "{{ pve_port_config | selectattr('name', 'equalto', item.port) | list }}"
+      existing_bridge: "{{ pve_current_config | selectattr('name', 'equalto', item.name) | list }}"
+  - name: Determine whether the owned bridge definition needs changing
+    ansible.builtin.set_fact:
+      pve_bridge_change: "{{ pve_network_files.results[1].stat.checksum | default('') != pve_bridge_content | hash('sha256')\
+        \ }}"
+  - name: Inspect current bridge agreement with the installed configuration
+    ansible.builtin.command:
+      argv: "{{ ['ifquery', '--check', proxmox_network.management.bridge] + (proxmox_network.guest_bridges | map(attribute='name')\
+        \ | list) }}"
+    register: pve_running_check
+    changed_when: false
+    failed_when: pve_running_check.rc not in [0, 1]
+    check_mode: false
+  - name: Initialize required runtime convergence
+    ansible.builtin.set_fact:
+      pve_bridge_reload_needed: "{{ pve_bridge_change or pve_running_check.rc != 0 }}"
+  - name: Detect guest bridge addresses or missing runtime interfaces
+    ansible.builtin.set_fact:
+      pve_bridge_reload_needed: |-
+        {{ pve_bridge_reload_needed or bridge_link | length != 1
+           or (bridge_link | first | default({})).get('addr_info', []) | length > 0
+           or 'UP' not in (bridge_link | first | default({})).get('flags', [])
+           or port_link | length != 1
+           or (port_link | first | default({})).get('master', '') != item.name
+           or (port_link | first | default({})).get('addr_info', []) | length > 0 }}
+    loop: "{{ proxmox_network.guest_bridges }}"
+    loop_control:
+      label: "{{ item.name }}"
+    vars:
+      bridge_link: "{{ pve_current_addresses | selectattr('ifname', 'equalto', item.name) | list }}"
+      port_link: "{{ pve_current_addresses | selectattr('ifname', 'equalto', item.port) | list }}"
+  - name: Refuse bridge configuration changes or runtime repairs after guests have been created
+    ansible.builtin.assert:
+      that:
+      - not pve_bridge_reload_needed or guest_files | length == 0
+      fail_msg: Changing or repairing these bootstrap bridges with existing guests requires a separate network maintenance
+        procedure. An unchanged converged configuration can still be verified.
+    vars:
+      guest_files: "{{ (pve_network_directories.results[1].files + pve_network_directories.results[2].files) | selectattr('path',\
+        \ 'match', '.*[.]conf$') | list }}"
+  - name: Parse the proposed bridge definitions with the installed ifupdown2
+    ansible.builtin.command:
+      argv:
+      - ifquery
+      - --interfaces
+      - /dev/stdin
+      - --all
+      - --format
+      - json
+      stdin: "{{ pve_bridge_content }}"
+    changed_when: false
+    check_mode: false
+  - name: Back up configuration before a real change
+    when: pve_bridge_reload_needed and not ansible_check_mode
+    block:
+    - name: Allocate a private network recovery directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /root
+        prefix: ansible-network-
+      register: pve_network_backup
+    - name: Preserve main configuration and any previous owned bridge file
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ pve_network_backup.path }}/{{ item | basename }}"
+        remote_src: true
+        mode: '0600'
+      loop: "{{ ['/etc/network/interfaces'] + ([pve_bridge_file] if pve_network_files.results[1].stat.exists else []) }}"
+    - name: Report the recovery files before applying
+      ansible.builtin.debug:
+        msg: 'Network recovery files: {{ pve_network_backup.path }}'
+  - name: Install only the guest bridge snippet
+    ansible.builtin.template:
+      src: proxmox-guest-bridges.j2
+      dest: "{{ pve_bridge_file }}"
+      owner: root
+      group: root
+      mode: '0644'
+      validate: ifquery --interfaces %s --all --format json
+    register: pve_bridge_install
+  - name: Preview runtime repair when the owned file already matches
+    ansible.builtin.debug:
+      msg: Running guest bridges differ from the desired state; this run would apply the existing persistent definitions with
+        ifreload.
+    changed_when: true
+    when: ansible_check_mode and pve_bridge_reload_needed and not pve_bridge_install.changed
+  - name: Apply the bridge definitions with ifupdown2
+    ansible.builtin.command:
+      argv:
+      - ifreload
+      - --all
+    async: 90
+    poll: 0
+    register: pve_bridge_reload
+    when: pve_bridge_reload_needed and not ansible_check_mode
+  - name: Wait for management SSH after the reload
+    ansible.builtin.wait_for_connection:
+      delay: 3
+      timeout: 90
+    when: pve_bridge_reload_needed and not ansible_check_mode
+  - name: Require a successful completed network reload
+    ansible.builtin.async_status:
+      jid: "{{ pve_bridge_reload.ansible_job_id }}"
+    register: pve_bridge_reload_result
+    until: pve_bridge_reload_result.finished
+    retries: 18
+    delay: 5
+    when: pve_bridge_reload_needed and not ansible_check_mode
+  - name: Check configured bridges against their running state
+    ansible.builtin.command:
+      argv: "{{ ['ifquery', '--check', proxmox_network.management.bridge] + (proxmox_network.guest_bridges | map(attribute='name')\
+        \ | list) }}"
+    changed_when: false
+    when: not ansible_check_mode
+  - name: Inspect detailed running links and addresses after application
+    ansible.builtin.command:
+      argv:
+      - ip
+      - -j
+      - -d
+      - address
+      - show
+    register: pve_network_after
+    changed_when: false
+    when: not ansible_check_mode
+  - name: Verify guest bridge membership, VLAN filtering and absence of all host addresses
+    ansible.builtin.assert:
+      that:
+      - bridge | length == 1
+      - bridge[0].linkinfo.info_kind == 'bridge'
+      - '"UP" in bridge[0].flags'
+      - bridge[0].linkinfo.info_data.vlan_filtering == (1 if item.vlan_aware else 0)
+      - bridge[0].addr_info | length == 0
+      - guest_port | length == 1
+      - guest_port[0].master | default('') == item.name
+      - guest_port[0].address == item.mac
+      - guest_port[0].addr_info | length == 0
+    loop: "{{ proxmox_network.guest_bridges }}"
+    loop_control:
+      label: "{{ item.name }}"
+    vars:
+      bridge: "{{ pve_network_after.stdout | from_json | selectattr('ifname', 'equalto', item.name) | list }}"
+      guest_port: "{{ pve_network_after.stdout | from_json | selectattr('ifname', 'equalto', item.port) | list }}"
+    when: not ansible_check_mode
+  - name: Verify preserved management address and physical port membership
+    ansible.builtin.assert:
+      that:
+      - management_port_after.master == proxmox_network.management.bridge
+      - management_port_after.address == proxmox_network.management.mac
+      - management_addresses_after | selectattr('family', 'equalto', 'inet') | list == management_addresses_before | selectattr('family',
+        'equalto', 'inet') | list
+    vars:
+      management_port_after: "{{ pve_network_after.stdout | from_json | selectattr('ifname', 'equalto', proxmox_network.management.port)\
+        \ | first }}"
+      management_addresses_after: "{{ (pve_network_after.stdout | from_json | selectattr('ifname', 'equalto', proxmox_network.management.bridge)\
+        \ | first).addr_info }}"
+      management_addresses_before: "{{ (pve_current_addresses | selectattr('ifname', 'equalto', proxmox_network.management.bridge)\
+        \ | first).addr_info }}"
+    when: not ansible_check_mode
+  - name: Verify that the main management configuration file is unchanged
+    ansible.builtin.stat:
+      path: /etc/network/interfaces
+      checksum_algorithm: sha256
+    register: pve_main_after
+  - name: Require the original main network configuration bytes
+    ansible.builtin.assert:
+      that:
+      - pve_main_after.stat.checksum == pve_network_files.results[0].stat.checksum
+  - name: Report the bridge configuration and operation
+    ansible.builtin.debug:
+      msg:
+        operation: "{{ 'Preview only; no network reload' if ansible_check_mode else 'Running bridges verified' }}"
+        configuration: "{{ pve_bridge_content }}"
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: "{{ pve_api.api_host }}"
+      api_user: "{{ pve_api.api_user }}"
+      api_token_id: "{{ pve_api.api_token_id }}"
+      api_token_secret: "{{ pve_api.api_token_secret }}"
+      validate_certs: true
+      ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+      api_timeout: 30

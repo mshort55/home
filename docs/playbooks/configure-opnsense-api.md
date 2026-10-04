@@ -27,8 +27,8 @@ For the original OPNsense 26.7 release, enrollment also persists and applies `ke
 After enrollment, preview and run the [management pilot](configure-opnsense-pilot.md). Its VM operations also require [Proxmox API enrollment](configure-proxmox-api.md) on this controller:
 
 ```bash
-ansible-playbook playbooks/configure-opnsense-pilot.yml --limit pve01 --check
-ansible-playbook playbooks/configure-opnsense-pilot.yml --limit pve01
+ansible-playbook playbooks/configure-opnsense-management.yml --limit pve01 --check
+ansible-playbook playbooks/configure-opnsense-management.yml --limit pve01
 ```
 
 Inspect the preview and stop if a run fails. The first OXL policy apply may save descriptions and explicit defaults on existing owned objects. Repeating the preview after successful application should report no changes.

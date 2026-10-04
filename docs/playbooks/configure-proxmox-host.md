@@ -2,6 +2,8 @@
 
 `playbooks/configure-proxmox-host.yml` manages the installed standalone Proxmox VE 9 host's signed package repositories and optionally applies package upgrades. `community.proxmox` verifies the node and firewall VM through trusted HTTPS. `ansible.builtin.deb822_repository` owns repository files and `ansible.builtin.apt` handles indexes and upgrades over existing trusted root SSH; the Proxmox collection does not provide these package-management operations.
 
+The entry points invoke the `proxmox_host` role. Its required `proxmox_host_options.task_action` selects `repositories` or `upgrade`; the generic host entry point requires this dictionary explicitly. [Role contracts](../roles.md) validate inputs before API or host access.
+
 ## Prerequisites and inventory
 
 Complete [Proxmox API enrollment](configure-proxmox-api.md), host bridges, OPNsense installation and the [management pilot](configure-opnsense-pilot.md). The owned firewall VM must be running with no pending hardware changes and its WAN connected. The host needs its management DNS/gateway and outbound HTTP/HTTPS access for repositories.
@@ -32,11 +34,11 @@ Before a repository change, existing source files are copied into a fresh mode-0
 
 ## Configure repositories, then preview upgrades
 
-Repository/index setup is the default operation and installs no host package upgrades:
+The repository entry point explicitly selects repository/index setup and installs no host package upgrades:
 
 ```bash
-ansible-playbook playbooks/configure-proxmox-host.yml --limit pve01 --check
-ansible-playbook playbooks/configure-proxmox-host.yml --limit pve01
+ansible-playbook playbooks/configure-proxmox-repositories.yml --limit pve01 --check
+ansible-playbook playbooks/configure-proxmox-repositories.yml --limit pve01
 ```
 
 The normal run refreshes signed indexes after repository changes. Otherwise it reuses the cache for `proxmox_host_cache_valid_time` seconds, default 3600. Override with `-e '{"proxmox_host_cache_valid_time":0}'` to request a fresh refresh. Check mode does not refresh indexes or modify repositories.
@@ -44,13 +46,11 @@ The normal run refreshes signed indexes after repository changes. Otherwise it r
 Once repository setup passes, explicitly preview and apply updates:
 
 ```bash
-ansible-playbook playbooks/configure-proxmox-host.yml --limit pve01 \
-  -e '{"proxmox_host_upgrade":true}' --check
-ansible-playbook playbooks/configure-proxmox-host.yml --limit pve01 \
-  -e '{"proxmox_host_upgrade":true}'
+ansible-playbook playbooks/update-proxmox-host.yml --limit pve01 --check
+ansible-playbook playbooks/update-proxmox-host.yml --limit pve01
 ```
 
-Upgrade mode refuses unconverged repository files; apply the default setup operation first. Its check-mode package preview uses the existing indexes and cannot predict packages published after that refresh. The normal upgrade refreshes expired indexes before applying updates, so its package set may differ from an older preview.
+`update-proxmox-host.yml` invokes `proxmox_host` with `task_action: upgrade`. Upgrade mode refuses unconverged repository files; apply `configure-proxmox-repositories.yml` first. Its check-mode package preview uses the existing indexes and cannot predict packages published after that refresh. The normal upgrade refreshes expired indexes before applying updates, so its package set may differ from an older preview.
 
 The APT task uses a full dependency-resolving upgrade within the configured release, with `fail_on_autoremove: true`, no automatic cleanup, no downgrades and no unauthenticated packages. Existing modified configuration files retain their installed contents using `force-confdef,force-confold`. Refused removals or held/conflicting packages need a separately reviewed resolution. Unattended major OS/PVE/Ceph release upgrades are outside this workflow. [Ansible APT module](https://docs.ansible.com/projects/ansible/latest/collections/ansible/builtin/apt_module.html).
 

@@ -1,6 +1,6 @@
 # Configure firewall startup and controlled host reboot
 
-`playbooks/configure-proxmox-boot.yml` enables automatic startup for the installed OPNsense VM through `community.proxmox.proxmox_kvm`. An optional `ansible.builtin.reboot` operation boots an updated Proxmox kernel, then verifies the recovered firewall and management services. Default execution configures startup without rebooting.
+`playbooks/configure-proxmox-boot.yml` enables automatic startup for the installed OPNsense VM through `community.proxmox.proxmox_kvm`. An optional `ansible.builtin.reboot` operation boots an updated Proxmox kernel, then verifies the recovered firewall and management services. `configure-proxmox-firewall-startup.yml` selects startup configuration without rebooting; `reboot-proxmox-host.yml` selects required maintenance reboot handling. Both invoke `proxmox_host` with the required `proxmox_host_options.task_action` set to `startup` or `reboot`, with no fallback action.
 
 ## Prerequisites
 
@@ -14,8 +14,8 @@ This workflow supports the standalone Proxmox 9 / Debian 13 host with the instal
 ## Configure automatic startup
 
 ```bash
-ansible-playbook playbooks/configure-proxmox-boot.yml --limit pve01 --check
-ansible-playbook playbooks/configure-proxmox-boot.yml --limit pve01
+ansible-playbook playbooks/configure-proxmox-firewall-startup.yml --limit pve01 --check
+ansible-playbook playbooks/configure-proxmox-firewall-startup.yml --limit pve01
 ```
 
 The first apply saves the exact previous VM configuration into a fresh mode-0700 `/root/ansible-firewall-boot-*` directory with a mode-0600 `vm-config.json`. It changes only `onboot` to true, using the configuration digest to reject concurrent edits. Startup order remains `order=1,up=30,down=120`: start the firewall before higher-order guests, wait 30 seconds before starting the next guest, and allow 120 seconds for shutdown. Proxmox uses reverse startup order for shutdown. The playbook verifies all hardware is preserved and the firewall remains running. [Proxmox startup and shutdown ordering](https://pve.proxmox.com/pve-docs/chapter-qm.html#qm_startup_and_shutdown).
@@ -27,13 +27,11 @@ Check mode performs read-only host/API/firewall/network checks and reports the s
 After host updates, preview and apply startup plus a required reboot in the same workflow:
 
 ```bash
-ansible-playbook playbooks/configure-proxmox-boot.yml --limit pve01 \
-  -e '{"proxmox_boot_reboot":true}' --check
-ansible-playbook playbooks/configure-proxmox-boot.yml --limit pve01 \
-  -e '{"proxmox_boot_reboot":true}'
+ansible-playbook playbooks/reboot-proxmox-host.yml --limit pve01 --check
+ansible-playbook playbooks/reboot-proxmox-host.yml --limit pve01
 ```
 
-Use a JSON boolean, rather than `-e proxmox_boot_reboot=true`, which passes a string. The reboot task runs only when a newer installed kernel or the Debian reboot marker indicates it is required. Once the running kernel matches and the marker is clear, repeating the command skips rebooting. There is no force-reboot option.
+`reboot-proxmox-host.yml` invokes the `proxmox_host` role with `task_action: reboot`. The reboot task runs only when a newer installed kernel or the Debian reboot marker indicates it is required. Once the running kernel matches and the marker is clear, repeating the command skips rebooting. There is no force-reboot option.
 
 The host reboot follows the normal Proxmox service shutdown/startup sequence, including its guest ACPI shutdown timeout. Proxmox can force a guest off if it exceeds that timeout; the playbook sends no separate forced VM stop. The firewall gateway, DNS and management services are temporarily unavailable while the host and guest restart; the controller must retain its direct management path.
 

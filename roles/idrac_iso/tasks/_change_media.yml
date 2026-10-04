@@ -1,0 +1,116 @@
+---
+- name: Refuse unrelated or inconsistent attached media
+  ansible.builtin.assert:
+    that:
+    - not iso_before.results[2].json.Inserted or iso_before.results[2].json.Image == iso_requested_url
+    - iso_before.results[2].json.Inserted or iso_before.results[2].json.ConnectedVia == 'NotConnected'
+    - idrac_iso_options.task_action != 'mount' or not iso_before.results[2].json.Inserted or iso_before.results[2].json.WriteProtected
+      is sameas true
+    - iso_before.results[2].json.Actions['#VirtualMedia.InsertMedia'].target == iso_media_path ~ '/Actions/VirtualMedia.InsertMedia'
+    - iso_before.results[2].json.Actions['#VirtualMedia.EjectMedia'].target == iso_media_path ~ '/Actions/VirtualMedia.EjectMedia'
+    fail_msg: Another image or console session is attached, or action paths are unexpected. Inspect the DVD before proceeding.
+  no_log: true
+- name: Determine whether a media action is needed
+  ansible.builtin.set_fact:
+    iso_media_change_needed: "{{ not iso_before.results[2].json.Inserted if idrac_iso_options.task_action == 'mount' else\
+      \ iso_before.results[2].json.Inserted }}"
+- name: Preview media and hosting operations without writes
+  ansible.builtin.debug:
+    msg:
+      operation: "{{ idrac_iso_options.task_action }}"
+      media_action_needed: "{{ iso_media_change_needed }}"
+      local_hosting: "{{ idrac_iso_source == 'local' }}"
+      scope: Preview reads iDRAC only; local hosting and bootability are not verified.
+  changed_when: iso_media_change_needed
+  when: ansible_check_mode
+- name: Finish the check-mode preview
+  ansible.builtin.meta: end_role
+  when: ansible_check_mode
+- name: Start and verify native Mac image hosting
+  ansible.builtin.include_tasks: _start_server.yml
+  when: idrac_iso_source == 'local' and idrac_iso_options.task_action == 'mount'
+- name: Perform and verify one media action
+  when: iso_media_change_needed
+  block:
+  - name: Create private media record parent
+    ansible.builtin.file:
+      path: "{{ backup_root }}"
+      state: directory
+      mode: '0700'
+  - name: Allocate a unique media operation directory
+    ansible.builtin.tempfile:
+      state: directory
+      path: "{{ backup_root }}"
+      prefix: "{{ inventory_hostname }}-iso-{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-"
+    register: iso_directory
+  - name: Save the original media response and operation intent
+    ansible.builtin.copy:
+      dest: "{{ iso_directory.path }}/before.json"
+      mode: '0600'
+      content: |
+        {{ {'media': iso_before.results[2].json, 'operation': idrac_iso_options.task_action, 'image': iso_requested_url, 'submission': 'not_started'} | to_nice_json }}
+    no_log: true
+    diff: false
+  - name: Report the private recovery record location
+    ansible.builtin.debug:
+      msg: 'Media operation records: {{ iso_directory.path }}'
+  - name: Submit the media action once and read back its state
+    block:
+    - name: Submit the advertised insert or eject action once
+      ansible.builtin.uri:
+        url: https://{{ ansible_host }}{{ iso_media_path }}/Actions/VirtualMedia.{{ 'InsertMedia' if idrac_iso_options.task_action
+          == 'mount' else 'EjectMedia' }}
+        method: POST
+        body_format: json
+        body: "{{ {'Image': iso_requested_url, 'Inserted': true, 'WriteProtected': true} if idrac_iso_options.task_action\
+          \ == 'mount' else {} }}"
+        status_code:
+        - 200
+        - 202
+        - 204
+      register: iso_submission
+      changed_when: true
+      no_log: true
+    - name: Wait for the requested media state
+      ansible.builtin.uri:
+        url: https://{{ ansible_host }}{{ iso_media_path }}
+        status_code: 200
+      register: iso_after
+      until: |-
+        iso_after.status | default(0) != 200 or ((iso_after.json | default({})).get('Inserted') is sameas false
+         if idrac_iso_options.task_action == 'eject' else
+         ((iso_after.json | default({})).get('Inserted') is sameas true and
+          (iso_after.json | default({})).get('Image') == iso_requested_url and
+          (iso_after.json | default({})).get('WriteProtected') is sameas true))
+      retries: 12
+      delay: 5
+      no_log: true
+    - name: Require verified final virtual DVD state
+      ansible.builtin.assert:
+        that:
+        - iso_after.json['@odata.id'] == iso_media_path
+        - iso_after.json.Inserted is sameas false if idrac_iso_options.task_action == 'eject' else iso_after.json.Inserted
+          is sameas true
+        - idrac_iso_options.task_action != 'mount' or iso_after.json.Image == iso_requested_url
+        - idrac_iso_options.task_action != 'mount' or iso_after.json.WriteProtected is sameas true
+      no_log: true
+    always:
+    - name: Preserve response bodies without request credentials
+      ansible.builtin.copy:
+        dest: "{{ iso_directory.path }}/result.json"
+        mode: '0600'
+        content: |-
+          {{ {'submission_http_status': iso_submission.status | default(0),
+              'submission_body': iso_submission.json | default({}),
+              'media_http_status': iso_after.status | default(0),
+              'media_body': iso_after.json | default({})} | to_nice_json }}
+      no_log: true
+      diff: false
+  - name: Record verified media operation completion
+    ansible.builtin.copy:
+      dest: "{{ iso_directory.path }}/completion.json"
+      mode: '0600'
+      content: |
+        {{ {'operation': idrac_iso_options.task_action, 'image': iso_requested_url, 'verified': true, 'boot_settings_changed': false, 'host_restarted': false} | to_nice_json }}
+    no_log: true
+    diff: false

@@ -20,7 +20,7 @@ ansible-playbook playbooks/install-opnsense.yml --limit pve01
 ansible-playbook playbooks/install-opnsense.yml --limit pve01
 ```
 
-The initial imported VM workflow runs in verification-only mode: it requires an existing matching VM, reads its hardware/bridges/storage and makes no ISO upload, allocation or WAN change. The installation preview verifies the bootstrap manifest, existing VM, record ownership, media conflicts and first-install disk guards, then reports the bounded operation, current media and whether the stopped guest needs its bootstrap DVD mounted. It makes no trust-file, ISO, VM, guest or disk writes. Check mode is a host/artifact preflight; it does not prove the guest OS is installed or reauthenticate its SSH service. Use the normal repeat run for full installed-system verification.
+The installation role first includes `opnsense_vm` with `task_action: verify`: it requires an existing matching VM, reads its hardware/bridges/storage and makes no ISO upload, allocation or WAN change. The installation preview verifies the bootstrap manifest, existing VM, record ownership, media conflicts and first-install disk guards, then reports the bounded operation, current media and whether the stopped guest needs its bootstrap DVD mounted. It makes no trust-file, ISO, VM, guest or disk writes. Check mode is a host/artifact preflight; it does not prove the guest OS is installed or reauthenticate its SSH service. Use the normal repeat run for full installed-system verification.
 
 A normal first run:
 

@@ -1,0 +1,26 @@
+---
+- name: Read the submitted task through the currently reachable endpoint
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}{{ idrac_network_task_path }}
+    status_code:
+    - 200
+    - 202
+  register: network_verify_task
+  until: idrac_network_options.task_action == 'status' or network_verify_task.status | default(0) not in [200, 202] or network_waiting_for_reboot
+    or (network_verify_task.json | default({})).get('TaskState', '') in ['Completed', 'Exception', 'Killed', 'Cancelled',
+    'Interrupted', 'Suspended']
+  retries: 12
+  delay: 5
+  no_log: true
+  when: idrac_network_options.task_action in ['status', 'verify']
+- name: Report task state without claiming configuration completion
+  ansible.builtin.debug:
+    msg:
+      task_path: "{{ idrac_network_task_path }}"
+      task_state: "{{ network_verify_task.json.TaskState | default('unknown') }}"
+      task_status: "{{ network_verify_task.json.TaskStatus | default('unknown') }}"
+      job_state: "{{ network_task_details.get('JobState', 'unknown') }}"
+      percent_complete: "{{ network_task_details.get('PercentComplete', 'unknown') }}"
+      waiting_for_host_reboot: "{{ network_waiting_for_reboot }}"
+      current_ipv4: "{{ network_before.results[2].json.IPv4Addresses }}"
+  when: idrac_network_options.task_action in ['status', 'verify']

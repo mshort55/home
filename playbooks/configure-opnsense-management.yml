@@ -1,0 +1,10 @@
+---
+- name: 'opnsense_pilot: management'
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+  - role: opnsense_pilot
+    opnsense_pilot_options:
+      task_action: management

@@ -4,6 +4,8 @@ Playbook: [boot-idrac-iso.yml](../../playbooks/boot-idrac-iso.yml).
 
 Configure one-time boot from iDRAC8's virtual CD/DVD and power on an offline UEFI server. This replaces manual selection in the F11 boot menu. Mount the image first with [mount-idrac-iso.yml](mount-idrac-iso.md); this boot workflow does not mount, eject or restart a running server. Booting an unattended installation ISO can immediately format its selected disk.
 
+The `boot-idrac-iso.yml` and `verify-idrac-iso-boot.yml` entry points explicitly select `boot` and `verify`. Both invoke the [idrac_boot role](../../roles/idrac_boot/tasks/main.yml), which requires `idrac_boot_options.task_action` before inspecting ISO files or accessing iDRAC. The generic `manage-idrac-iso-boot.yml` requires this parameter dictionary explicitly.
+
 ## Inputs and prerequisites
 
 Run from an Ansible controller with BMC network access, trusted hostname/CA, Vault credentials and a local copy of the selected ISO. The image hosting job runs on the native Mac and must remain running. A Linux dev container can execute this boot playbook if it shares the ISO files and can reach iDRAC and the Mac's hosting address. Paths are resolved in the executing controller's inventory location. Keep the hosting Mac powered, its lid open and its Ethernet connected until installation finishes reading the media.
@@ -47,12 +49,11 @@ If a request fails or times out, inspect the saved responses and current iDRAC s
 
 Successful completion confirms API task completion and the reported power state. Observe the VGA console or iDRAC virtual console to confirm the installer actually boots and finishes. For Proxmox, establish management connectivity and SSH host-key trust after installation; boot API success alone does not establish OS installation or SSH access.
 
-To verify an existing boot attempt on a running server, use `idrac_iso_boot_operation=verify` with its original record directory and the same image inputs:
+To verify an existing boot attempt on a running server, use `verify-idrac-iso-boot.yml`. It selects operation `verify`; supply the original record directory and the same image inputs:
 
 ```bash
-ansible-playbook playbooks/boot-idrac-iso.yml --limit idrac01 \
+ansible-playbook playbooks/verify-idrac-iso-boot.yml --limit idrac01 \
   -e @.cache/proxmox-installer/<build-directory>/mount-vars.yml \
-  -e idrac_iso_boot_operation=verify \
   -e 'idrac_iso_boot_record={{ inventory_dir }}/backups/<boot-record-directory>'
 ```
 

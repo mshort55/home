@@ -1,0 +1,5 @@
+---
+vault_file: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+backup_root: "{{ (role_path ~ '/../..') | realpath }}/backups"
+idrac_iso_port: 8080
+idrac_iso_boot_read_timeout: 60

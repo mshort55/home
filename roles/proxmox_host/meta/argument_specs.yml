@@ -1,0 +1,260 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch proxmox_host actions.
+    options:
+      proxmox_host_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - repositories
+            - upgrade
+            - startup
+            - reboot
+            - bridges
+      opnsense_vm:
+        type: dict
+        description: Owned firewall VM hardware and network allocation.
+        options: &id001
+          vmid:
+            type: int
+            description: Owned numeric VM ID (100).
+            required: true
+          name:
+            type: str
+            description: Owned VM hostname.
+            required: true
+          cores:
+            type: int
+            description: Four virtual CPU cores.
+            required: true
+          memory_mib:
+            type: int
+            description: 8192 MiB of fixed guest RAM.
+            required: true
+          disk_gib:
+            type: int
+            description: 32 GiB system disk.
+            required: true
+          disk_storage:
+            type: str
+            description: Existing LVM-thin storage ID.
+            required: true
+          iso_storage:
+            type: str
+            description: Existing directory ISO storage ID.
+            required: true
+          onboot:
+            type: bool
+            description: Desired installed-guest host-startup behavior.
+            required: true
+          wan_connected:
+            type: bool
+            description: Desired pilot WAN link state.
+            required: true
+          networks:
+            type: list
+            description: Five ordered, stable VirtIO MAC-to-role mappings.
+            elements: dict
+            required: true
+            options:
+              device:
+                type: str
+                description: Proxmox network key.
+                required: true
+                choices:
+                - net0
+                - net1
+                - net2
+                - net3
+                - net4
+              role:
+                type: str
+                description: Assigned guest network role.
+                required: true
+                choices:
+                - WAN
+                - MGMT
+                - HOME
+                - DEV
+                - BMC
+              mac:
+                type: str
+                description: Stable guest MAC address.
+                required: true
+              bridge:
+                type: str
+                description: Existing data bridge.
+                required: true
+              tag:
+                type: int
+                description: Explicit non-WAN VLAN tag; absent on WAN.
+      opnsense_guest:
+        type: str
+        description: Inventory hostname of the installed firewall.
+      proxmox_host_repository:
+        type: str
+        description: Explicit signed package repository channel.
+        choices:
+        - enterprise
+        - no-subscription
+      proxmox_network:
+        type: dict
+        description: Installed management bridge and desired isolated guest bridges.
+      proxmox_host_cache_valid_time:
+        type: int
+        description: APT index cache lifetime in seconds.
+        default: 3600
+      opnsense_release:
+        type: dict
+        description: Optional proxmox_host setting; preserves the existing workflow value.
+        default: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../files/opnsense/release.yml') | from_yaml).opnsense_release\
+          \ }}"
+      pve_bridge_file:
+        type: path
+        description: Optional proxmox_host setting; preserves the existing workflow value.
+        default: /etc/network/interfaces.d/ansible-guest-bridges
+  repositories:
+    short_description: 'proxmox_host: repositories.'
+    options:
+      proxmox_host_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - repositories
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_vm:
+        type: dict
+        description: Owned firewall VM hardware and network allocation.
+        required: true
+        options: *id001
+      opnsense_guest:
+        type: str
+        description: Inventory hostname of the installed firewall.
+        required: true
+      proxmox_host_repository:
+        type: str
+        description: Explicit signed package repository channel.
+        choices:
+        - enterprise
+        - no-subscription
+        required: true
+  upgrade:
+    short_description: 'proxmox_host: upgrade.'
+    options:
+      proxmox_host_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - upgrade
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_vm:
+        type: dict
+        description: Owned firewall VM hardware and network allocation.
+        required: true
+        options: *id001
+      opnsense_guest:
+        type: str
+        description: Inventory hostname of the installed firewall.
+        required: true
+      proxmox_host_repository:
+        type: str
+        description: Explicit signed package repository channel.
+        choices:
+        - enterprise
+        - no-subscription
+        required: true
+  startup:
+    short_description: 'proxmox_host: startup.'
+    options:
+      proxmox_host_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - startup
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_vm:
+        type: dict
+        description: Owned firewall VM hardware and network allocation.
+        required: true
+        options: *id001
+      opnsense_guest:
+        type: str
+        description: Inventory hostname of the installed firewall.
+        required: true
+      proxmox_host_repository:
+        type: str
+        description: Explicit signed package repository channel.
+        choices:
+        - enterprise
+        - no-subscription
+        required: true
+  reboot:
+    short_description: 'proxmox_host: reboot.'
+    options:
+      proxmox_host_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - reboot
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_vm:
+        type: dict
+        description: Owned firewall VM hardware and network allocation.
+        required: true
+        options: *id001
+      opnsense_guest:
+        type: str
+        description: Inventory hostname of the installed firewall.
+        required: true
+      proxmox_host_repository:
+        type: str
+        description: Explicit signed package repository channel.
+        choices:
+        - enterprise
+        - no-subscription
+        required: true
+  bridges:
+    short_description: 'proxmox_host: bridges.'
+    options:
+      proxmox_host_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - bridges
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      proxmox_network:
+        type: dict
+        description: Installed management bridge and desired isolated guest bridges.
+        required: true

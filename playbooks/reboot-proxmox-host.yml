@@ -1,0 +1,10 @@
+---
+- name: 'proxmox_host: reboot'
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+  - role: proxmox_host
+    proxmox_host_options:
+      task_action: reboot

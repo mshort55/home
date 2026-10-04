@@ -1,0 +1,29 @@
+---
+- name: Validate the selected image and device identity inputs
+  ansible.builtin.assert:
+    that:
+    - inventory_hostname is match('^[A-Za-z0-9_-]+$')
+    - idrac_expected_mac is match('^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
+    - idrac_iso_path is string and idrac_iso_path.startswith('/')
+    - idrac_iso_path | basename is match('^[A-Za-z0-9_.-]+[.]iso$')
+    - idrac_iso_sha256 is match('^[0-9a-f]{64}$')
+    - idrac_iso_bind_address is match('^(?:[0-9]{1,3}[.]){3}[0-9]{1,3}$')
+    - boot_iso_port is integer and 1024 <= boot_iso_port <= 65535
+    fail_msg: Supply the documented image inputs and independently verified dedicated iDRAC identity.
+  tags:
+  - always
+- name: Verify the selected local ISO without changing it
+  ansible.builtin.stat:
+    path: "{{ idrac_iso_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  register: boot_iso
+  no_log: true
+- name: Require the expected original or prepared ISO bytes
+  ansible.builtin.assert:
+    that:
+    - boot_iso.stat.isreg | default(false)
+    - not boot_iso.stat.islnk | default(false)
+    - boot_iso.stat.size | default(0) > 0
+    - boot_iso.stat.checksum | default('') == idrac_iso_sha256
+    fail_msg: The selected local ISO is missing, empty, a symlink or has an unexpected checksum.

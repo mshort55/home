@@ -1,0 +1,64 @@
+---
+- name: Preview, submit, inspect or verify a bounded iDRAC IPv4 transition
+  block:
+  - name: Run read state
+    ansible.builtin.include_tasks: _read_state.yml
+  - name: Run read task
+    ansible.builtin.include_tasks: _read_task.yml
+  - name: Require successful task completion as well as live networking
+    ansible.builtin.assert:
+      that:
+      - network_verify_task.json.TaskState == 'Completed'
+      - network_verify_task.json.TaskStatus in ['OK', 'Ok']
+      fail_msg: Import is not successfully completed. If status reports waiting_for_host_reboot, a previously staged NoReboot
+        import needs the operator's host reboot; do not resubmit the import.
+  - name: Require the requested IPv4 state during verification
+    ansible.builtin.assert:
+      that: network_already_configured
+      fail_msg: The recovered endpoint has not reached the requested IPv4 state.
+  - name: Read the interface again after task completion
+    ansible.builtin.uri:
+      url: https://{{ ansible_host }}{{ ethernet_path }}
+      status_code: 200
+    register: network_verified_interface
+    no_log: true
+  - name: Verify the final enabled untagged interface and IPv4 settings
+    ansible.builtin.assert:
+      that:
+      - network_verified_interface.json.MACAddress | lower == idrac_expected_mac | lower
+      - network_verified_interface.json.InterfaceEnabled
+      - not network_verified_interface.json.VLAN.VLANEnable
+      - network_verified_interface.json.IPv4Addresses | length == 1
+      - idrac_network_mode != 'dhcp' or final_ipv4.AddressOrigin == 'DHCP'
+      - idrac_network_mode != 'static' or (final_ipv4.AddressOrigin == 'Static' and final_ipv4.Address == idrac_network.address
+        and final_ipv4.SubnetMask == idrac_network.netmask and final_ipv4.Gateway == idrac_network.gateway)
+    vars:
+      final_ipv4: "{{ network_verified_interface.json.IPv4Addresses[0] }}"
+    no_log: true
+  - name: Report recovered configuration and task verification
+    ansible.builtin.debug:
+      msg: Verified expected iDRAC identity, untagged interface, requested IPv4 settings and completed import task through
+        the recovered endpoint.
+  vars:
+    manager_path: /redfish/v1/Managers/iDRAC.Embedded.1
+    ethernet_path: /redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/iDRAC.Embedded.1%23NIC.1
+    preview_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ImportSystemConfigurationPreview
+    import_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ImportSystemConfiguration
+    network_task_details: "{{ (network_verify_task.json | default({})).get('Oem', {}).get('Dell', {}) }}"
+    network_task_messages: "{{ (network_verify_task.json | default({})).get('Messages', []) | map(attribute='Message', default='')\
+      \ | join(' ') }}"
+    network_waiting_for_reboot: |-
+      {{ (network_task_messages ~ ' ' ~ network_task_details.get('Message', ''))
+         is search('(?i)waiting\s+(?:for|on)\s+(?:a\s+)?(?:system\s+)?reboot') }}
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30

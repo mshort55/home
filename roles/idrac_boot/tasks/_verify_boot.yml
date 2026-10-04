@@ -1,0 +1,128 @@
+---
+- name: Require an existing boot record for this inventory host
+  ansible.builtin.assert:
+    that:
+    - idrac_iso_boot_record is defined
+    - idrac_iso_boot_record is string and idrac_iso_boot_record.startswith('/')
+    - idrac_iso_boot_record | basename is match('^' ~ (inventory_hostname | regex_escape) ~ '-iso-boot-[A-Za-z0-9_.-]+$')
+    fail_msg: Supply the absolute path of this host's existing boot record directory.
+- name: Inspect the existing private boot record and its source files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+    get_checksum: false
+  loop:
+  - "{{ idrac_iso_boot_record }}"
+  - "{{ idrac_iso_boot_record }}/before.json"
+  - "{{ idrac_iso_boot_record }}/import-submission.json"
+  register: boot_verify_files
+  no_log: true
+- name: Require protected nonsymlink boot records
+  ansible.builtin.assert:
+    that:
+    - boot_verify_files.results[0].stat.isdir | default(false)
+    - not boot_verify_files.results[0].stat.islnk | default(false)
+    - boot_verify_files.results[0].stat.mode == '0700'
+    - boot_verify_files.results[1].stat.isreg | default(false)
+    - not boot_verify_files.results[1].stat.islnk | default(false)
+    - boot_verify_files.results[1].stat.mode == '0600'
+    - boot_verify_files.results[2].stat.isreg | default(false)
+    - not boot_verify_files.results[2].stat.islnk | default(false)
+    - boot_verify_files.results[2].stat.mode == '0600'
+    fail_msg: Boot verification requires the original protected record directory and submission files.
+- name: Read only the saved intent and import submission
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+  - "{{ idrac_iso_boot_record }}/before.json"
+  - "{{ idrac_iso_boot_record }}/import-submission.json"
+  register: boot_verify_records
+  no_log: true
+- name: Decode the existing boot intent and submission
+  ansible.builtin.set_fact:
+    boot_verify_before: "{{ boot_verify_records.results[0].content | b64decode | from_json }}"
+    boot_verify_import: "{{ boot_verify_records.results[1].content | b64decode | from_json }}"
+  no_log: true
+- name: Require matching image inputs and a task on the verified iDRAC origin
+  ansible.builtin.assert:
+    that:
+    - boot_verify_before.image == boot_image_url
+    - boot_verify_before.iso_sha256 == idrac_iso_sha256
+    - boot_verify_before.profile == boot_profile
+    - boot_verify_before.power_state == 'Off'
+    - boot_verify_import.http_status == 202
+    - boot_verify_import.location | default('') is match('^(https://' ~ (ansible_host | regex_escape) ~ ')?/redfish/v1/TaskService/Tasks/[A-Za-z0-9_.-]+$')
+    fail_msg: The saved boot record does not match these image inputs or the verified iDRAC origin.
+  no_log: true
+- name: Normalize the saved task URL
+  ansible.builtin.set_fact:
+    boot_verify_task_url: "{{ boot_verify_import.location if boot_verify_import.location.startswith('https://') else 'https://'\
+      \ ~ ansible_host ~ boot_verify_import.location }}"
+  no_log: true
+- name: Read and preserve the verification resource results
+  block:
+  - name: Read current device identity, original import task, power and media
+    ansible.builtin.uri:
+      url: "{{ item.url }}"
+      status_code:
+      - 200
+      - 202
+      timeout: "{{ idrac_iso_boot_read_timeout }}"
+    loop:
+    - name: identity
+      url: https://{{ ansible_host }}{{ boot_identity_path }}
+    - name: import_task
+      url: "{{ boot_verify_task_url }}"
+    - name: system
+      url: https://{{ ansible_host }}{{ boot_system_path }}
+    - name: virtual_dvd
+      url: https://{{ ansible_host }}{{ boot_media_path }}
+    register: boot_verify_reads
+    until: boot_verify_reads.status | default(0) != -1 or 'timed out' not in (boot_verify_reads.msg | default('') | lower)
+    retries: 2
+    delay: 5
+    check_mode: false
+    no_log: true
+  always:
+  - name: Preserve named verification results without request credentials
+    ansible.builtin.copy:
+      dest: "{{ idrac_iso_boot_record }}/verification-reads.json"
+      mode: '0600'
+      content: |-
+        {%- set observations = namespace(reads=[]) -%} {%- for result in boot_verify_reads.results | default([]) -%} {%- set observations.reads = observations.reads + [{
+          'resource': result.item.name,
+          'http_status': result.status | default(0),
+          'timed_out': 'timed out' in (result.msg | default('') | lower),
+          'attempts': result.attempts | default(1),
+          'body': result.json | default({})}] -%}
+        {%- endfor -%} {{ observations.reads | to_nice_json }}
+    no_log: true
+    diff: false
+- name: Require expected device, completed original job and mounted image on a running server
+  ansible.builtin.assert:
+    that:
+    - boot_verify_reads.results | map(attribute='status') | unique | list == [200]
+    - boot_verify_reads.results[0].json.MACAddress | lower == idrac_expected_mac | lower
+    - boot_verify_reads.results[1].json.TaskState == 'Completed'
+    - boot_verify_reads.results[1].json.TaskStatus in ['OK', 'Ok']
+    - boot_verify_reads.results[2].json['@odata.id'] == boot_system_path
+    - boot_verify_reads.results[2].json.PowerState == 'On'
+    - boot_verify_reads.results[3].json['@odata.id'] == boot_media_path
+    - boot_verify_reads.results[3].json.Inserted is sameas true
+    - boot_verify_reads.results[3].json.WriteProtected is sameas true
+    - boot_verify_reads.results[3].json.Image == boot_image_url
+    fail_msg: Current state does not verify this boot request. Inspect the original task and console; no boot request was
+      submitted.
+  no_log: true
+- name: Save separate verification without rewriting the original failed run
+  ansible.builtin.copy:
+    dest: "{{ idrac_iso_boot_record }}/verification.json"
+    mode: '0600'
+    content: |
+      {{ {'operation': 'verify', 'image': boot_image_url, 'iso_sha256': idrac_iso_sha256, 'import_task': boot_verify_task_url, 'boot_profile_task_completed': true, 'power_state': 'On', 'device_requests_submitted': false, 'os_installation_verified': false} | to_nice_json }}
+  diff: false
+- name: Report verified boot job and current power state
+  ansible.builtin.debug:
+    msg: 'Verified the original boot job completed successfully, the expected DVD is attached and the server is on. No boot
+      or power requests were submitted. OS installation must be confirmed from the console or installed host. Record: {{ idrac_iso_boot_record
+      }}/verification.json'

@@ -1,0 +1,65 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch community_api actions.
+    options:
+      community_api_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - load
+            - prepare
+      community_api_host:
+        type: str
+        description: Inventory endpoint whose controller enrollment is loaded.
+      community_api_var:
+        type: str
+        description: Explicit exported credential variable.
+        choices:
+        - pve_api
+        - opn_api
+  load:
+    short_description: 'community_api: load.'
+    options:
+      community_api_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - load
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      community_api_host:
+        type: str
+        description: Inventory endpoint whose controller enrollment is loaded.
+        required: true
+      community_api_var:
+        type: str
+        description: Explicit exported credential variable.
+        choices:
+        - pve_api
+        - opn_api
+        required: true
+  prepare:
+    short_description: 'community_api: prepare.'
+    options:
+      community_api_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - prepare
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict

@@ -24,10 +24,8 @@ ansible-playbook playbooks/configure-opnsense-api.yml --limit opnsense01 --check
 ansible-playbook playbooks/configure-opnsense-api.yml --limit opnsense01
 ansible-playbook playbooks/configure-opnsense-home.yml --limit pve01 --check
 ansible-playbook playbooks/configure-opnsense-home.yml --limit pve01
-ansible-playbook playbooks/configure-switch-ports.yml \
-  -e '{"switch_port_roles":["home_pilot"]}' --check
-ansible-playbook playbooks/configure-switch-ports.yml \
-  -e '{"switch_port_roles":["home_pilot"]}'
+ansible-playbook playbooks/configure-switch-home-pilot-port.yml --check
+ansible-playbook playbooks/configure-switch-home-pilot-port.yml
 ```
 
 Review each preview before applying. The HOME entry point reuses management and VM verification, validates candidate vendor models without saving, and checks the required DHCP privilege before OXL access. Apply saves a protected backup and pending transaction, merges the API objects, configures only the HOME interface, reloads services and checks the saved and loaded policy. It verifies HOME addressing, Unbound, the running Kea service and its generated interface, subnet, pool, lease lifetime and gateway/DNS/NTP options, plus automatic outbound NAT. It also verifies existing MGMT and WAN connectivity. It does not start an installation or reboot the server.
@@ -67,8 +65,7 @@ MGMT playbooks cannot run through this isolated HOME connection. Return Ethernet
 
 ```bash
 ansible-playbook playbooks/configure-opnsense-home.yml --limit pve01 --check
-ansible-playbook playbooks/configure-switch-ports.yml \
-  -e '{"switch_port_roles":["home_pilot"]}' --check
+ansible-playbook playbooks/configure-switch-home-pilot-port.yml --check
 ```
 
 ## Repeated and interrupted runs

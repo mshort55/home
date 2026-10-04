@@ -1,0 +1,112 @@
+---
+- name: Build a partial profile containing only the requested IPv4 settings
+  ansible.builtin.set_fact:
+    network_profile: |
+      <SystemConfiguration ServiceTag="{{ network_before.results[1].json.SKU }}">
+      <Component FQDD="iDRAC.Embedded.1">
+      <Attribute Name="IPv4.1#DHCPEnable">{{ 'Disabled' if idrac_network_mode == 'static' else 'Enabled' }}</Attribute>
+      {% if idrac_network_mode == 'static' %}
+      <Attribute Name="IPv4Static.1#Address">{{ idrac_network.address }}</Attribute>
+      <Attribute Name="IPv4Static.1#Netmask">{{ idrac_network.netmask }}</Attribute>
+      <Attribute Name="IPv4Static.1#Gateway">{{ idrac_network.gateway }}</Attribute>
+      {% endif %}
+      </Component>
+      </SystemConfiguration>
+- name: Create private maintenance parent
+  ansible.builtin.file:
+    path: "{{ backup_root }}"
+    state: directory
+    mode: '0700'
+- name: Allocate a private network maintenance record
+  ansible.builtin.tempfile:
+    state: directory
+    path: "{{ backup_root }}"
+    prefix: "{{ inventory_hostname }}-network-{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-"
+  register: network_directory
+- name: Save the bounded profile and pre-change interface
+  ansible.builtin.copy:
+    dest: "{{ network_directory.path }}/{{ item.name }}"
+    content: "{{ item.content }}"
+    mode: '0600'
+  loop:
+  - name: profile.xml
+    content: "{{ network_profile }}"
+  - name: before.json
+    content: |
+      {{ network_before.results[2].json | to_nice_json }}
+  no_log: true
+  diff: false
+- name: Record preview intent before the non-retried submission
+  ansible.builtin.copy:
+    dest: "{{ network_directory.path }}/intent.json"
+    mode: '0600'
+    content: |
+      {{ {'operation': idrac_network_options.task_action, 'mode': idrac_network_mode, 'status': 'preview_submission_pending', 'configuration_applied': false} | to_nice_json }}
+- name: Report the private record before submitting a task
+  ansible.builtin.debug:
+    msg: 'Network maintenance record: {{ network_directory.path }}'
+- name: Submit the partial profile for validation without applying it
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}{{ preview_path }}
+    method: POST
+    body_format: json
+    body:
+      ImportBuffer: "{{ network_profile }}"
+      ShareParameters:
+        Target: ALL
+    status_code: 202
+  register: network_preview_submission
+  changed_when: true
+  no_log: true
+- name: Save the preview response before validating its task location
+  ansible.builtin.copy:
+    dest: "{{ network_directory.path }}/preview-submission.json"
+    mode: '0600'
+    content: |
+      {{ {'location': network_preview_submission.location | default(''), 'body': network_preview_submission.json | default({})} | to_nice_json }}
+  no_log: true
+  diff: false
+- name: Require a preview task on the authenticated origin
+  ansible.builtin.assert:
+    that: network_preview_submission.location is match('^(https://' ~ (ansible_host | regex_escape) ~ ')?/redfish/v1/TaskService/Tasks/[A-Za-z0-9_.-]+$')
+  no_log: true
+- name: Normalize the verified preview task URL
+  ansible.builtin.set_fact:
+    network_preview_url: "{{ network_preview_submission.location if network_preview_submission.location.startswith('https://')\
+      \ else 'https://' ~ ansible_host ~ network_preview_submission.location }}"
+  no_log: true
+- name: Receive and preserve the profile validation result
+  block:
+  - name: Wait for the preview task to finish
+    ansible.builtin.uri:
+      url: "{{ network_preview_url }}"
+      status_code:
+      - 200
+      - 202
+    register: network_preview_task
+    until: network_preview_task.status | default(0) not in [200, 202] or (network_preview_task.json | default({})).get('TaskState',
+      '') in ['Completed', 'Exception', 'Killed', 'Cancelled', 'Interrupted', 'Suspended']
+    retries: 24
+    delay: 5
+    no_log: true
+  always:
+  - name: Preserve the last preview response even after failure
+    ansible.builtin.copy:
+      dest: "{{ network_directory.path }}/preview-task.json"
+      mode: '0600'
+      content: |
+        {{ {'http_status': network_preview_task.status | default(0), 'body': network_preview_task.json | default({})} | to_nice_json }}
+    no_log: true
+    diff: false
+- name: Require successful preview before any configuration import
+  ansible.builtin.assert:
+    that:
+    - network_preview_task.json.TaskState == 'Completed'
+    - network_preview_task.json.TaskStatus in ['OK', 'Ok']
+    fail_msg: Preview failed; inspect the private task record. No configuration import has been submitted.
+- name: Record successful validation separately from configuration application
+  ansible.builtin.copy:
+    dest: "{{ network_directory.path }}/intent.json"
+    mode: '0600'
+    content: |
+      {{ {'operation': idrac_network_options.task_action, 'mode': idrac_network_mode, 'status': 'preview_complete', 'configuration_applied': false} | to_nice_json }}

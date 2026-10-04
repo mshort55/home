@@ -84,6 +84,8 @@ ansible_become_password: "{{ vault_devices[inventory_hostname].enable_password }
 
 A playbook loads `secrets/vault.yml` using `vars_files`. The repo's `ansible.cfg` sets `ask_vault_pass = True`, so playbook commands prompt automatically; `--ask-vault-pass` is unnecessary when running from the repo root. This supplies the stored credentials without individual SSH/enable prompts. The default also prompts for playbooks that do not need Vault; for those commands, use `ANSIBLE_ASK_VAULT_PASS=False` as a per-command override. This setting does not store or cache the password. See the [switch backup instructions](playbooks/backup-switch.md) for the complete command and prerequisites.
 
+Vault-backed entry points resolve this default path relative to their repository, before roles execute. Set `vault_file` in inventory or pass `-e vault_file=/absolute/path/to/vault.yml` to select another store. Private role defaults do not supply variables to a play's initial `vars_files` lookup.
+
 Encryption does not verify a device password. Use the relevant playbook to verify device authentication. If unlocking fails, check the Vault password. If authentication fails after successful unlocking, inspect the device entry with `edit`. Keep secret-bearing output suppressed during ordinary playbook runs.
 
 Vault protects this credential store at rest. It does not automatically encrypt configuration exports under `backups/`, which retain their separate permissions and Git ignores.

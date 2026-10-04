@@ -1,0 +1,16 @@
+---
+- name: Validate the selected idrac_boot action contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs[idrac_boot_options.task_action].options\
+      \ }}"
+    validate_args_context:
+      name: idrac_boot
+      type: role
+      argument_spec_name: "{{ idrac_boot_options.task_action }}"
+  tags:
+  - always
+- name: Dispatch the explicit idrac_boot action
+  ansible.builtin.include_tasks:
+    file: "{{ idrac_boot_options.task_action }}.yml"
+  tags:
+  - always

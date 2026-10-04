@@ -1,0 +1,275 @@
+---
+- name: Prepare a private Proxmox unattended installation ISO locally
+  block:
+  - name: Require complete installation settings and exact disk and NIC identities
+    ansible.builtin.assert:
+      that:
+      - proxmox_install is defined
+      - proxmox_install is mapping
+      - inventory_hostname is match('^[A-Za-z0-9_-]+$')
+      - proxmox_idrac_host is defined
+      - proxmox_idrac_host in groups.get('idracs', [])
+      - proxmox_install.source_iso is string
+      - proxmox_install.source_iso.startswith('/')
+      - proxmox_install.source_sha256 is match('^[0-9a-f]{64}$')
+      - proxmox_install.disk_serial is match('^[A-Za-z0-9_.:-]{1,128}$')
+      - proxmox_install.management_mac is match('^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$')
+      - proxmox_install.fqdn is string
+      - proxmox_install.mailto is string
+      - proxmox_install.country is string
+      - proxmox_install.keyboard is string
+      - proxmox_install.timezone is string
+      - proxmox_install.cidr is string
+      - proxmox_install.gateway is string
+      - proxmox_install.dns is string
+      - proxmox_install.maxroot is integer and proxmox_install.maxroot > 0
+      - proxmox_install.swapsize is integer and proxmox_install.swapsize >= 0
+      - proxmox_install.minfree is integer and proxmox_install.minfree >= 0
+      - proxmox_install.ssh_public_key_files is sequence
+      - proxmox_install.ssh_public_key_files is not string
+      - proxmox_install.ssh_public_key_files | length > 0
+      - pve_container_runtime in ['docker', 'podman']
+      fail_msg: Supply the documented proxmox_install inputs with exact observed disk and management NIC identities.
+  - name: Require the owner-local Proxmox root credential
+    ansible.builtin.assert:
+      that:
+      - vault_devices[inventory_hostname].username == 'root'
+      - vault_devices[inventory_hostname].password is string
+      - vault_devices[inventory_hostname].password | length >= 8
+      - vault_devices[inventory_hostname].password is not search('[\x00\r\n]')
+      fail_msg: Add a root username and password of at least eight characters under this Proxmox host in Vault.
+    no_log: true
+  - name: Read local platform and user details
+    ansible.builtin.setup:
+      gather_subset:
+      - min
+  - name: Require an ordinary Linux or native Mac user and container-safe paths
+    ansible.builtin.assert:
+      that:
+      - ansible_facts.system in ['Linux', 'Darwin']
+      - ansible_facts.user_uid | int > 0
+      - inventory_dir is not search('[,\r\n]')
+      - (role_path ~ '/../..') is not search('[,\r\n]')
+      - proxmox_install.source_iso is not search('[,\r\n]')
+      fail_msg: Run locally as an ordinary user; bind-mount paths cannot contain commas or newlines.
+  - name: Verify the original ISO checksum without modifying it
+    ansible.builtin.stat:
+      path: "{{ proxmox_install.source_iso }}"
+      follow: false
+      checksum_algorithm: sha256
+    register: pve_source
+    no_log: true
+  - name: Require the original verified regular ISO
+    ansible.builtin.assert:
+      that:
+      - pve_source.stat.isreg | default(false)
+      - not pve_source.stat.islnk | default(false)
+      - pve_source.stat.size | default(0) > 0
+      - pve_source.stat.checksum | default('') == proxmox_install.source_sha256
+      fail_msg: The original ISO is missing, a symlink, empty, or does not match its expected SHA-256.
+  - name: Validate public key paths
+    ansible.builtin.assert:
+      that:
+      - item is string
+      - item.startswith('/')
+      - item.endswith('.pub')
+      fail_msg: Supply absolute paths to existing SSH public key files ending in .pub.
+    loop: "{{ proxmox_install.ssh_public_key_files }}"
+  - name: Read only the specified public keys
+    ansible.builtin.slurp:
+      src: "{{ item }}"
+    loop: "{{ proxmox_install.ssh_public_key_files }}"
+    register: pve_public_keys
+    no_log: true
+  - name: Check the container engine is available
+    ansible.builtin.command:
+      argv:
+      - "{{ pve_container_runtime }}"
+      - info
+      - --format
+      - "{{ \"{{.OSType}}\" if pve_container_runtime == \"docker\" else \"{{.Host.OS}}\" }}"
+      expand_argument_vars: false
+    register: pve_engine
+    changed_when: false
+    check_mode: false
+  - name: Require a running Linux container engine
+    ansible.builtin.assert:
+      that:
+      - pve_engine.stdout | trim == 'linux'
+      fail_msg: Start a Linux Docker or Podman engine with linux/amd64 execution and access to this local checkout.
+  - name: Calculate the builder definition checksum
+    ansible.builtin.stat:
+      path: "{{ pve_builder_context }}/Dockerfile"
+      checksum_algorithm: sha256
+    register: pve_builder_definition
+  - name: Select the builder image tied to this definition
+    ansible.builtin.set_fact:
+      pve_builder_image: home-proxmox-iso:{{ pve_builder_definition.stat.checksum[:16] }}
+  - name: Inspect the cached builder image
+    ansible.builtin.command:
+      argv:
+      - "{{ pve_container_runtime }}"
+      - image
+      - inspect
+      - "{{ pve_builder_image }}"
+      expand_argument_vars: false
+    register: pve_image
+    changed_when: false
+    failed_when: pve_image.rc not in [0, 1, 125]
+    check_mode: false
+    no_log: true
+  - name: Report the intended local build in check mode
+    ansible.builtin.debug:
+      msg:
+        fqdn: "{{ proxmox_install.fqdn }}"
+        cidr: "{{ proxmox_install.cidr }}"
+        disk_serial: "{{ proxmox_install.disk_serial }}"
+        management_mac: "{{ proxmox_install.management_mac }}"
+        ssh_public_key_files: "{{ proxmox_install.ssh_public_key_files | length }}"
+        builder_image_missing: "{{ pve_image.rc != 0 }}"
+        scope: Preview only; no image build, password hashing, answer validation or ISO generation occurs.
+    when: ansible_check_mode
+  - name: Finish the read-only preview
+    ansible.builtin.meta: end_role
+    when: ansible_check_mode
+  - name: Build the pinned preparation image if missing
+    ansible.builtin.command:
+      argv:
+      - "{{ pve_container_runtime }}"
+      - build
+      - --platform
+      - linux/amd64
+      - --tag
+      - "{{ pve_builder_image }}"
+      - "{{ pve_builder_context }}"
+      expand_argument_vars: false
+    when: pve_image.rc != 0
+    changed_when: true
+  - name: Create the private local artifact parent
+    ansible.builtin.file:
+      path: "{{ pve_artifact_root }}"
+      state: directory
+      mode: '0700'
+  - name: Allocate a fresh private build directory
+    ansible.builtin.tempfile:
+      state: directory
+      path: "{{ pve_artifact_root }}"
+      prefix: "{{ inventory_hostname }}-{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-"
+    register: pve_directory
+  - name: Report the private build location
+    ansible.builtin.debug:
+      msg: 'Build artifacts and diagnostics: {{ pve_directory.path }}'
+  - name: Write build settings without the root password
+    ansible.builtin.copy:
+      dest: "{{ pve_directory.path }}/settings.json"
+      mode: '0600'
+      content: |
+        {{ (proxmox_install | dict2items | rejectattr('key', 'in', ['source_iso', 'ssh_public_key_files']) | items2dict) | combine({'ssh_public_keys': pve_public_keys.results | map(attribute='content') | map('b64decode') | map('trim') | unique | list}) | to_nice_json }}
+    no_log: true
+    diff: false
+  - name: Build and verify the ISO in an isolated nonroot container
+    ansible.builtin.command:
+      argv:
+      - "{{ pve_container_runtime }}"
+      - run
+      - --rm
+      - --interactive
+      - --platform
+      - linux/amd64
+      - --user
+      - "{{ ansible_facts.user_uid }}:{{ ansible_facts.user_gid }}"
+      - --network
+      - none
+      - --read-only
+      - --cap-drop
+      - ALL
+      - --security-opt
+      - no-new-privileges
+      - --tmpfs
+      - /tmp:rw,nosuid,nodev,size=64m
+      - --mount
+      - type=bind,src={{ proxmox_install.source_iso }},dst=/input/source.iso,readonly
+      - --mount
+      - type=bind,src={{ pve_directory.path }},dst=/work
+      - --mount
+      - type=bind,src={{ (role_path ~ '/../..') | realpath }}/scripts/prepare-proxmox-iso.py,dst=/prepare-proxmox-iso.py,readonly
+      - "{{ pve_builder_image }}"
+      - python3
+      - /prepare-proxmox-iso.py
+      - --settings
+      - /work/settings.json
+      - --source
+      - /input/source.iso
+      - --work-dir
+      - /work
+      stdin: "{{ vault_devices[inventory_hostname].password }}"
+      stdin_add_newline: false
+      expand_argument_vars: false
+    register: pve_build
+    changed_when: true
+    failed_when: false
+    no_log: true
+  - name: Preserve private runner diagnostics without its input
+    ansible.builtin.copy:
+      dest: "{{ pve_directory.path }}/runner-result.json"
+      mode: '0600'
+      content: |
+        {{ {'rc': pve_build.rc, 'stdout': pve_build.stdout | default(''), 'stderr': pve_build.stderr | default('')} | to_nice_json }}
+    no_log: true
+    diff: false
+  - name: Require a successful local preparation run
+    ansible.builtin.assert:
+      that:
+      - pve_build.rc == 0
+      fail_msg: ISO preparation failed. Inspect {{ pve_directory.path }}/runner-result.json and build.log locally. No device
+        was changed.
+  - name: Read the verified completion record
+    ansible.builtin.slurp:
+      src: "{{ pve_directory.path }}/completion.json"
+    register: pve_completion
+    no_log: true
+  - name: Decode the completion record
+    ansible.builtin.set_fact:
+      pve_manifest: "{{ pve_completion.content | b64decode | from_json }}"
+    no_log: true
+  - name: Independently verify the finished ISO checksum and permissions
+    ansible.builtin.stat:
+      path: "{{ pve_directory.path }}/proxmox-auto.iso"
+      follow: false
+      checksum_algorithm: sha256
+    register: pve_output
+    no_log: true
+  - name: Require verified protected artifacts matching the requested identities
+    ansible.builtin.assert:
+      that:
+      - pve_manifest.embedded_answers_verified is sameas true
+      - pve_manifest.uefi_boot_image_verified is sameas true
+      - pve_manifest.disk_serial == proxmox_install.disk_serial
+      - pve_manifest.management_mac == proxmox_install.management_mac
+      - pve_manifest.source_sha256 == proxmox_install.source_sha256
+      - pve_output.stat.isreg and not pve_output.stat.islnk
+      - pve_output.stat.mode == '0600'
+      - pve_output.stat.size > 0
+      - pve_output.stat.checksum == pve_manifest.iso_sha256
+      fail_msg: Generated ISO verification did not match the requested private build.
+    no_log: true
+  - name: Write portable inputs for the separate ISO mount playbook
+    ansible.builtin.copy:
+      dest: "{{ pve_directory.path }}/mount-vars.yml"
+      mode: '0600'
+      content: "{{ {'idrac_iso_path': '{{ inventory_dir }}/.cache/proxmox-installer/' ~ (pve_directory.path | basename) ~\
+        \ '/proxmox-auto.iso', 'idrac_iso_sha256': pve_manifest.iso_sha256} | to_nice_yaml }}"
+    diff: false
+  - name: Report the completed preparation and separate mount inputs
+    ansible.builtin.debug:
+      msg:
+        iso_path: "{{ pve_directory.path }}/proxmox-auto.iso"
+        iso_sha256: "{{ pve_manifest.iso_sha256 }}"
+        mount_vars: "{{ pve_directory.path }}/mount-vars.yml"
+        idrac_host: "{{ proxmox_idrac_host }}"
+        fqdn: "{{ pve_manifest.fqdn }}"
+        cidr: "{{ pve_manifest.cidr }}"
+        disk_serial: "{{ pve_manifest.disk_serial }}"
+        management_mac: "{{ pve_manifest.management_mac }}"
+        scope: Preparation completed locally. Mounting and booting are separate; booting this ISO starts an unattended installation
+          that formats the selected disk.

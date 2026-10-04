@@ -1,0 +1,30 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch proxmox_api actions.
+    options:
+      proxmox_api_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - enroll
+  enroll:
+    short_description: 'proxmox_api: enroll.'
+    options:
+      proxmox_api_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - enroll
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict

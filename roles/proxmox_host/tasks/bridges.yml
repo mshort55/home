@@ -1,0 +1,3 @@
+---
+- name: Run the validated action workflow
+  ansible.builtin.include_tasks: _bridges.yml

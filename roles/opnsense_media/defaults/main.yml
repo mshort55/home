@@ -1,0 +1,8 @@
+---
+opnsense_iso_cache: "{{ inventory_dir }}/.cache/iso/opnsense-{{ opnsense_release.version }}"
+opnsense_release: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../files/opnsense/release.yml') | from_yaml).opnsense_release\
+  \ }}"
+opnsense_bootstrap_dir: "{{ inventory_dir }}/.cache/opnsense-bootstrap/{{ inventory_hostname }}"
+opnsense_builder_context: "{{ (role_path ~ '/../..') | realpath }}/containers/opnsense-installer"
+opnsense_container_runtime: docker
+vault_file: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"

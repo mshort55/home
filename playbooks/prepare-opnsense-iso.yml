@@ -1,93 +1,14 @@
 ---
-- name: Download and verify the pinned OPNsense DVD ISO on the controller
+- name: 'opnsense_media: download'
   hosts: proxmox_hosts
-  connection: local
   gather_facts: false
   become: false
   serial: 1
+  connection: local
   vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
     ansible_connection: local
-    ansible_python_interpreter: "{{ ansible_playbook_python }}"
-    opnsense_iso_cache: "{{ inventory_dir }}/.cache/iso/opnsense-{{ opnsense_release.version }}"
-  vars_files:
-    - ../files/opnsense/release.yml
-  tasks:
-    - name: Validate the pinned release and local cache path
-      ansible.builtin.assert:
-        that:
-          - opnsense_release.version is match('^[0-9]+[.][0-9]+(?:[.][0-9]+)?$')
-          - opnsense_release.filename == 'OPNsense-' + opnsense_release.version + '-dvd-amd64.iso'
-          - opnsense_release.base_url is match('^https://[A-Za-z0-9.-]+/[^\s?#]+$')
-          - opnsense_release.archive_sha256 is match('^[0-9a-f]{64}$')
-          - opnsense_release.public_key_sha256 is match('^[0-9a-f]{64}$')
-          - opnsense_iso_cache.startswith('/')
-
-    - name: Verify the repository signing key before downloading
-      ansible.builtin.stat:
-        path: "{{ playbook_dir }}/../files/opnsense/{{ opnsense_release.public_key_file }}"
-        follow: false
-        checksum_algorithm: sha256
-      register: opnsense_signing_key
-
-    - name: Require the pinned nonsymlink signing key
-      ansible.builtin.assert:
-        that:
-          - opnsense_signing_key.stat.isreg | default(false)
-          - not opnsense_signing_key.stat.islnk | default(false)
-          - opnsense_signing_key.stat.checksum | default('') == opnsense_release.public_key_sha256
-
-    - name: Preview local preparation without downloading or writing
-      ansible.builtin.debug:
-        msg: "Download {{ opnsense_release.filename }}.bz2, check the pinned archive SHA-256, verify the decompressed ISO signature and write completion.json under {{ opnsense_iso_cache }}. No Proxmox access is required."
-      when: ansible_check_mode
-
-    - name: Finish the local preparation preview
-      ansible.builtin.meta: end_host
-      when: ansible_check_mode
-
-    - name: Create the private local ISO cache
-      ansible.builtin.file:
-        path: "{{ opnsense_iso_cache }}"
-        state: directory
-        mode: '0700'
-
-    - name: Download the pinned compressed ISO over verified HTTPS
-      ansible.builtin.get_url:
-        url: "{{ opnsense_release.base_url }}/{{ opnsense_release.filename }}.bz2"
-        dest: "{{ opnsense_iso_cache }}/{{ opnsense_release.filename }}.bz2"
-        checksum: "sha256:{{ opnsense_release.archive_sha256 }}"
-        validate_certs: true
-        mode: '0600'
-        timeout: 60
-
-    - name: Download the ISO signature over verified HTTPS
-      ansible.builtin.get_url:
-        url: "{{ opnsense_release.base_url }}/{{ opnsense_release.filename }}.sig"
-        dest: "{{ opnsense_iso_cache }}/{{ opnsense_release.filename }}.sig"
-        validate_certs: true
-        mode: '0600'
-        timeout: 60
-
-    - name: Verify the signature and prepare the ISO atomically
-      ansible.builtin.command:
-        argv:
-          - "{{ ansible_playbook_python }}"
-          - "{{ playbook_dir }}/../scripts/prepare-opnsense-iso.py"
-          - --directory
-          - "{{ opnsense_iso_cache }}"
-          - --filename
-          - "{{ opnsense_release.filename }}"
-          - --version
-          - "{{ opnsense_release.version }}"
-          - --archive-sha256
-          - "{{ opnsense_release.archive_sha256 }}"
-          - --public-key
-          - "{{ playbook_dir }}/../files/opnsense/{{ opnsense_release.public_key_file }}"
-          - --public-key-sha256
-          - "{{ opnsense_release.public_key_sha256 }}"
-      register: opnsense_iso_preparation
-      changed_when: (opnsense_iso_preparation.stdout | from_json).changed
-
-    - name: Report the verified controller ISO
-      ansible.builtin.debug:
-        msg: "{{ (opnsense_iso_preparation.stdout | from_json).manifest }}"
+  roles:
+  - role: opnsense_media
+    opnsense_media_options:
+      task_action: download

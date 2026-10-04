@@ -1,0 +1,33 @@
+---
+- name: Set one-time virtual DVD boot and power on an offline server
+  block:
+  - name: Run verify image
+    ansible.builtin.include_tasks: _verify_image.yml
+  - name: Run verify boot
+    ansible.builtin.include_tasks: _verify_boot.yml
+  vars:
+    boot_iso_port: "{{ idrac_iso_port }}"
+    boot_manager_path: /redfish/v1/Managers/iDRAC.Embedded.1
+    boot_system_path: /redfish/v1/Systems/System.Embedded.1
+    boot_bios_path: /redfish/v1/Systems/System.Embedded.1/Bios
+    boot_settings_path: /redfish/v1/Systems/System.Embedded.1/Bios/Settings
+    boot_media_path: /redfish/v1/Managers/iDRAC.Embedded.1/VirtualMedia/CD
+    boot_identity_path: /redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/iDRAC.Embedded.1%23NIC.1
+    boot_jobs_path: /redfish/v1/Managers/iDRAC.Embedded.1/Jobs
+    boot_import_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ImportSystemConfiguration
+    boot_reset_path: /redfish/v1/Systems/System.Embedded.1/Actions/ComputerSystem.Reset
+    boot_image_url: http://{{ idrac_iso_bind_address }}:{{ boot_iso_port }}/{{ idrac_iso_path | basename | urlencode }}
+    boot_profile: <SystemConfiguration><Component FQDD="iDRAC.Embedded.1"><Attribute Name="ServerBoot.1#BootOnce">Enabled</Attribute><Attribute
+      Name="ServerBoot.1#FirstBootDevice">vCD-DVD</Attribute></Component></SystemConfiguration>
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30

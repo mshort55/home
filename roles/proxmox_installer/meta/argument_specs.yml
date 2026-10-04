@@ -1,0 +1,63 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch proxmox_installer actions.
+    options:
+      proxmox_installer_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - prepare
+      proxmox_install:
+        type: dict
+        description: Unattended installation, exact disk/NIC identities and public key inputs.
+      proxmox_idrac_host:
+        type: str
+        description: Associated inventory iDRAC host.
+      vault_file:
+        type: path
+        description: Encrypted controller credential source.
+        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+      pve_container_runtime:
+        type: str
+        description: Optional proxmox_installer setting; preserves the existing workflow value.
+        default: docker
+        choices:
+        - docker
+        - podman
+      pve_builder_context:
+        type: path
+        description: Optional proxmox_installer setting; preserves the existing workflow value.
+        default: "{{ (role_path ~ '/../..') | realpath }}/containers/proxmox-installer"
+      pve_artifact_root:
+        type: path
+        description: Optional proxmox_installer setting; preserves the existing workflow value.
+        default: "{{ inventory_dir }}/.cache/proxmox-installer"
+  prepare:
+    short_description: 'proxmox_installer: prepare.'
+    options:
+      proxmox_installer_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - prepare
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      proxmox_install:
+        type: dict
+        description: Unattended installation, exact disk/NIC identities and public key inputs.
+        required: true
+      proxmox_idrac_host:
+        type: str
+        description: Associated inventory iDRAC host.
+        required: true

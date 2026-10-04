@@ -1,0 +1,146 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch idrac_boot actions.
+    options:
+      idrac_boot_options:
+        type: dict
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        required: true
+        options:
+          task_action:
+            type: str
+            description: Select the matching action task file.
+            required: true
+            choices:
+            - boot
+            - verify
+            - uefi
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+      idrac_iso_path:
+        type: path
+        description: Exact previously mounted ISO path.
+      idrac_iso_sha256:
+        type: str
+        description: SHA-256 of the mounted image.
+      idrac_iso_bind_address:
+        type: str
+        description: Existing image server IPv4 address.
+      idrac_iso_port:
+        type: int
+        description: Existing image server TCP port.
+        default: 8080
+      idrac_iso_boot_record:
+        type: path
+        description: Original protected boot record; required for verify.
+      idrac_tls_ciphers:
+        type: list
+        description: Optional legacy TLS cipher allowlist; omitted uses controller defaults.
+        elements: str
+      vault_file:
+        type: path
+        description: Encrypted controller credential source.
+        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+      backup_root:
+        type: path
+        description: Private controller backup parent.
+        default: "{{ (role_path ~ '/../..') | realpath }}/backups"
+      idrac_iso_boot_read_timeout:
+        type: int
+        description: Read-only verification request timeout in seconds.
+        default: 60
+  boot:
+    short_description: 'idrac_boot: boot.'
+    options:
+      idrac_boot_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - boot
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true
+      idrac_iso_path:
+        type: path
+        description: Exact previously mounted ISO path.
+        required: true
+      idrac_iso_sha256:
+        type: str
+        description: SHA-256 of the mounted image.
+        required: true
+      idrac_iso_bind_address:
+        type: str
+        description: Existing image server IPv4 address.
+        required: true
+  verify:
+    short_description: 'idrac_boot: verify.'
+    options:
+      idrac_boot_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - verify
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true
+      idrac_expected_mac:
+        type: str
+        description: Independently verified dedicated iDRAC MAC.
+        required: true
+      idrac_iso_path:
+        type: path
+        description: Exact previously mounted ISO path.
+        required: true
+      idrac_iso_sha256:
+        type: str
+        description: SHA-256 of the mounted image.
+        required: true
+      idrac_iso_bind_address:
+        type: str
+        description: Existing image server IPv4 address.
+        required: true
+      idrac_iso_boot_record:
+        type: path
+        description: Original protected boot record; required for verify.
+        required: true
+  uefi:
+    short_description: 'idrac_boot: uefi.'
+    options:
+      idrac_boot_options:
+        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        options:
+          task_action:
+            choices:
+            - uefi
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      idrac_ca_path:
+        type: path
+        description: Verified iDRAC CA file.
+        required: true

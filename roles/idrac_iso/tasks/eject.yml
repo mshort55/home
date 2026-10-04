@@ -1,0 +1,36 @@
+---
+- name: Manage a read-only ISO on iDRAC virtual DVD media
+  block:
+  - name: Run read media
+    ansible.builtin.include_tasks: _read_media.yml
+  - name: Run change media
+    ansible.builtin.include_tasks: _change_media.yml
+  - name: Stop native Mac hosting after successful ejection
+    ansible.builtin.include_tasks: _stop_server.yml
+    when: idrac_iso_source == 'local' and idrac_iso_options.task_action == 'eject'
+  - name: Report the verified media state
+    ansible.builtin.debug:
+      msg: "{{ 'Read-only ISO is mounted. Keep its source server running while booting or installing.' if idrac_iso_options.task_action\
+        \ == 'mount' else 'ISO is ejected; local hosting is stopped when managed by this workflow.' }}"
+  vars:
+    iso_manager_path: /redfish/v1/Managers/iDRAC.Embedded.1
+    iso_identity_path: /redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/iDRAC.Embedded.1%23NIC.1
+    iso_media_path: /redfish/v1/Managers/iDRAC.Embedded.1/VirtualMedia/CD
+    iso_server_directory: "{{ (role_path ~ '/../..') | realpath }}/.cache/iso-server/{{ inventory_hostname }}"
+    iso_server_label: local.home-automation.iso.{{ inventory_hostname }}
+    iso_requested_url: |-
+      {{ 'http://' ~ idrac_iso_bind_address ~ ':' ~ (idrac_iso_port | string) ~ '/' ~
+         (idrac_iso_path | basename | urlencode) if idrac_iso_source == 'local'
+         else idrac_iso_url }}
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30

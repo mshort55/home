@@ -1,0 +1,65 @@
+---
+- name: Validate the selected image and device identity inputs
+  ansible.builtin.assert:
+    that:
+    - idrac_iso_source in ['local', 'url']
+    - inventory_hostname is match('^[A-Za-z0-9_-]+$')
+    - idrac_expected_mac is defined
+    - idrac_expected_mac is match('^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$')
+    fail_msg: Supply the documented image inputs and independently verified dedicated iDRAC identity.
+  tags:
+  - always
+- name: Validate local image hosting inputs
+  ansible.builtin.assert:
+    that:
+    - idrac_iso_path is defined
+    - idrac_iso_path is string
+    - idrac_iso_path.startswith('/')
+    - idrac_iso_path | basename is match('^[A-Za-z0-9_.-]+[.]iso$')
+    - idrac_iso_sha256 is defined
+    - idrac_iso_sha256 is match('^[0-9a-f]{64}$')
+    - idrac_iso_bind_address is defined
+    - idrac_iso_bind_address is match('^(?:[0-9]{1,3}[.]){3}[0-9]{1,3}$')
+    - idrac_network.address is defined
+    - idrac_iso_port is integer
+    - idrac_iso_port >= 1024 and idrac_iso_port <= 65535
+    fail_msg: Local hosting needs an absolute native Mac ISO path, SHA-256, Ethernet IPv4 address and port.
+  when: idrac_iso_source == 'local' and idrac_iso_options.task_action != 'status'
+- name: Validate the requested image URL before device access
+  ansible.builtin.assert:
+    that:
+    - iso_requested_url is string
+    - iso_requested_url | length <= 4096
+    - iso_requested_url is not search('[\s\x00-\x1f\x7f]')
+    - iso_requested_url | urlsplit('scheme') in ['http', 'https']
+    - iso_requested_url | urlsplit('hostname') | length > 0
+    - iso_requested_url | urlsplit('username') is none
+    - iso_requested_url | urlsplit('password') is none
+    - iso_requested_url | urlsplit('query') == ''
+    - iso_requested_url | urlsplit('fragment') == ''
+    - iso_requested_url | urlsplit('path') is search('(?i)[.]iso$')
+    - iso_requested_url | urlsplit('port') is none or 1 <= (iso_requested_url | urlsplit('port')) <= 65535
+    fail_msg: Supply a credential-free HTTP(S) ISO URL without query parameters or fragments.
+  when: idrac_iso_options.task_action != 'status'
+  no_log: true
+- name: Prepare the native Mac platform and iDRAC hostname mapping
+  ansible.builtin.include_tasks: _prepare_host.yml
+  when: idrac_iso_source == 'local'
+- name: Read manager, dedicated interface identity and virtual DVD
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}{{ item }}
+    status_code: 200
+  loop: "{{ [iso_manager_path, iso_identity_path, iso_media_path] }}"
+  register: iso_before
+  check_mode: false
+  no_log: true
+- name: Require the expected iDRAC and advertised DVD resource
+  ansible.builtin.assert:
+    that:
+    - iso_before.results[0].json.VirtualMedia['@odata.id'] == iso_manager_path ~ '/VirtualMedia'
+    - iso_before.results[1].json.MACAddress | lower == idrac_expected_mac | lower
+    - iso_before.results[2].json['@odata.id'] == iso_media_path
+    - iso_before.results[2].json.Inserted is boolean
+    - '''CD'' in iso_before.results[2].json.MediaTypes or ''DVD'' in iso_before.results[2].json.MediaTypes'
+    fail_msg: Device identity or virtual DVD resource does not match the inventory.
+  no_log: true

@@ -77,8 +77,7 @@ Treat the answer and ISO as sensitive credential material. Completion verifies t
 The completion report includes `idrac_host`, taken from the Proxmox host's `proxmox_idrac_host` association. Use that controller as the limit for the mount workflow. Keep the original mounted ISO available while a discovery shell needs it. Once that environment has shut down, eject the original image using its original mount inputs:
 
 ```bash
-ansible-playbook playbooks/mount-idrac-iso.yml --limit idrac01 --ask-become-pass \
-  -e idrac_iso_operation=eject
+ansible-playbook playbooks/eject-idrac-iso.yml --limit idrac01 --ask-become-pass
 ```
 
 Mount the prepared image from the native Mac using the new build's reported `mount-vars.yml`:

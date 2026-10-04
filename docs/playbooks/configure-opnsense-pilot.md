@@ -4,6 +4,8 @@
 
 This stage enables management DNS/NTP and outbound HTTP/HTTPS for explicitly named infrastructure hosts. Before a HOME pilot is enrolled, HOME, DEV and BMC remain assigned but disabled and no DHCP server is enabled. Later runs preserve the recorded [HOME pilot](configure-opnsense-home.md). WireGuard, port forwards and household gateway migration use separate workflows. IPv6 forwarding remains disabled. API account and GUI certificate trust are provisioned by [OPNsense API enrollment](configure-opnsense-api.md); interactive GUI accounts, host updates and other zone policies use separate workflows.
 
+`configure-opnsense-management.yml` invokes `opnsense_pilot` with `task_action: management`; `configure-opnsense-home.yml` selects `home`. The role requires `opnsense_pilot_options.task_action` before VM API access and includes the VM verification role with its own explicit parameters. Management reconciliation preserves a previously recorded HOME allocation; it does not disable HOME.
+
 ## Prerequisites and inventory
 
 Complete [installation](install-opnsense.md), then [OPNsense API enrollment](configure-opnsense-api.md) on this controller. [Proxmox API enrollment](configure-proxmox-api.md) must also be available for VM operations. Keep the existing household router active, with the server's WAN bridge connected to the existing household LAN through its pilot switch port. Do not attach the ISP cable during this workflow. The WAN pilot gateway must belong to a different private 10/8 /24 from management.
@@ -34,9 +36,9 @@ Administration and update hosts must be ordinary addresses on the installed mana
 ## Preview, apply and repeat
 
 ```bash
-ansible-playbook playbooks/configure-opnsense-pilot.yml --limit pve01 --check
-ansible-playbook playbooks/configure-opnsense-pilot.yml --limit pve01
-ansible-playbook playbooks/configure-opnsense-pilot.yml --limit pve01
+ansible-playbook playbooks/configure-opnsense-management.yml --limit pve01 --check
+ansible-playbook playbooks/configure-opnsense-management.yml --limit pve01
+ansible-playbook playbooks/configure-opnsense-management.yml --limit pve01
 ```
 
 The target is the Proxmox host. Guest operations delegate to its declared `opnsense_guest`. Check mode reads installed identity, hardware and configuration, builds candidate models in memory, performs native validation, runs OXL in check mode and reports differences. It makes no configuration, trust-file, service or WAN-link writes. It does not prove runtime or internet access; normal runs perform those checks.

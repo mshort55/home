@@ -1,0 +1,3 @@
+---
+backup_root: "{{ (role_path ~ '/../..') | realpath }}/backups"
+vault_file: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"

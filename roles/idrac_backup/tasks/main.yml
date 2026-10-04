@@ -1,0 +1,16 @@
+---
+- name: Validate the selected idrac_backup action contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs[idrac_backup_options.task_action].options\
+      \ }}"
+    validate_args_context:
+      name: idrac_backup
+      type: role
+      argument_spec_name: "{{ idrac_backup_options.task_action }}"
+  tags:
+  - always
+- name: Dispatch the explicit idrac_backup action
+  ansible.builtin.include_tasks:
+    file: "{{ idrac_backup_options.task_action }}.yml"
+  tags:
+  - always

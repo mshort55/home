@@ -1,0 +1,105 @@
+---
+- name: Require staged physical recovery before a backup or import
+  ansible.builtin.assert:
+    that:
+    - idrac_network_recovery_ready is defined
+    - idrac_network_recovery_ready is sameas true
+    - not ansible_check_mode
+    fail_msg: Apply requires Boolean idrac_network_recovery_ready=true and a normal run after staging recovery.
+  tags:
+  - always
+- name: Run idrac_backup export
+  ansible.builtin.include_role:
+    name: idrac_backup
+    public: false
+  vars:
+    idrac_backup_options:
+      task_action: export
+  tags:
+  - always
+- name: Preview, submit, inspect or verify a bounded iDRAC IPv4 transition
+  block:
+  - name: Run read state
+    ansible.builtin.include_tasks: _read_state.yml
+  - name: Run profile preflight
+    ansible.builtin.include_tasks: _profile_preflight.yml
+  - name: Report an already configured interface on apply
+    ansible.builtin.debug:
+      msg: Requested IPv4 settings are already present; no import was submitted.
+    when: idrac_network_options.task_action == 'apply' and network_already_configured
+  - name: Finish an already configured apply without importing
+    ansible.builtin.meta: end_role
+    when: idrac_network_options.task_action == 'apply' and network_already_configured
+  - name: Run preview profile
+    ansible.builtin.include_tasks: _preview_profile.yml
+  - name: Record import intent before an operation that can drop connectivity
+    ansible.builtin.copy:
+      dest: "{{ network_directory.path }}/intent.json"
+      mode: '0600'
+      content: |
+        {{ {'operation': 'apply', 'mode': idrac_network_mode, 'status': 'import_submission_pending', 'backup_directory': idrac_backup_directory, 'configuration_applied': 'unverified'} | to_nice_json }}
+  - name: Submit only the iDRAC IPv4 settings once without deferred staging
+    ansible.builtin.uri:
+      url: https://{{ ansible_host }}{{ import_path }}
+      method: POST
+      body_format: json
+      body:
+        ImportBuffer: "{{ network_profile }}"
+        ShareParameters:
+          Target: IDRAC
+      status_code: 202
+    register: network_import_submission
+    changed_when: true
+    no_log: true
+  - name: Preserve the import submission without claiming completion
+    ansible.builtin.copy:
+      dest: "{{ network_directory.path }}/import-submission.json"
+      mode: '0600'
+      content: |
+        {{ {'location': network_import_submission.location | default(''), 'body': network_import_submission.json | default({}), 'configuration_applied': 'unverified'} | to_nice_json }}
+    no_log: true
+    diff: false
+  - name: Require an import task on the authenticated origin
+    ansible.builtin.assert:
+      that: network_import_submission.location is match('^(https://' ~ (ansible_host | regex_escape) ~ ')?/redfish/v1/TaskService/Tasks/[A-Za-z0-9_.-]+$')
+    no_log: true
+  - name: Record accepted import separately from completed application
+    ansible.builtin.copy:
+      dest: "{{ network_directory.path }}/intent.json"
+      mode: '0600'
+      content: |
+        {{ {'operation': 'apply', 'mode': idrac_network_mode, 'status': 'import_accepted', 'task_path': network_import_submission.location | regex_replace('^https://' ~ (ansible_host | regex_escape), ''), 'backup_directory': idrac_backup_directory, 'configuration_applied': 'unverified'} | to_nice_json }}
+  - name: Report accepted submission and the required recovery verification
+    ansible.builtin.debug:
+      msg:
+      - 'Import accepted; completion is unverified. Record: {{ network_directory.path }}'
+      - 'Verification task_path: {{ network_import_submission.location | regex_replace(''^https://'' ~ (ansible_host | regex_escape),
+        '''') }}'
+      - HTTP acceptance does not establish completion. Use operation=status on the reachable endpoint to inspect the saved
+        task; operation=verify requires completed task and final IPv4 settings.
+      - Complete the coordinated switch-port move, restore verified hostname resolution from the recovery network, then run
+        this workflow with operation=verify and the saved task path. Do not retry the import after a lost response without
+        inspecting the endpoint and task.
+  vars:
+    manager_path: /redfish/v1/Managers/iDRAC.Embedded.1
+    ethernet_path: /redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/iDRAC.Embedded.1%23NIC.1
+    preview_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ImportSystemConfigurationPreview
+    import_path: /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Oem/EID_674_Manager.ImportSystemConfiguration
+    network_task_details: "{{ (network_verify_task.json | default({})).get('Oem', {}).get('Dell', {}) }}"
+    network_task_messages: "{{ (network_verify_task.json | default({})).get('Messages', []) | map(attribute='Message', default='')\
+      \ | join(' ') }}"
+    network_waiting_for_reboot: |-
+      {{ (network_task_messages ~ ' ' ~ network_task_details.get('Message', ''))
+         is search('(?i)waiting\s+(?:for|on)\s+(?:a\s+)?(?:system\s+)?reboot') }}
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ vault_devices[inventory_hostname].username }}"
+      url_password: "{{ vault_devices[inventory_hostname].password }}"
+      force_basic_auth: true
+      validate_certs: true
+      ca_path: "{{ idrac_ca_path }}"
+      ciphers: "{{ idrac_tls_ciphers | default(omit) }}"
+      follow_redirects: none
+      use_proxy: false
+      return_content: true
+      timeout: 30
