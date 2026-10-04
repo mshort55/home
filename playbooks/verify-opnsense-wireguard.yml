@@ -1,0 +1,10 @@
+---
+- name: Verify local HOME WireGuard administration without changes
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+    - role: opnsense_wireguard
+      opnsense_wireguard_options:
+        task_action: verify

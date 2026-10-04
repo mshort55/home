@@ -1,0 +1,13 @@
+---
+- name: Configure the switch management return route
+  hosts: cisco_switches
+  gather_facts: false
+  become: true
+  become_method: enable
+  serial: 1
+  vars_files:
+    - "{{ vault_file | default(((playbook_dir ~ '/..') | realpath) ~ '/secrets/vault.yml') }}"
+  roles:
+    - role: cisco_switch
+      cisco_switch_options:
+        task_action: gateway

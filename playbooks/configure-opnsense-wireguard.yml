@@ -1,0 +1,10 @@
+---
+- name: Configure local HOME WireGuard administration
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+    - role: opnsense_wireguard
+      opnsense_wireguard_options:
+        task_action: configure

@@ -1,0 +1,45 @@
+---
+- name: Validate the installed guest inputs
+  ansible.builtin.include_tasks: _inputs.yml
+- name: Inspect the encrypted controller keys
+  ansible.builtin.stat:
+    path: "{{ wireguard_key_directory }}/keys.vault.yml"
+    follow: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: wireguard_key_file
+- name: Require key preparation before device access
+  ansible.builtin.assert:
+    that:
+      - wireguard_key_file.stat.isreg | default(false)
+      - not wireguard_key_file.stat.islnk | default(false)
+      - wireguard_key_file.stat.mode == '0600'
+    fail_msg: Run prepare-wireguard-client.yml on this controller first.
+- name: Validate the existing encrypted keys without creating or rotating them
+  wireguard_keys:
+    directory: "{{ wireguard_key_directory }}"
+    identity: "{{ inventory_hostname }}"
+    settings: "{{ opnsense_wireguard }}"
+  check_mode: true
+- name: Load the private WireGuard keys
+  ansible.builtin.include_vars:
+    file: "{{ wireguard_key_directory }}/keys.vault.yml"
+    name: wireguard_material
+  no_log: true
+- name: Build the public device identity and policy payload
+  ansible.builtin.set_fact:
+    wireguard_payload:
+      settings: "{{ opnsense_wireguard }}"
+      server_public: "{{ wireguard_material.server.public }}"
+      peer_public: "{{ wireguard_material.client.public }}"
+      mtu: "{{ wireguard_mtu }}"
+- name: Load the enrolled OPNsense API
+  ansible.builtin.include_role:
+    name: community_api
+    public: false
+  vars:
+    community_api_options:
+      task_action: load
+    community_api_host: "{{ inventory_hostname }}"
+    community_api_var: opn_api

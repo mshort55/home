@@ -39,11 +39,12 @@ try {
     $mdl = new \OPNsense\Auth\User();
     $user = $mdl->getUserByName('home-ansible');
     $legacyPrivileges = 'page-filter-api,page-services-unbound';
-    $privileges = $legacyPrivileges . ',page-dhcp-kea-v4';
+    $dhcpPrivileges = $legacyPrivileges . ',page-dhcp-kea-v4';
+    $privileges = $dhcpPrivileges . ',page-wireguard-config';
     if ($user !== null) {
         ensure(in_array((string)$user->descr, [OWNERSHIP_MARKER, LEGACY_OWNERSHIP_MARKER], true), 'Conflicting API user');
         ensure(file_exists($record), 'Missing original API credentials; refusing key rotation');
-        ensure(in_array((string)$user->priv, [$legacyPrivileges, $privileges], true) && (string)$user->disabled === '0', 'API user privileges conflict');
+        ensure(in_array((string)$user->priv, [$legacyPrivileges, $dhcpPrivileges, $privileges], true) && (string)$user->disabled === '0', 'API user privileges conflict');
     }
     $credentials = file_exists($record) ? json_decode(file_get_contents($record), true, 512, JSON_THROW_ON_ERROR) : null;
     if ($credentials !== null) {

@@ -1,0 +1,82 @@
+---
+- name: Reconcile owned WireGuard resources through OXL
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  module_defaults:
+    group/oxlorg.opnsense.all:
+      firewall: "{{ opn_api.firewall }}"
+      api_key: "{{ opn_api.api_key }}"
+      api_secret: "{{ opn_api.api_secret }}"
+      ssl_verify: true
+      ssl_ca_file: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+      api_timeout: 30
+      api_retries: 2
+  block:
+    - name: Merge the single laptop peer with only its tunnel address
+      oxlorg.opnsense.wireguard_peer:
+        name: "{{ opnsense_wireguard.peer_name }}"
+        public_key: "{{ wireguard_material.client.public }}"
+        allowed_ips: ["{{ opnsense_wireguard.peer_address }}/32"]
+        enabled: true
+        link_servers: false
+        reload: false
+      register: wireguard_peer_change
+    - name: Merge the owned instance and exact peer membership
+      oxlorg.opnsense.wireguard_server:
+        name: "{{ opnsense_wireguard.name }}"
+        public_key: "{{ wireguard_material.server.public }}"
+        private_key: "{{ wireguard_material.server.private }}"
+        allowed_ips: ["{{ opnsense_wireguard.server_address }}/24"]
+        port: "{{ opnsense_wireguard.port }}"
+        mtu: "{{ wireguard_mtu }}"
+        enabled: true
+        disable_routes: false
+        peers: "{{ [opnsense_wireguard.peer_name] if not wireguard_policy_preview or wireguard_plan.peer_exists else [] }}"
+        link_peers: "{{ not wireguard_policy_preview or wireguard_plan.peer_exists }}"
+        reload: false
+      register: wireguard_server_change
+      no_log: true
+    - name: Merge only the named WireGuard administration rules
+      oxlorg.opnsense.rule:
+        match_fields: [description]
+        description: "{{ item.description }}"
+        sequence: "{{ item.sequence | int }}"
+        enabled: true
+        action: "{{ item.action }}"
+        quick: true
+        interface: ["{{ item.interface }}"]
+        interface_invert: false
+        direction: in
+        ip_protocol: inet
+        protocol: "{{ item.protocol }}"
+        source_net: "{{ item.source_net }}"
+        source_invert: false
+        source_port: ''
+        destination_net: "{{ item.destination_net }}"
+        destination_invert: false
+        destination_port: "{{ item.destination_port }}"
+        log: "{{ item.log == '1' }}"
+        state_type: keep
+        gateway: ''
+        replyto: ''
+        disable_replyto: false
+        reload: false
+      loop: "{{ wireguard_plan.rules }}"
+      loop_control:
+        label: "{{ item.description }}"
+      when: not wireguard_policy_preview or wireguard_plan.interface_exists
+      register: wireguard_rule_change
+    - name: Permit DNS from the authenticated laptop address only
+      oxlorg.opnsense.unbound_acl:
+        name: "{{ wireguard_plan.acl.name }}"
+        description: "{{ wireguard_plan.acl.description }}"
+        action: allow
+        networks: ["{{ opnsense_wireguard.peer_address }}/32"]
+        enabled: true
+        reload: false
+      register: wireguard_acl_change
+    - name: Enable the WireGuard service after saving its owned resources
+      oxlorg.opnsense.wireguard_general:
+        enabled: true
+      register: wireguard_general_change

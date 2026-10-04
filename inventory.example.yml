@@ -14,6 +14,7 @@ all:
           switch_management:
             vlan: 10
             address: 10.77.10.2/24
+            default_gateway: 10.77.10.254
             description: MGMT
             legacy_interface: Vlan1
             legacy_address: 10.77.55.1/24
@@ -136,6 +137,19 @@ all:
           opnsense_proxmox_host: pve01
           ansible_host: 10.77.10.254
           # Management pilot; select wan_connected: true on pve01 when using it.
+          opnsense_wireguard:
+            name: home_admin
+            peer_name: admin_mac
+            port: 51820
+            tunnel_subnet: 10.77.99.0/24
+            server_address: 10.77.99.1
+            peer_address: 10.77.99.2
+            endpoint: 10.77.200.254
+            management_subnet: 10.77.10.0/24
+            management_address: 10.77.10.254
+            proxmox_address: 10.77.10.10
+            switch_host: switch01
+            switch_address: 10.77.10.2
           opnsense_home_pilot:
             address: 10.77.200.254
             subnet: 10.77.200.0/24

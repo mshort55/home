@@ -38,7 +38,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 
 | Role | Public actions | Optional defaults | Argument contracts |
 |---|---|---|---|
-| [cisco_switch](../roles/cisco_switch/tasks/main.yml) | `backup`, `management`, `ports` | [defaults](../roles/cisco_switch/defaults/main.yml) | [schema](../roles/cisco_switch/meta/argument_specs.yml) |
+| [cisco_switch](../roles/cisco_switch/tasks/main.yml) | `backup`, `management`, `ports`, `gateway` | [defaults](../roles/cisco_switch/defaults/main.yml) | [schema](../roles/cisco_switch/meta/argument_specs.yml) |
 | [community_api](../roles/community_api/tasks/main.yml) | `load`, `prepare` | [defaults](../roles/community_api/defaults/main.yml) | [schema](../roles/community_api/meta/argument_specs.yml) |
 | [fortigate_backup](../roles/fortigate_backup/tasks/main.yml) | `backup` | [defaults](../roles/fortigate_backup/defaults/main.yml) | [schema](../roles/fortigate_backup/meta/argument_specs.yml) |
 | [idrac_backup](../roles/idrac_backup/tasks/main.yml) | `export` | [defaults](../roles/idrac_backup/defaults/main.yml) | [schema](../roles/idrac_backup/meta/argument_specs.yml) |
@@ -50,6 +50,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [opnsense_install](../roles/opnsense_install/tasks/main.yml) | `install` | [defaults](../roles/opnsense_install/defaults/main.yml) | [schema](../roles/opnsense_install/meta/argument_specs.yml) |
 | [opnsense_media](../roles/opnsense_media/tasks/main.yml) | `download`, `bootstrap` | [defaults](../roles/opnsense_media/defaults/main.yml) | [schema](../roles/opnsense_media/meta/argument_specs.yml) |
 | [opnsense_pilot](../roles/opnsense_pilot/tasks/main.yml) | `management`, `home` | [defaults](../roles/opnsense_pilot/defaults/main.yml) | [schema](../roles/opnsense_pilot/meta/argument_specs.yml) |
+| [opnsense_wireguard](../roles/opnsense_wireguard/tasks/main.yml) | `prepare`, `configure`, `verify` | [defaults](../roles/opnsense_wireguard/defaults/main.yml) | [schema](../roles/opnsense_wireguard/meta/argument_specs.yml) |
 | [opnsense_vm](../roles/opnsense_vm/tasks/main.yml) | `describe`, `create`, `verify` | [defaults](../roles/opnsense_vm/defaults/main.yml) | [schema](../roles/opnsense_vm/meta/argument_specs.yml) |
 | [proxmox_api](../roles/proxmox_api/tasks/main.yml) | `enroll` | [defaults](../roles/proxmox_api/defaults/main.yml) | [schema](../roles/proxmox_api/meta/argument_specs.yml) |
 | [proxmox_host](../roles/proxmox_host/tasks/main.yml) | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` | [defaults](../roles/proxmox_host/defaults/main.yml) | [schema](../roles/proxmox_host/meta/argument_specs.yml) |
@@ -66,7 +67,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 
 `describe` only builds the desired VM description from inventory and the pinned release; it makes no API, SSH or device request. Other runtime registers retain their existing workflow prefixes. Credentials loaded into named output dictionaries remain suppressed by `no_log`, with their controller files protected as before.
 
-The existing runtime Python/PHP/shell helpers remain under `scripts/`, pinned release metadata/signing keys under `files/`, and container build definitions under `containers/`. Role tasks resolve these assets from `role_path`, not from the caller's playbook directory. Templates are local to their owning role. Private inventory, encrypted Vault, existing disk/VM ownership markers, generated artifact paths and recovery-record formats remain compatible.
+The controller action plugin `plugins/action/wireguard_keys.py` prepares stable Vault-encrypted WireGuard keys using the unlocked Ansible Vault secret; `ansible.cfg` registers its plugin path. The existing runtime Python/PHP/shell helpers remain under `scripts/`, pinned release metadata/signing keys under `files/`, and container build definitions under `containers/`. Role tasks resolve these assets from `role_path`, not from the caller's playbook directory. Templates are local to their owning role. Private inventory, encrypted Vault, existing disk/VM ownership markers, generated artifact paths and recovery-record formats remain compatible.
 
 ## File layout
 
@@ -82,6 +83,7 @@ roles/
     tasks/
       _backup.yml
       backup.yml
+      gateway.yml
       main.yml
       management.yml
       ports.yml
@@ -212,6 +214,22 @@ roles/
       describe.yml
       main.yml
       verify.yml
+  opnsense_wireguard/
+    defaults/
+      main.yml
+    meta/
+      argument_specs.yml
+    tasks/
+      _backup.yml
+      _inputs.yml
+      _load.yml
+      _policy.yml
+      configure.yml
+      main.yml
+      prepare.yml
+      verify.yml
+    templates/
+      home-admin.conf.j2
   proxmox_api/
     defaults/
       main.yml
@@ -249,7 +267,7 @@ roles/
       prepare.yml
 ```
 
-All 43 orchestration files and their selected groups/actions are listed in [entry points](playbooks/entry-points.md). Generic `configure-*`/`manage-*` entry points require an explicit role action dictionary. Named entries keep their existing commands. Legacy action flags no longer select workflows; use the role parameter dictionary or the corresponding named entry.
+All 47 orchestration files and their selected groups/actions are listed in [entry points](playbooks/entry-points.md). Generic `configure-*`/`manage-*` entry points require an explicit role action dictionary. Named entries keep their existing commands. Legacy action flags no longer select workflows; use the role parameter dictionary or the corresponding named entry.
 
 The former `playbooks/tasks/` helpers are now task modules in `community_api`, `idrac_snapshot`, `idrac_iso`, `idrac_boot`, `opnsense_vm`, `opnsense_pilot` and `proxmox_host`. `playbooks/templates/iso-server.plist.j2` belongs to `roles/idrac_iso/templates/`; `playbooks/templates/proxmox-guest-bridges.j2` belongs to `roles/proxmox_host/templates/`. `README.md` indexes this architecture and the workflow usage documents.
 

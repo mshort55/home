@@ -31,6 +31,10 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [configure-switch-ports.yml](../../playbooks/configure-switch-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | Required explicit `task_action` |
 | [configure-switch-recovery-ports.yml](../../playbooks/configure-switch-recovery-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-server-ports.yml](../../playbooks/configure-switch-server-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
+| [configure-opnsense-wireguard.yml](../../playbooks/configure-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `configure` |
+| [configure-switch-gateway.yml](../../playbooks/configure-switch-gateway.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `gateway` |
+| [prepare-wireguard-client.yml](../../playbooks/prepare-wireguard-client.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
+| [verify-opnsense-wireguard.yml](../../playbooks/verify-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `verify` |
 | [create-opnsense-vm.yml](../../playbooks/create-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | `create` |
 | [eject-idrac-iso.yml](../../playbooks/eject-idrac-iso.yml) | `idracs` | [idrac_iso](../../roles/idrac_iso/tasks/main.yml) | `eject` |
 | [install-opnsense.yml](../../playbooks/install-opnsense.yml) | `proxmox_hosts` | [opnsense_install](../../roles/opnsense_install/tasks/main.yml) | `install` |
@@ -80,7 +84,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 
 | Parameter dictionary | Allowed `task_action` values |
 |---|---|
-| `cisco_switch_options` | `backup`, `management`, `ports` |
+| `cisco_switch_options` | `backup`, `management`, `ports`, `gateway` |
 | `community_api_options` | `load`, `prepare` |
 | `fortigate_backup_options` | `backup` |
 | `idrac_backup_options` | `export` |
@@ -92,6 +96,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `opnsense_install_options` | `install` |
 | `opnsense_media_options` | `download`, `bootstrap` |
 | `opnsense_pilot_options` | `management`, `home` |
+| `opnsense_wireguard_options` | `prepare`, `configure`, `verify` |
 | `opnsense_vm_options` | `describe`, `create`, `verify` |
 | `proxmox_api_options` | `enroll` |
 | `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |

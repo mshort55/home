@@ -1,0 +1,13 @@
+---
+- name: Prepare the private WireGuard Mac client
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  connection: local
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  roles:
+    - role: opnsense_wireguard
+      opnsense_wireguard_options:
+        task_action: prepare

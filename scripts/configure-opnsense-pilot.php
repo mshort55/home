@@ -96,6 +96,26 @@ function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$des
         }
         $remapped[$key] = $values;
     }
+    // A separate, protected workflow owns WireGuard rules and its DNS ACL.
+    // Preserve only the UUIDs and exact fields recorded by that workflow.
+    $retained = [];
+    $wireguardRecord = '/conf/ansible-wireguard/state.json';
+    if (is_file($wireguardRecord)) {
+        privatePath('/conf/ansible-wireguard', true);
+        privatePath($wireguardRecord, false);
+        $wireguard = json_decode(file_get_contents($wireguardRecord), true, 512, JSON_THROW_ON_ERROR);
+        global $seed;
+        requireCondition(($wireguard['version'] ?? null) === 1 && $wireguard['seed_id'] === $seed['seed_id'] && $wireguard['phase'] === 'complete', 'Complete or reconcile the owned WireGuard workflow first');
+        foreach ($wireguard['objects'][$label] ?? [] as $object) {
+            $identity = $object['values'][$field];
+            requireCondition(isset($existing[$identity]) && $existing[$identity]['uuid'] === $object['uuid'], 'Missing or replaced owned WireGuard ' . $label);
+            foreach ($object['values'] as $name => $value) {
+                requireCondition(($existing[$identity]['values'][$name] ?? '') === $value, 'Owned WireGuard policy drift; run configure-opnsense-wireguard.yml');
+            }
+            $retained[$object['uuid']] = $existing[$identity]['values'];
+            unset($existing[$identity]);
+        }
+    }
     requireCondition(count($existing) === 0, 'Unmanaged ' . $label . ' entry requires separate review');
     $desired = $remapped;
     // Build the candidate in memory for vendor validation; OXL performs the saves.
@@ -103,6 +123,9 @@ function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$des
         $container->del($key);
     }
     foreach ($desired as $key => $values) {
+        $container->add($key)->setNodes($values);
+    }
+    foreach ($retained as $key => $values) {
         $container->add($key)->setNodes($values);
     }
 }
@@ -183,7 +206,15 @@ try {
         requireCondition(str_starts_with(ipv4($host), $subnet) && !in_array($host, [$subnet . '0', $subnet . '255', $address], true), 'Hosts must be ordinary addresses on management /24');
     }
     $ssh = explode(' ', getenv('SSH_CONNECTION') ?: '');
-    requireCondition(in_array($ssh[0], $admins, true), 'Current SSH controller is absent from the explicit admin addresses');
+    $wireguardSource = null;
+    if (is_file('/conf/ansible-wireguard/state.json')) {
+        privatePath('/conf/ansible-wireguard', true);
+        privatePath('/conf/ansible-wireguard/state.json', false);
+        $wireguardIdentity = json_decode(file_get_contents('/conf/ansible-wireguard/state.json'), true, 512, JSON_THROW_ON_ERROR);
+        requireCondition(($wireguardIdentity['version'] ?? null) === 1 && $wireguardIdentity['seed_id'] === $seed['seed_id'] && $wireguardIdentity['phase'] === 'complete', 'Complete or reconcile the owned WireGuard workflow first');
+        $wireguardSource = $wireguardIdentity['input']['settings']['peer_address'];
+    }
+    requireCondition(in_array($ssh[0], $admins, true) || ($wireguardSource !== null && $ssh[0] === $wireguardSource), 'Current SSH controller is absent from the explicit wired or enrolled WireGuard administrator addresses');
     requireCondition(count($input['dns_servers']) === 2 && count(array_unique($input['dns_servers'])) === 2, 'Specify two distinct pinned DNS resolvers');
     foreach ($input['dns_servers'] as $server) {
         ipv4($server);

@@ -1,0 +1,21 @@
+---
+- name: Load the installed identity without writes
+  ansible.builtin.include_tasks: _load.yml
+- name: Verify saved and running WireGuard administration
+  ansible.builtin.raw: "printf '%s' {{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-wireguard.php') | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php -- verify {{ wireguard_payload | to_json | b64encode | quote }}"
+  changed_when: false
+  check_mode: false
+- name: Read peer and handshake status through OXL
+  oxlorg.opnsense.wireguard_show:
+    firewall: "{{ opn_api.firewall }}"
+    api_key: "{{ opn_api.api_key }}"
+    api_secret: "{{ opn_api.api_secret }}"
+    ssl_verify: true
+    ssl_ca_file: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: wireguard_status
+- name: Report the public WireGuard status
+  ansible.builtin.debug:
+    var: wireguard_status.data

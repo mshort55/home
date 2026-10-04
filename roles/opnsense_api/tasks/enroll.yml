@@ -80,6 +80,8 @@
     loop:
     - rule
     - dhcp_subnet
+    - wireguard_server
+    - wireguard_peer
     delegate_to: localhost
     vars:
       ansible_python_interpreter: "{{ ansible_playbook_python }}"

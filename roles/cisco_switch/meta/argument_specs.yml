@@ -5,7 +5,8 @@ argument_specs:
     options:
       cisco_switch_options:
         type: dict
-        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        description: Role-scoped parameters. The task_action field is required; there
+          is no default action.
         required: true
         options:
           task_action:
@@ -16,6 +17,7 @@ argument_specs:
             - backup
             - management
             - ports
+            - gateway
       switch_ports:
         type: list
         description: Inventory-owned access and trunk definitions.
@@ -93,16 +95,17 @@ argument_specs:
       backup_root:
         type: path
         description: Private controller backup parent.
-        default: "{{ (role_path ~ '/../..') | realpath }}/backups"
+        default: '{{ (role_path ~ ''/../..'') | realpath }}/backups'
       vault_file:
         type: path
         description: Encrypted controller credential source.
-        default: "{{ (role_path ~ '/../..') | realpath }}/secrets/vault.yml"
+        default: '{{ (role_path ~ ''/../..'') | realpath }}/secrets/vault.yml'
   backup:
     short_description: 'cisco_switch: backup.'
     options:
       cisco_switch_options:
-        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        description: Role-scoped parameters. The task_action field is required; there
+          is no default action.
         options:
           task_action:
             choices:
@@ -116,7 +119,8 @@ argument_specs:
     short_description: 'cisco_switch: management.'
     options:
       cisco_switch_options:
-        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        description: Role-scoped parameters. The task_action field is required; there
+          is no default action.
         options:
           task_action:
             choices:
@@ -140,7 +144,8 @@ argument_specs:
     short_description: 'cisco_switch: ports.'
     options:
       cisco_switch_options:
-        description: Role-scoped parameters. The task_action field is required; there is no default action.
+        description: Role-scoped parameters. The task_action field is required; there
+          is no default action.
         options:
           task_action:
             choices:
@@ -161,3 +166,44 @@ argument_specs:
         description: Explicit selected inventory roles; required for ports.
         elements: str
         required: true
+  gateway:
+    short_description: Configure an explicit management return route with IPv4 routing
+      disabled.
+    options:
+      cisco_switch_options:
+        type: dict
+        required: true
+        description: Explicit role action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - gateway
+            description: Select the gateway task file.
+      switch_management:
+        type: dict
+        required: true
+        description: Installed switch management identity and reviewed default gateway.
+        options:
+          vlan:
+            type: int
+            required: true
+            description: Existing MGMT VLAN.
+          address:
+            type: str
+            required: true
+            description: Existing MGMT IPv4 CIDR.
+          default_gateway:
+            type: str
+            required: true
+            description: Installed firewall on MGMT; used for routed reply traffic.
+          description:
+            type: str
+            description: Existing management SVI description; accepted from shared inventory without changing it.
+          legacy_interface:
+            type: str
+            description: Retained legacy SVI identity; accepted from shared inventory without changing it.
+          legacy_address:
+            type: str
+            description: Retained legacy IPv4 CIDR; accepted from shared inventory without changing it.

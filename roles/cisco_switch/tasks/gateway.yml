@@ -1,0 +1,89 @@
+---
+- name: Require the reviewed same-subnet management gateway
+  ansible.builtin.assert:
+    that:
+      - switch_management.default_gateway is match('^[0-9]{1,3}(\.[0-9]{1,3}){3}$')
+      - switch_management.default_gateway.split('.') | map('int') | max <= 255
+      - switch_management.default_gateway.split('.')[:3] == switch_management.address.split('/')[0].split('.')[:3]
+      - switch_management.default_gateway.split('.')[-1] | int > 0
+      - switch_management.default_gateway.split('.')[-1] | int < 255
+      - switch_management.default_gateway != switch_management.address.split('/')[0]
+    fail_msg: Define switch_management.default_gateway on the installed MGMT subnet.
+- name: Preserve the switch before an apply
+  ansible.builtin.include_tasks: _backup.yml
+  when: not ansible_check_mode
+- name: Read configurations and the installed management interface
+  cisco.ios.ios_command:
+    commands:
+      - show running-config
+      - show startup-config
+      - "show interfaces Vlan{{ switch_management.vlan }}"
+    retries: 1
+  register: switch_gateway_before
+  changed_when: false
+  no_log: true
+- name: Refuse routing, conflicting gateways, incomplete output or unrelated unsaved changes
+  ansible.builtin.assert:
+    that:
+      - switch_gateway_before.stdout | length == 3
+      - switch_gateway_before.stdout[0] is search('(?m)^version \S+')
+      - switch_gateway_before.stdout[1] is search('(?m)^version \S+')
+      - switch_gateway_before.stdout[0] is search('(?m)^end\s*$')
+      - switch_gateway_before.stdout[1] is search('(?m)^end\s*$')
+      - running_body == startup_body
+      - switch_gateway_before.stdout[0] is not search('(?m)^(ip routing|ipv6 unicast-routing|ip route )')
+      - current_gateways | length == 0 or current_gateways == [switch_management.default_gateway]
+      - switch_gateway_before.stdout[2] is search('line protocol is up')
+      - switch_gateway_before.stdout[2] is search('Internet address is ' ~ (switch_management.address | regex_escape))
+  vars:
+    running_body: "{{ switch_gateway_before.stdout[0] | regex_search('(?ms)^version .*') | regex_replace('(?ms)^crypto pki certificate chain .*?(?=^!)', '') }}"
+    startup_body: "{{ switch_gateway_before.stdout[1] | regex_search('(?ms)^version .*') | regex_replace('(?ms)^crypto pki certificate chain .*?(?=^!)', '') }}"
+    current_gateways: "{{ switch_gateway_before.stdout[0] | regex_findall('(?m)^ip default-gateway ([0-9.]+)[ ]*$') }}"
+  no_log: true
+- name: Verify the firewall gateway through the management SVI before setting a return route
+  cisco.ios.ios_command:
+    commands:
+      - "ping {{ switch_management.default_gateway }} source Vlan{{ switch_management.vlan }} repeat 3 timeout 2"
+    retries: 1
+  register: switch_gateway_probe
+  # ios_command otherwise discards ping in check mode. This diagnostic writes no configuration.
+  check_mode: false
+  changed_when: false
+  retries: 3
+  delay: 2
+  until:
+    - switch_gateway_probe is succeeded
+    - switch_gateway_probe.stdout | default([]) | length == 1
+    - (switch_gateway_probe.stdout | default([]) | first | default('')) is search('Success rate is 100 percent')
+- name: Require the installed gateway to respond
+  ansible.builtin.assert:
+    that:
+      - switch_gateway_probe.stdout | default([]) | length == 1
+      - (switch_gateway_probe.stdout | default([]) | first | default('')) is search('Success rate is 100 percent')
+    fail_msg: The MGMT gateway must respond from the switch before its return route is configured.
+- name: Set only the reviewed management default gateway
+  cisco.ios.ios_config:
+    lines: ["ip default-gateway {{ switch_management.default_gateway }}"]
+  register: switch_gateway_change
+- name: Read back the gateway
+  cisco.ios.ios_command:
+    commands: [show running-config]
+    retries: 1
+  register: switch_gateway_after
+  no_log: true
+  when: not ansible_check_mode
+- name: Verify the exact gateway and preserved disabled routing
+  ansible.builtin.assert:
+    that:
+      - switch_gateway_after.stdout[0] is search('(?m)^ip default-gateway ' ~ (switch_management.default_gateway | regex_escape) ~ '\s*$')
+      - switch_gateway_after.stdout[0] is not search('(?m)^(ip routing|ipv6 unicast-routing)\s*$')
+  no_log: true
+  when: not ansible_check_mode
+- name: Save the verified return route
+  cisco.ios.ios_config:
+    save_when: always
+  when: not ansible_check_mode and switch_gateway_change.changed
+  no_log: true
+- name: Report the bounded gateway change
+  ansible.builtin.debug:
+    msg: "{{ switch_gateway_change.commands | default([]) }}"

@@ -1,0 +1,20 @@
+---
+- name: Validate the effective WireGuard role inputs before selecting a task file
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+    validate_args_context:
+      name: opnsense_wireguard
+      type: role
+      argument_spec_name: main
+  tags: [always]
+- name: Validate the selected WireGuard action contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs[opnsense_wireguard_options.task_action].options }}"
+    validate_args_context:
+      name: opnsense_wireguard
+      type: role
+      argument_spec_name: "{{ opnsense_wireguard_options.task_action }}"
+  tags: [always]
+- name: Dispatch the explicit WireGuard action
+  ansible.builtin.include_tasks: "{{ opnsense_wireguard_options.task_action }}.yml"
+  tags: [always]

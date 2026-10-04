@@ -1,0 +1,28 @@
+---
+- name: Select the stable pre-change backup destination
+  ansible.builtin.set_fact:
+    wireguard_backup_directory: "{{ inventory_dir }}/backups/{{ inventory_hostname }}-wireguard-{{ (wireguard_complete.stdout | trim | from_json).backup | basename | regex_replace('^before-', '') | regex_replace('\\.xml$', '') }}"
+- name: Read the original backup without displaying its contents
+  ansible.builtin.raw: "/usr/bin/base64 {{ (wireguard_complete.stdout | trim | from_json).backup | quote }}"
+  register: wireguard_backup_bytes
+  changed_when: false
+  no_log: true
+- name: Create the protected controller backup directory
+  ansible.builtin.file:
+    path: "{{ wireguard_backup_directory }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+- name: Preserve the exact pre-change configuration privately
+  ansible.builtin.copy:
+    content: "{{ wireguard_backup_bytes.stdout | b64decode }}"
+    dest: "{{ wireguard_backup_directory }}/before.xml"
+    mode: '0600'
+    follow: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  no_log: true
+  diff: false

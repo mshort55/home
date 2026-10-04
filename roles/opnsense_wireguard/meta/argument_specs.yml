@@ -1,0 +1,126 @@
+---
+argument_specs:
+  main:
+    short_description: Validate and dispatch explicit WireGuard actions.
+    options:
+      opnsense_wireguard_options:
+        type: dict
+        required: true
+        description: Explicit role action; no default action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - prepare
+            - configure
+            - verify
+            description: Select the matching action task file.
+      opnsense_wireguard: &id001
+        type: dict
+        required: true
+        description: Explicit HOME-to-MGMT WireGuard allocation and named targets.
+        options:
+          name:
+            type: str
+            required: true
+            description: Stable owned WireGuard instance name.
+          peer_name:
+            type: str
+            required: true
+            description: Stable owned laptop peer name.
+          port:
+            type: int
+            required: true
+            description: HOME-only UDP listener port.
+          tunnel_subnet:
+            type: str
+            required: true
+            description: Distinct IPv4 /24 tunnel network.
+          server_address:
+            type: str
+            required: true
+            description: Firewall tunnel address.
+          peer_address:
+            type: str
+            required: true
+            description: Single laptop tunnel address; server permits only its /32.
+          endpoint:
+            type: str
+            required: true
+            description: Installed HOME pilot gateway; never the WAN address.
+          management_subnet:
+            type: str
+            required: true
+            description: Installed MGMT /24; the only routed client network.
+          management_address:
+            type: str
+            required: true
+            description: Firewall MGMT address for admin, DNS and NTP.
+          proxmox_address:
+            type: str
+            required: true
+            description: Named Proxmox management target.
+          switch_host:
+            type: str
+            required: true
+            description: Inventory switch identity.
+          switch_address:
+            type: str
+            required: true
+            description: Named switch management target.
+      wireguard_key_directory:
+        type: path
+        default: '{{ (role_path ~ ''/../..'') | realpath }}/.cache/wireguard/{{ inventory_hostname
+          }}'
+        description: Private controller directory holding encrypted keys and the Mac
+          import file.
+      wireguard_mtu:
+        type: int
+        default: 1420
+        description: "Tunnel and Mac MTU; constrained to 1280\u20131500."
+  prepare:
+    short_description: WireGuard prepare.
+    options:
+      opnsense_wireguard_options:
+        description: Explicit role action; no default action.
+        options:
+          task_action:
+            choices:
+            - prepare
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_wireguard: *id001
+  configure:
+    short_description: WireGuard configure.
+    options:
+      opnsense_wireguard_options:
+        description: Explicit role action; no default action.
+        options:
+          task_action:
+            choices:
+            - configure
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_wireguard: *id001
+  verify:
+    short_description: WireGuard verify.
+    options:
+      opnsense_wireguard_options:
+        description: Explicit role action; no default action.
+        options:
+          task_action:
+            choices:
+            - verify
+            description: Select the matching action task file.
+            required: true
+            type: str
+        required: true
+        type: dict
+      opnsense_wireguard: *id001

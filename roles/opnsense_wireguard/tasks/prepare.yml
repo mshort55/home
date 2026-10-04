@@ -1,0 +1,31 @@
+---
+- name: Validate the private client inputs
+  ansible.builtin.include_tasks: _inputs.yml
+- name: Generate or validate stable encrypted server and Mac keys
+  wireguard_keys:
+    directory: "{{ wireguard_key_directory }}"
+    identity: "{{ inventory_hostname }}"
+    settings: "{{ opnsense_wireguard }}"
+  register: wireguard_keys_result
+- name: Load only the protected encrypted key material
+  ansible.builtin.include_vars:
+    file: "{{ wireguard_keys_result.path }}"
+    name: wireguard_material
+  when: wireguard_keys_result.exists
+  no_log: true
+- name: Render the private Mac client configuration
+  ansible.builtin.template:
+    src: home-admin.conf.j2
+    dest: "{{ wireguard_key_directory }}/home-admin.conf"
+    mode: '0600'
+    follow: false
+  when: wireguard_keys_result.exists
+  no_log: true
+  diff: false
+- name: Report the protected artifacts without key contents
+  ansible.builtin.debug:
+    msg:
+      encrypted_keys: "{{ wireguard_key_directory }}/keys.vault.yml"
+      mac_client: "{{ wireguard_key_directory }}/home-admin.conf"
+      endpoint: "{{ opnsense_wireguard.endpoint }}:{{ opnsense_wireguard.port }}"
+      routes: ["{{ opnsense_wireguard.management_subnet }}", "{{ opnsense_wireguard.server_address }}/32"]

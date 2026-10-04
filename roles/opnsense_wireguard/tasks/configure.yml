@@ -1,0 +1,80 @@
+---
+- name: Reconcile local HOME WireGuard administration
+  vars:
+    wireguard_prefix: "printf '%s' {{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-wireguard.php') | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
+  block:
+    - name: Load the bounded inputs and protected key material
+      ansible.builtin.include_tasks: _load.yml
+    - name: Preview installed identity, native interface and policy without writes
+      ansible.builtin.raw: "{{ wireguard_prefix }} plan {{ wireguard_payload | to_json | b64encode | quote }}"
+      register: wireguard_preview
+      check_mode: false
+      changed_when: ansible_check_mode and (wireguard_preview.stdout | trim | from_json).reload_required
+    - name: Select the verified plan
+      ansible.builtin.set_fact:
+        wireguard_plan: "{{ wireguard_preview.stdout | trim | from_json }}"
+    - name: Require the explicitly enrolled WireGuard API privilege
+      ansible.builtin.assert:
+        that: [wireguard_plan.api_ready]
+        fail_msg: Run configure-opnsense-api.yml for opnsense01 to enroll the WireGuard privilege first.
+    - name: Preview supported resources using the community modules
+      ansible.builtin.include_tasks:
+        file: _policy.yml
+        apply:
+          check_mode: true
+      vars:
+        wireguard_policy_preview: true
+    - name: Report the bounded preview
+      ansible.builtin.debug:
+        msg:
+          changes: "{{ wireguard_plan.changes }}"
+          endpoint: "{{ opnsense_wireguard.endpoint }}:{{ opnsense_wireguard.port }}"
+          runtime_checks: "{{ wireguard_plan.runtime_checks }}"
+          access: Named firewall, Proxmox and switch management services only; no HOME, DEV, BMC or internet tunnel access
+    - name: Finish the preview before configuration or service writes
+      ansible.builtin.meta: end_role
+      when: ansible_check_mode
+    - name: Preserve the original configuration and record the owned interface and policy
+      ansible.builtin.raw: "{{ wireguard_prefix }} stage {{ wireguard_payload | to_json | b64encode | quote }}"
+      register: wireguard_stage
+      changed_when: (wireguard_stage.stdout | trim | from_json).changed
+    - name: Merge supported WireGuard and policy resources
+      ansible.builtin.include_tasks: _policy.yml
+      vars:
+        wireguard_policy_preview: false
+    - name: Apply pending WireGuard, firewall and DNS configuration through OXL
+      oxlorg.opnsense.reload:
+        firewall: "{{ opn_api.firewall }}"
+        api_key: "{{ opn_api.api_key }}"
+        api_secret: "{{ opn_api.api_secret }}"
+        ssl_verify: true
+        ssl_ca_file: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+        target: "{{ item }}"
+      loop: [wireguard, rule, unbound]
+      delegate_to: localhost
+      vars:
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      when: (wireguard_stage.stdout | trim | from_json).reload_required or wireguard_peer_change.changed or wireguard_server_change.changed or wireguard_rule_change.changed or wireguard_acl_change.changed or wireguard_general_change.changed
+    - name: Restore the owned tunnel address only when it is missing after reload
+      ansible.builtin.raw: "{{ wireguard_prefix }} activate {{ wireguard_payload | to_json | b64encode | quote }}"
+      register: wireguard_activation
+      changed_when: wireguard_activation.rc == 0 and (wireguard_activation.stdout | trim | from_json).changed
+      retries: 6
+      delay: 5
+      until: wireguard_activation is succeeded
+    - name: Verify the running tunnel, exact peer, loaded rules and DNS ACL before completing
+      ansible.builtin.raw: "{{ wireguard_prefix }} complete {{ wireguard_payload | to_json | b64encode | quote }}"
+      register: wireguard_complete
+      changed_when: wireguard_complete.rc == 0 and (wireguard_complete.stdout | trim | from_json).changed
+      retries: 12
+      delay: 5
+      until: wireguard_complete is succeeded
+    - name: Export the original protected configuration
+      ansible.builtin.include_tasks: _backup.yml
+    - name: Report the verified administration endpoint
+      ansible.builtin.debug:
+        msg:
+          endpoint: "{{ opnsense_wireguard.endpoint }}:{{ opnsense_wireguard.port }}"
+          client: "{{ wireguard_key_directory }}/home-admin.conf"
+          backup: "{{ wireguard_backup_directory }}"
+          next: Import the Mac client; test from HOME with WireGuard off and on, then run verify-opnsense-wireguard.yml

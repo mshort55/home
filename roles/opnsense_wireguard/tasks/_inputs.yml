@@ -1,0 +1,18 @@
+---
+- name: Require the enrolled management host and bounded pilot inputs
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname in groups.get('opnsense_hosts', [])
+      - opnsense_proxmox_host in groups.get('proxmox_hosts', [])
+      - opnsense_wireguard.name is match('^[A-Za-z0-9_.-]{1,64}$')
+      - opnsense_wireguard.peer_name is match('^[A-Za-z0-9_.-]{1,64}$')
+      - opnsense_wireguard.port >= 1 and opnsense_wireguard.port <= 65535
+      - wireguard_mtu >= 1280 and wireguard_mtu <= 1500
+      - opnsense_wireguard.management_address == ansible_host
+      - opnsense_wireguard.endpoint == opnsense_home_pilot.address
+      - opnsense_wireguard.proxmox_address == hostvars[opnsense_proxmox_host].ansible_host
+      - opnsense_wireguard.switch_host in groups.get('cisco_switches', [])
+      - opnsense_wireguard.switch_address == hostvars[opnsense_wireguard.switch_host].switch_management.address.split('/')[0]
+      - opnsense_wireguard.switch_address != opnsense_wireguard.proxmox_address
+      - wireguard_key_directory is match('^/')
+    fail_msg: Define the installed MGMT targets and HOME pilot endpoint in opnsense_wireguard.
