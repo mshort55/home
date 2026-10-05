@@ -1,13 +1,35 @@
 ---
-- name: Wait for cloud-init readiness through the hypervisor guest agent
+- name: Wait for the confined hypervisor guest agent to respond
   ansible.builtin.command:
-    argv: [qm, guest, exec, '200', --, /bin/sh, -c, 'test -f /var/lib/cloud/home-automation-ready && test "$(getenforce)" = Enforcing && systemctl is-active firewalld sshd qemu-guest-agent && ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key']
+    argv: [qm, guest, cmd, '200', ping]
+  changed_when: false
+  register: fedora_agent_check
+  retries: 60
+  delay: 10
+  until: fedora_agent_check.rc == 0
+- name: Wait for the seeded SSH listener through authenticated WireGuard routing
+  ansible.builtin.wait_for:
+    host: '{{ hostvars[fedora_dev_vm.guest_host].ansible_host }}'
+    port: 22
+    connect_timeout: 5
+    timeout: 600
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+- name: Verify cloud-init readiness using the pinned guest SSH identity
+  ansible.builtin.command:
+    argv: [/bin/sh, -c, 'test -f /var/lib/cloud/home-automation-ready && test "$(/usr/sbin/getenforce)" = Enforcing && /usr/bin/systemctl is-active firewalld sshd qemu-guest-agent && /usr/bin/ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key']
+  delegate_to: '{{ fedora_dev_vm.guest_host }}'
+  become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_use_tty: false
   changed_when: false
   register: fedora_guest_check
   retries: 60
   delay: 10
-  until: fedora_guest_check.rc == 0 and (fedora_guest_check.stdout | from_json).exitcode | default(1) == 0
+  until: fedora_guest_check.rc == 0
 - name: Match the installed guest host key to the controller's seeded identity
   ansible.builtin.assert:
     that:
-      - (lookup('ansible.builtin.file', fedora_seed_directory ~ '/ssh_host_ed25519_key.pub').split()[:2] | join(' ')) in (fedora_guest_check.stdout | from_json)['out-data']
+      - (lookup('ansible.builtin.file', fedora_seed_directory ~ '/ssh_host_ed25519_key.pub').split()[:2] | join(' ')) in fedora_guest_check.stdout

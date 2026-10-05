@@ -27,6 +27,20 @@ def protected(path: Path, directory: bool = False) -> None:
         raise ValueError("Unexpected installation artifact type")
 
 
+def hardware_differences(config: dict[str, Any], expected: dict[str, Any]) -> list[str]:
+    differences: list[str] = []
+    for key, value in expected.items():
+        actual = config.get(key)
+        if type(value) is int:
+            # Proxmox returns memory as a numeric string on some API versions.
+            matches = (type(actual) is int and actual == value) or (isinstance(actual, str) and actual == str(value))
+        else:
+            matches = actual == value
+        if not matches:
+            differences.append(key)
+    return differences
+
+
 def main() -> None:
     allocation = mapping(json.loads(sys.argv[1]))
     node = sys.argv[2]
@@ -54,8 +68,9 @@ def main() -> None:
             raise ValueError("VM has pending configuration changes")
         state = str(read("pvesh", "get", "/nodes/localhost/qemu/200/status/current", "--output-format", "json")["status"])
         expected = {"name": allocation["name"], "description": "Managed by create-fedora-dev-vm.yml; vmid=200", "cores": 4, "memory": 8192, "sockets": 1, "onboot": 0, "ostype": "l26", "scsihw": "virtio-scsi-single", "bios": "seabios", "serial0": "socket", "vga": "serial0"}
-        if any(config.get(key) != value for key, value in expected.items()):
-            raise ValueError("Owned VM hardware has drifted")
+        differences = hardware_differences(config, expected)
+        if differences:
+            raise ValueError("Owned VM hardware has drifted: " + ", ".join(differences))
         if str(config.get("agent", "")) not in ["1", "enabled=1"] or config.get("cicustom") != "user=home-cloudinit:snippets/dev01-user.yml":
             raise ValueError("Guest agent or seeded cloud-init selection differs")
         if config.get("ipconfig0") != f"ip={allocation['address']},gw={allocation['gateway']}" or config.get("nameserver") != allocation["dns"] or config.get("searchdomain") != allocation["domain"]:

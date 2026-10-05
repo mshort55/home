@@ -16,7 +16,7 @@ ansible-playbook playbooks/create-fedora-dev-vm.yml --limit pve01
 ansible-playbook playbooks/verify-fedora-dev-vm.yml --limit pve01
 ```
 
-Enable/verify [DEV routing](configure-opnsense-lab.md) before creation. Refresh and activate WireGuard before guest SSH. Preparation is local. Creation reaches Proxmox and the firewall; first-boot verification uses the authenticated hypervisor guest agent instead of a MGMT-to-DEV SSH allowance.
+Enable/verify [DEV routing](configure-opnsense-lab.md) before creation. Refresh and activate WireGuard on the controller's network path before creation or guest SSH. Preparation is local. Creation reaches Proxmox and the firewall; first-boot verification checks guest-agent liveness, then uses the pinned guest SSH identity through WireGuard with the named user's sudo permissions. Fedora's confined guest agent does not run administration probes. No MGMT-to-DEV SSH allowance is added.
 
 API enrollment supports a controlled upgrade from the exact previous owned role to add `VM.Config.Cloudinit`, preserving the original token and rejecting arbitrary privilege drift. Rerun enrollment before cloud-init VM creation.
 
