@@ -23,8 +23,11 @@ jobs:
           python-version: '3.12'
       - name: Install audit dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends cmake build-essential libssl-dev python3-dev
           python -m venv .venv-validation
+          .venv-validation/bin/python tools/install-ssh.py
           .venv-validation/bin/python -m pip install -r requirements-dev.txt
           .venv-validation/bin/python tools/install-validation-tools.py
-      - name: Audit both dependency locks and complete Git history
+      - name: Audit dependency and SSH build locks and complete Git history
         run: python3 tools/run-validation.py --checks repository secrets --audit

@@ -9,6 +9,7 @@ Run from the repository root on Linux:
 
 ```bash
 python3 -m venv .venv-validation
+.venv-validation/bin/python tools/install-ssh.py
 .venv-validation/bin/python -m pip install -r requirements-dev.txt
 .venv-validation/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
 .venv-validation/bin/python tools/install-validation-tools.py
@@ -23,6 +24,7 @@ provided by `shellcheck-py`. The native tool installer downloads pinned Hadolint
 and Gitleaks releases, verifies committed SHA-256 values, and installs them in
 `.cache/validation/bin`. Linux and macOS on ARM64 and x86-64 are supported.
 
+Install the SSH build prerequisites from the [README](../README.md) first.
 Setup requires internet access. The standard validation command performs offline
 checks after dependencies and collections are installed:
 
@@ -73,7 +75,7 @@ privacy and contract checks always run first.
 
 ## Security audit
 
-Run online vulnerability checks for both locked dependency sets and a redacted
+Run online vulnerability checks for runtime, validation and isolated SSH build dependencies and a redacted
 scan of all local Git refs with:
 
 ```bash
@@ -84,14 +86,14 @@ The separate security workflow runs on pushes, pull requests and Mondays. It
 fetches complete Git history. Audit findings and unavailable services produce a
 failed status; they are not silently ignored.
 
-The existing `paramiko==4.0.0` pin is currently reported under
-[CVE-2026-44405](https://github.com/advisories/GHSA-r374-rxx8-8654), for RSA SHA-1
-support. [Paramiko 5.0.0 removes RSA/SHA-1 and SHA-1 key exchange support](https://www.paramiko.org/changelog.html).
-The switch runbook explicitly requires legacy Paramiko compatibility, so this
-validation rollout retains the runtime pin and leaves the finding visible.
-Verify the switch's supported algorithms through a separate compatibility
-review before upgrading that runtime dependency. The security audit currently
-fails for this known finding; the offline validation suite can pass independently.
+The Paramiko dependency previously reported under
+[CVE-2026-44405](https://github.com/advisories/GHSA-r374-rxx8-8654) has been removed.
+The [SSH transport guide](ssh-transport.md) documents its replacement with pinned
+native libssh and the explicit Cisco compatibility policy. Both dependency checks
+and the security audit verify the Python/native SSH versions and policy-file
+support; a Python package scan alone would miss outdated embedded native code.
+The switch connection still requires legacy signatures/key exchange. Passing the
+package audit does not establish modern cryptography on that connection.
 
 ## Maintenance and intentional exceptions
 

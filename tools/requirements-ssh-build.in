@@ -1,0 +1,7 @@
+# Isolated build environment; none of these tools are infrastructure dependencies.
+cython==3.2.4
+expandvars==1.1.2
+packaging==26.3
+setuptools==84.0.0
+setuptools-scm==8.3.1
+wheel==0.48.0

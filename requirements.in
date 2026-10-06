@@ -1,5 +1,8 @@
 ansible-core==2.20.9
-paramiko==4.0.0
+# Install with tools/install-ssh.py before resolving/installing this lock.
+# Never install upstream wheels, which bundle an outdated native libssh.
+--no-binary ansible-pylibssh
+ansible-pylibssh==1.4.0
 proxmoxer==2.3.0
 requests==2.34.2
 httpx==0.28.1

@@ -23,11 +23,12 @@ jobs:
           python-version: '3.12'
       - name: Install validation dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends cmake build-essential libssl-dev python3-dev php-cli
           python -m venv .venv-validation
+          .venv-validation/bin/python tools/install-ssh.py
           .venv-validation/bin/python -m pip install -r requirements-dev.txt
           .venv-validation/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
           .venv-validation/bin/python tools/install-validation-tools.py
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends php-cli
       - name: Validate source and safety contracts
         run: python3 tools/run-validation.py

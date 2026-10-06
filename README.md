@@ -9,17 +9,21 @@ Run from this directory, using Python 3.12:
 ```bash
 cd /Repos/home
 python3 -m venv .venv
+.venv/bin/python tools/install-ssh.py
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
 ```
 
-`requirements.in` records direct Python dependencies; `requirements.txt` pins their resolved dependencies. Collections and their dependencies are pinned separately. The virtual environment and downloaded collections stay local and Git-ignored. Installation changes laptop files only.
+Install the SSH build prerequisites first: on Ubuntu use `sudo apt-get install cmake build-essential libssl-dev python3-dev`; on macOS install the Xcode command-line tools and run `brew install cmake openssl@3`. Keep operating-system/Homebrew security updates current. The [SSH transport guide](docs/ssh-transport.md) explains the native library and legacy compatibility scope.
+
+`requirements.in` records direct Python dependencies; `requirements.txt` pins their resolved dependencies. Run the SSH installer before installing either dependency lock; it builds verified libssh into the Python bindings. Collections and their dependencies are pinned separately. The virtual environment and downloaded collections stay local and Git-ignored. Installation changes laptop files only.
 
 When the repository is shared between a Linux container and a Mac, create a separate native Mac environment. Python must be 3.12 or later. Run in the Mac's terminal:
 
 ```bash
 cd /Users/$(whoami)/Repos/home
 python3 -m venv .venv-macos
+.venv-macos/bin/python tools/install-ssh.py
 .venv-macos/bin/python -m pip install -r requirements.txt
 .venv-macos/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
 ```

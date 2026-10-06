@@ -1,0 +1,13 @@
+{
+  "libssh": {
+    "version": "0.12.2",
+    "url": "https://www.libssh.org/files/0.12/libssh-0.12.2.tar.xz",
+    "sha256": "49560f677d96e3706a904ac2de1116e25f3680937d51e5c92198fcba4a1c1e9f"
+  },
+  "ansible-pylibssh": {
+    "version": "1.4.0",
+    "installed_version": "1.4.0+home1",
+    "url": "https://files.pythonhosted.org/packages/56/a9/1437294eb6e093c538262688d97979cc92407c033da92997d6e09348a248/ansible_pylibssh-1.4.0.tar.gz",
+    "sha256": "a48b5e6db21062bc6258548e6a3e4363043d40128f0e6b796774a59b6a7dbe82"
+  }
+}

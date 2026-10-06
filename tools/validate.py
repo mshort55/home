@@ -178,6 +178,7 @@ def main() -> int:
                 command([sys.executable, "-m", "pytest", "--cov", "--cov-report=term-missing"], env)
             elif check == "dependencies":
                 command([sys.executable, "-m", "pip", "check"], env)
+                command([sys.executable, "tools/check-ssh.py"], env)
                 from importlib.metadata import version
 
                 from packaging.requirements import Requirement
@@ -216,9 +217,10 @@ def main() -> int:
                     if json.loads(manifest.read_text())["collection_info"]["version"] != pin["version"]:
                         raise ValueError(f"Installed collection version differs: {pin['name']}")
         if args.audit:
+            command([sys.executable, "tools/check-ssh.py"], env)
             # Run every audit even when one reports a finding; do not hide existing vulnerabilities.
             failures = []
-            for filename in ["requirements.txt", "requirements-dev.txt"]:
+            for filename in ["requirements.txt", "requirements-dev.txt", "tools/requirements-ssh-build.txt"]:
                 try:
                     command([binary("pip-audit"), "--no-deps", "--disable-pip", "-r", filename], env)
                 except subprocess.CalledProcessError:

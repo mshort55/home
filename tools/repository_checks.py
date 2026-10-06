@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import configparser
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -133,8 +134,41 @@ def refresh_documentation(root: Path = ROOT) -> None:
         path.write_text(text[:start] + table + text[end:])
 
 
+def ssh_policy_errors(root: Path = ROOT) -> list[str]:
+    expected = {
+        "Host": ["*"],
+        "HostKeyAlgorithms": ["+ssh-rsa"],
+        "KexAlgorithms": ["+diffie-hellman-group14-sha1"],
+        "Ciphers": ["aes256-ctr,aes192-ctr,aes128-ctr"],
+        "MACs": ["+hmac-sha1"],
+    }
+    policy = {}
+    try:
+        for line in (root / "files/ssh/cisco-legacy.conf").read_text().splitlines():
+            tokens = shlex.split(line, comments=True)
+            if not tokens:
+                continue
+            if tokens[0] in policy:
+                return ["Duplicate legacy SSH policy directive"]
+            policy[tokens[0]] = tokens[1:]
+        if policy != expected:
+            return ["Legacy SSH policy changed beyond the reviewed device-specific exceptions"]
+        variables = load_yaml(root / "inventory.example.yml")["all"]["children"]["cisco_switches"]["vars"]
+        if (
+            variables.get("ansible_network_cli_ssh_type") != "libssh"
+            or variables.get("ansible_host_key_checking") is not True
+        ):
+            return ["Cisco inventory must use libssh with host-key verification"]
+        target = "{{ (playbook_dir ~ '/../files/ssh/cisco-legacy.conf') | realpath }}"
+        if variables.get("ansible_libssh_config_file") != target:
+            return ["Cisco inventory must explicitly select the repository's legacy SSH policy"]
+    except (OSError, ValueError, KeyError) as error:
+        return [f"SSH policy cannot be validated: {error}"]
+    return []
+
+
 def check_repository(root: Path = ROOT) -> list[str]:
-    errors = []
+    errors = ssh_policy_errors(root)
     files = source_files(root)
     environment = Environment()
     for relative in files:
@@ -147,7 +181,7 @@ def check_repository(root: Path = ROOT) -> list[str]:
         if path.is_symlink():
             errors.append(f"source symlink requires explicit handling: {relative}")
             continue
-        if path.suffix not in {".py", ".yml", ".yaml", ".j2", ".md", ".sh", ".php", ".toml", ".in", ".txt"}:
+        if path.suffix not in {".py", ".yml", ".yaml", ".j2", ".md", ".sh", ".php", ".toml", ".in", ".txt", ".conf"}:
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -206,7 +240,8 @@ def check_repository(root: Path = ROOT) -> list[str]:
         ("defaults", "private_role_vars", True),
         ("defaults", "display_args_to_stdout", False),
         ("persistent_connection", "log_messages", False),
-        ("paramiko_connection", "host_key_auto_add", False),
+        ("libssh_connection", "host_key_auto_add", False),
+        ("libssh_connection", "look_for_keys", False),
     ]:
         if config.getboolean(section, key) != expected:
             errors.append(f"Ansible trust/privacy configuration changed: {section}.{key}")
