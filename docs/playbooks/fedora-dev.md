@@ -41,6 +41,8 @@ ansible-playbook playbooks/verify-fedora-dev-connectivity.yml --limit dev01
 
 The guest role verifies identity, named-user key-only SSH, SELinux, services, permanent/runtime firewall policy, IPv4-only operation and cloud-init completion. Applications require explicit guest firewall openings even though the routed tunnel permits DEV workload ports.
 
+Guest baseline, verification and connectivity tasks use SSH without allocating a terminal, keeping terminal control output out of Ansible's module responses. This also applies to first-boot SSH readiness checks.
+
 For native Mac SSH, use `ssh -o UserKnownHostsFile=<checkout>/.cache/fedora-dev/dev01/known_hosts mjs@10.55.30.10` with an approved key. Verify guest DNS/public HTTPS and blocked guest-initiated MGMT/BMC/HOME/WG connections. Tunnel-off must deny lab access again; port 8 uses the same policy through the wired profile.
 
 ## Explicit power operations

@@ -11,5 +11,10 @@
       - ansible_host ~ '/24' == hostvars[fedora_proxmox_host].fedora_dev_vm.address
       - ansible_user == hostvars[fedora_proxmox_host].fedora_dev_vm.username
 - name: Dispatch the explicit guest baseline action
-  ansible.builtin.include_tasks: "{{ fedora_host_options.task_action }}.yml"
+  ansible.builtin.include_tasks:
+    file: "{{ fedora_host_options.task_action }}.yml"
+    apply:
+      vars:
+        # Module responses must not acquire terminal control output.
+        ansible_ssh_use_tty: false
   tags: [always]
