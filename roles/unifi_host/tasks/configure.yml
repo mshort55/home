@@ -1,0 +1,151 @@
+---
+- name: Verify the first-boot guard and guest baseline before installation
+  ansible.builtin.include_tasks: _baseline.yml
+- name: Ensure the vendor dependencies and DNS verification tool are installed
+  ansible.builtin.apt:
+    name: [podman, slirp4netns, passt, ca-certificates, nftables, python3, bind9-dnsutils]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+- name: Require the pinned protected installer on this controller
+  ansible.builtin.stat:
+    path: '{{ unifi_artifact_directory }}/uosserver-5.1.42-x64'
+    follow: false
+    checksum_algorithm: sha256
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  register: unifi_installer
+- name: Require exact official installer bytes before copying or execution
+  ansible.builtin.assert:
+    that:
+    - unifi_installer.stat.isreg | default(false)
+    - not unifi_installer.stat.islnk | default(false)
+    - unifi_installer.stat.mode == '0600'
+    - unifi_installer.stat.checksum == 'f6111e9396a42c74016f5dde9b01fbef486a6fe69efe137935e6e38b7c22f94d'
+- name: Inspect the original first-install marker and existing vendor service
+  ansible.builtin.stat:
+    path: '{{ item }}'
+    follow: false
+  loop:
+  - /var/lib/home-automation/unifi-installed.json
+  - /etc/systemd/system/uosserver.service
+  register: unifi_installation_paths
+- name: Refuse an unowned or incomplete existing vendor installation
+  ansible.builtin.assert:
+    that:
+    - unifi_installation_paths.results[0].stat.exists or not unifi_installation_paths.results[1].stat.exists
+    - not unifi_installation_paths.results[0].stat.exists or (unifi_installation_paths.results[0].stat.isreg and not unifi_installation_paths.results[0].stat.islnk and unifi_installation_paths.results[0].stat.mode == '0600' and unifi_installation_paths.results[0].stat.uid == 0)
+    fail_msg: An interrupted or unowned UniFi installation needs inspection; no reinstall or purge is performed.
+- name: Preview installation without staging the installer or starting the controller
+  ansible.builtin.debug:
+    msg: 'Install pinned UniFi OS 5.1.42 with rootless pasta networking behind the verified isolation guard.'
+  changed_when: not unifi_installation_paths.results[0].stat.exists
+  when: ansible_check_mode
+- name: Finish the guest preview before installation writes
+  ansible.builtin.meta: end_role
+  when: ansible_check_mode
+- name: Create the private installation record directory
+  ansible.builtin.file:
+    path: /var/lib/home-automation
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+- name: Require isolation for both vendor service units before either starts
+  ansible.builtin.copy:
+    dest: '/etc/systemd/system/{{ item }}.service.d/10-home-isolation.conf'
+    content: |
+      [Unit]
+      Requires=home-unifi-isolation.service
+      After=home-unifi-isolation.service
+      [Service]
+      ExecStartPre=+/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py verify /etc/home-automation/unifi-isolation.json
+    owner: root
+    group: root
+    mode: '0644'
+  loop: [uosserver, uosserver-updater]
+  register: unifi_service_guard
+- name: Reload unit dependencies when changed
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: unifi_service_guard.changed
+- name: Stage the exact installer only before its first execution
+  ansible.builtin.copy:
+    src: '{{ unifi_artifact_directory }}/uosserver-5.1.42-x64'
+    dest: /var/lib/home-automation/unifi-installer
+    owner: root
+    group: root
+    mode: '0700'
+    follow: false
+  when: not unifi_installation_paths.results[0].stat.exists
+- name: Confirm the copied installer digest before execution
+  ansible.builtin.stat:
+    path: /var/lib/home-automation/unifi-installer
+    follow: false
+    checksum_algorithm: sha256
+  register: unifi_staged_installer
+  when: not unifi_installation_paths.results[0].stat.exists
+- name: Require exact protected staged installer bytes
+  ansible.builtin.assert:
+    that:
+    - unifi_staged_installer.stat.isreg and not unifi_staged_installer.stat.islnk
+    - unifi_staged_installer.stat.checksum == unifi_installer.stat.checksum
+    - unifi_staged_installer.stat.mode == '0700'
+  when: not unifi_installation_paths.results[0].stat.exists
+- name: Record first-install ownership before the vendor can start its service
+  ansible.builtin.copy:
+    content: '{{ {"version": 1, "phase": "pending", "installer_sha256": unifi_installer.stat.checksum, "isolation": unifi_isolation_settings} | to_nice_json }}'
+    dest: /var/lib/home-automation/unifi-installed.json
+    owner: root
+    group: root
+    mode: '0600'
+    follow: false
+  when: not unifi_installation_paths.results[0].stat.exists
+- name: Install once using the inspected vendor noninteractive options
+  ansible.builtin.command:
+    argv: [/var/lib/home-automation/unifi-installer, --non-interactive, --network-mode, pasta, --web-port, '11443']
+  when: not unifi_installation_paths.results[0].stat.exists
+- name: Verify the original installer marker before resuming or completing
+  ansible.builtin.slurp:
+    src: /var/lib/home-automation/unifi-installed.json
+  register: unifi_installation_record
+- name: Require the matching immutable installer and isolation identity
+  ansible.builtin.assert:
+    that:
+    - (unifi_installation_record.content | b64decode | from_json).installer_sha256 == unifi_installer.stat.checksum
+    - (unifi_installation_record.content | b64decode | from_json).isolation == unifi_isolation_settings
+- name: Require the already installed controller service without attempting a reinstall
+  ansible.builtin.stat:
+    path: /etc/systemd/system/uosserver.service
+  register: unifi_service_after
+- name: Require the original installation to have created its vendor unit
+  ansible.builtin.assert:
+    that: unifi_service_after.stat.isreg | default(false)
+    fail_msg: The recorded installation is incomplete; inspect its vendor output before recovery. No automatic purge or reinstall is permitted.
+- name: Start the guarded controller and enable its guest startup
+  ansible.builtin.systemd_service:
+    name: uosserver
+    enabled: true
+    state: started
+- name: Wait for the isolated controller UI listener
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 11443
+    timeout: 300
+- name: Verify the installed guarded controller before completion
+  ansible.builtin.include_tasks: _installed.yml
+- name: Complete the first-install record after verification
+  ansible.builtin.copy:
+    content: '{{ (unifi_installation_record.content | b64decode | from_json) | combine({"phase": "complete"}) | to_nice_json }}'
+    dest: /var/lib/home-automation/unifi-installed.json
+    owner: root
+    group: root
+    mode: '0600'
+    follow: false
+- name: Report the next supported manual setup and TLS step
+  ansible.builtin.debug:
+    msg:
+      url: 'https://{{ ansible_host }}:11443'
+      next: 'Complete local-only setup, disable automatic application/device updates, and upload the prepared GUI TLS certificate/key before verify-unifi-restore-ready.yml. Leave the authoritative backup unrestored until that gate passes.'

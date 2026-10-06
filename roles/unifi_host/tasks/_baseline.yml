@@ -1,0 +1,46 @@
+---
+- name: Verify saved inputs, first-boot readiness and key-only guest administration
+  ansible.builtin.command:
+    argv:
+    - /usr/bin/python3
+    - -c
+    - |
+      import hashlib, json, pathlib, subprocess, sys
+      allocation, isolation = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+      def read(*args: str) -> str:
+          return subprocess.run(args, check=True, capture_output=True, text=True).stdout.strip()
+      if read('hostname', '-s') != allocation['name'] or json.loads(pathlib.Path('/etc/home-automation/unifi-isolation.json').read_text()) != isolation:
+          raise SystemExit('Controller identity or immutable isolation inputs differ')
+      for name in ['/usr/local/lib/home-automation/unifi-isolation.py', '/etc/home-automation/unifi-isolation.json']:
+          path = pathlib.Path(name)
+          if path.is_symlink() or not path.is_file() or path.stat().st_uid != 0 or path.stat().st_mode & 0o777 != 0o600:
+              raise SystemExit('Unprotected controller isolation artifact')
+      if hashlib.sha256(pathlib.Path('/usr/local/lib/home-automation/unifi-isolation.py').read_bytes()).hexdigest() != sys.argv[3]:
+          raise SystemExit('Controller isolation helper differs from the reviewed bootstrap')
+      if pathlib.Path('/etc/systemd/system/nftables.service').resolve() != pathlib.Path('/dev/null'):
+          raise SystemExit('The global-flush nftables unit must remain masked')
+      cloud = json.loads(read('/usr/bin/cloud-init', 'status', '--format', 'json'))
+      if cloud['status'] != 'done' or cloud['errors'] or cloud.get('recoverable_errors'):
+          raise SystemExit('Cloud-init is not complete without errors')
+      ssh = read('/usr/sbin/sshd', '-T').splitlines()
+      for expected in ['passwordauthentication no', 'kbdinteractiveauthentication no', 'permitrootlogin no', 'allowusers ' + allocation['username']]:
+          if expected not in ssh: raise SystemExit('Key-only SSH baseline differs')
+      if read('systemctl', 'is-active', 'home-unifi-isolation', 'ssh', 'qemu-guest-agent').splitlines() != ['active'] * 3 or read('systemctl', 'is-enabled', 'home-unifi-isolation') != 'enabled':
+          raise SystemExit('Required baseline services are not active/enabled')
+      addresses = json.loads(read('ip', '-j', 'address', 'show'))
+      if allocation['address'].split('/')[0] not in [item['local'] for interface in addresses for item in interface.get('addr_info', []) if item['family'] == 'inet']:
+          raise SystemExit('Controller static address differs')
+      routes = json.loads(read('ip', '-j', 'route', 'show', 'default'))
+      if len(routes) != 1 or routes[0]['gateway'] != allocation['gateway'] or pathlib.Path('/proc/sys/net/ipv6/conf/all/disable_ipv6').read_text().strip() != '1':
+          raise SystemExit('Controller routing or IPv4-only baseline differs')
+      print(json.dumps({'cloud_init': 'done', 'isolation': 'verified', 'ssh': 'key-only'}))
+    - '{{ unifi_allocation | to_json }}'
+    - '{{ unifi_isolation_settings | to_json }}'
+    - '{{ lookup("ansible.builtin.file", role_path ~ "/../../scripts/unifi-isolation.py", rstrip=false) | hash("sha256") }}'
+  changed_when: false
+  check_mode: false
+- name: Verify the protected saved and exact loaded isolation guard before installation or restore
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, /usr/local/lib/home-automation/unifi-isolation.py, verify, /etc/home-automation/unifi-isolation.json]
+  changed_when: false
+  check_mode: false

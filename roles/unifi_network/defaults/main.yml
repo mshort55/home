@@ -1,0 +1,2 @@
+---
+unifi_firewall_host: '{{ hostvars[unifi_proxmox_host].opnsense_guest }}'

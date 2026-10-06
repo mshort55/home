@@ -1,0 +1,87 @@
+---
+- name: Load the bounded network API
+  ansible.builtin.include_tasks: _load.yml
+- name: Preview saved and loaded controller policy without writes
+  ansible.builtin.raw: '{{ unifi_network_prefix }} plan {{ unifi_network_payload | to_json | b64encode | quote }}'
+  delegate_to: '{{ unifi_firewall_host }}'
+  check_mode: false
+  changed_when: false
+  register: unifi_network_preview
+- name: Select the validated controller policy
+  ansible.builtin.set_fact:
+    unifi_network_plan: '{{ unifi_network_preview.stdout | trim | from_json }}'
+- name: Preview the supported API merges
+  ansible.builtin.include_tasks:
+    file: _policy.yml
+    apply:
+      check_mode: true
+- name: Report the controller network scope
+  ansible.builtin.debug:
+    msg:
+      changes: '{{ unifi_network_plan.changes }}'
+      access: 'Only authenticated tunnel SSH/HTTPS and controller public HTTP/HTTPS downloads; private-network denies remain.'
+- name: Finish preview before policy intent or device writes
+  ansible.builtin.meta: end_role
+  when: ansible_check_mode
+- name: Preserve the original firewall configuration and record controller policy intent
+  ansible.builtin.raw: '{{ unifi_network_prefix }} stage {{ unifi_network_payload | to_json | b64encode | quote }}'
+  delegate_to: '{{ unifi_firewall_host }}'
+  register: unifi_network_stage
+  changed_when: unifi_network_stage.rc == 0 and (unifi_network_stage.stdout | trim | from_json).changed
+- name: Apply the named controller policy objects
+  ansible.builtin.include_tasks: _policy.yml
+- name: Load saved firewall and DNS changes or an interrupted transaction
+  oxlorg.opnsense.reload:
+    firewall: '{{ opn_api.firewall }}'
+    api_key: '{{ opn_api.api_key }}'
+    api_secret: '{{ opn_api.api_secret }}'
+    ssl_verify: true
+    ssl_ca_file: '{{ inventory_dir }}/.cache/community-api/{{ unifi_firewall_host }}/ca.pem'
+    target: '{{ item }}'
+  loop: [rule, unbound]
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  when: unifi_network_plan.reload_required or unifi_network_rule_changes.changed or unifi_network_dns_change.changed
+- name: Complete only after saved rules, loaded rules and DNS match
+  ansible.builtin.raw: '{{ unifi_network_prefix }} complete {{ unifi_network_payload | to_json | b64encode | quote }}'
+  delegate_to: '{{ unifi_firewall_host }}'
+  register: unifi_network_complete
+  changed_when: unifi_network_complete.rc == 0 and (unifi_network_complete.stdout | trim | from_json).changed
+- name: Fetch the original protected device configuration
+  ansible.builtin.slurp:
+    src: '{{ (unifi_network_complete.stdout | trim | from_json).backup }}'
+  delegate_to: '{{ unifi_firewall_host }}'
+  vars:
+    ansible_python_interpreter: /usr/local/bin/python3
+  register: unifi_network_backup
+  no_log: true
+- name: Export the original backup privately to this controller
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  block:
+  - name: Create the private backup parent
+    ansible.builtin.file:
+      path: '{{ inventory_dir }}/backups'
+      state: directory
+      mode: '0700'
+  - name: Select the controller export directory from the preserved device backup identity
+    ansible.builtin.set_fact:
+      unifi_network_backup_directory:
+        path: '{{ inventory_dir }}/backups/{{ unifi_firewall_host }}-unifi-{{ (unifi_network_complete.stdout | trim | from_json).backup | basename | regex_replace("[.]xml$", "") }}'
+  - name: Create the private export directory without duplicating a repeated backup
+    ansible.builtin.file:
+      path: '{{ unifi_network_backup_directory.path }}'
+      state: directory
+      mode: '0700'
+  - name: Save the exact original firewall configuration privately
+    ansible.builtin.copy:
+      content: '{{ unifi_network_backup.content | b64decode }}'
+      dest: '{{ unifi_network_backup_directory.path }}/before.xml'
+      mode: '0600'
+    no_log: true
+    diff: false
+- name: Report the protected controller network backup
+  ansible.builtin.debug:
+    msg: '{{ unifi_network_backup_directory.path }}/before.xml'

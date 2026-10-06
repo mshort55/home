@@ -1,0 +1,14 @@
+[Unit]
+Description=Isolate the UniFi backup restore rehearsal
+Before=uosserver.service
+Wants=network-pre.target
+Before=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py apply /etc/home-automation/unifi-isolation.json
+ExecReload=/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py apply /etc/home-automation/unifi-isolation.json
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+argument_specs:
+  main:
+    short_description: Own only the controller DNS and bounded MGMT/WireGuard rules.
+    options:
+      unifi_network_options:
+        type: dict
+        required: true
+        description: Explicit controller network operation.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - configure
+            - verify
+            description: Matching public task filename.
+      unifi_proxmox_host:
+        type: str
+        required: true
+        description: Inventory host owning VM 110.
+      unifi_firewall_host:
+        type: str
+        default: '{{ hostvars[unifi_proxmox_host].opnsense_guest }}'
+        description: Enrolled firewall whose policy gates the rehearsal.

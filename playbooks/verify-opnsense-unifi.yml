@@ -1,0 +1,10 @@
+---
+- name: Verify saved and loaded controller policy
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  roles:
+  - role: unifi_network
+    unifi_network_options:
+      task_action: verify
+    unifi_proxmox_host: '{{ opnsense_proxmox_host }}'

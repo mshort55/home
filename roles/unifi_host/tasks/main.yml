@@ -1,0 +1,20 @@
+---
+- name: Validate the effective isolated UniFi guest contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+- name: Require the owned controller inventory identity
+  ansible.builtin.assert:
+    that:
+    - inventory_hostname in groups.get('unifi_hosts', [])
+    - inventory_hostname == hostvars[unifi_proxmox_host].unifi_vm_allocation.guest_host
+    - ansible_host ~ '/24' == hostvars[unifi_proxmox_host].unifi_vm_allocation.address
+    - ansible_user == hostvars[unifi_proxmox_host].unifi_vm_allocation.username
+- name: Dispatch the explicit isolated controller guest action
+  ansible.builtin.include_tasks:
+    file: '{{ unifi_host_options.task_action }}.yml'
+    apply:
+      vars:
+        ansible_ssh_use_tty: false
+  vars:
+    unifi_allocation: '{{ hostvars[unifi_proxmox_host].unifi_vm_allocation }}'
+    unifi_isolation_settings: '{{ {"hostname": unifi_allocation.name, "gateway": unifi_allocation.gateway, "tunnel_address": unifi_allocation.tunnel_address, "recovery_address": unifi_allocation.recovery_address} }}'

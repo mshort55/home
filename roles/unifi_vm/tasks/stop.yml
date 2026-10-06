@@ -1,0 +1,35 @@
+---
+- name: Verify ownership before the explicit power transition
+  ansible.builtin.include_tasks: _read.yml
+- name: Require the completed owned UniFi installation
+  ansible.builtin.assert:
+    that: [unifi_current.exists, unifi_current.previous.phase == 'complete']
+- name: Preview the explicit controller power transition without a write
+  ansible.builtin.debug:
+    msg: 'VM 110 would be stopped; no hardware changes are requested.'
+  changed_when: unifi_current.state != 'stopped'
+  when: ansible_check_mode
+- name: Apply only the requested guest power state
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ pve_api.api_host }}"
+    api_user: "{{ pve_api.api_user }}"
+    api_token_id: "{{ pve_api.api_token_id }}"
+    api_token_secret: "{{ pve_api.api_token_secret }}"
+    validate_certs: true
+    ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+    node: "{{ inventory_hostname }}"
+    vmid: 110
+    state: stopped
+    force: false
+    timeout: 120
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  when: not ansible_check_mode
+- name: Read back the owned hardware and requested power state
+  ansible.builtin.include_tasks: _read.yml
+  when: not ansible_check_mode
+- name: Require the exact requested controller power state
+  ansible.builtin.assert:
+    that: unifi_current.state == 'stopped'
+  when: not ansible_check_mode

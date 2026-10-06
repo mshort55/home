@@ -58,12 +58,14 @@ def main() -> None:
     require(allocation.get('node') == node and allocation.get('vmid') == 100 and allocation.get('type') == 'qemu'
             and allocation.get('name') == guest and allocation.get('status') == 'running', 'Firewall allocation conflicts')
     for extra in [item for item in allocations if item.get('vmid') != 100]:
-        require(extra.get('vmid') == 200 and extra.get('node') == node and extra.get('type') == 'qemu'
-                and lab.get('allocation') is not None, 'Unowned additional guest requires separate maintenance review')
-        inspected = mapping(json.loads(run(sys.executable, '-c', str(lab['probe']), json.dumps(lab['allocation']), node)))
+        controller = extra.get('vmid') == 110
+        allocation_key, probe_key = ('unifi_allocation', 'unifi_probe') if controller else ('allocation', 'probe')
+        require(extra.get('vmid') in [110, 200] and extra.get('node') == node and extra.get('type') == 'qemu'
+                and lab.get(allocation_key) is not None, 'Unowned additional guest requires separate maintenance review')
+        inspected = mapping(json.loads(run(sys.executable, '-c', str(lab[probe_key]), json.dumps(lab[allocation_key]), node)))
         previous = mapping(inspected['previous'])
-        require(inspected.get('exists') is True and previous.get('phase') == 'complete', 'Complete the owned development installation before host maintenance')
-        require(lab.get('action') != 'reboot' or inspected.get('state') == 'stopped',
+        require(inspected.get('exists') is True and previous.get('phase') == 'complete', 'Complete the owned guest installation before host maintenance')
+        require(controller or lab.get('action') != 'reboot' or inspected.get('state') == 'stopped',
                 'Stop the development VM with stop-fedora-dev-vm.yml before host reboot; it has manual startup policy')
 
     directory = Path('/var/lib/home-automation/opnsense-100')

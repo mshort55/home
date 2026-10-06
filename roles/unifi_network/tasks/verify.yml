@@ -1,0 +1,7 @@
+---
+- name: Verify saved and loaded controller network policy without writes
+  ansible.builtin.raw: '{{ unifi_network_prefix }} verify {{ unifi_network_payload | to_json | b64encode | quote }}'
+  delegate_to: '{{ unifi_firewall_host }}'
+  become: false
+  check_mode: false
+  changed_when: false

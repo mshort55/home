@@ -63,6 +63,16 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [verify-idrac-iso-boot.yml](../../playbooks/verify-idrac-iso-boot.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | `verify` |
 | [verify-idrac-network.yml](../../playbooks/verify-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `verify` |
 | [verify-opnsense-vm.yml](../../playbooks/verify-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | `verify` |
+| [configure-opnsense-unifi.yml](../../playbooks/configure-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `configure` |
+| [configure-unifi-host.yml](../../playbooks/configure-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configure` |
+| [create-unifi-vm.yml](../../playbooks/create-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `create` |
+| [prepare-unifi.yml](../../playbooks/prepare-unifi.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `prepare` |
+| [start-unifi-vm.yml](../../playbooks/start-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `start` |
+| [stop-unifi-vm.yml](../../playbooks/stop-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `stop` |
+| [verify-opnsense-unifi.yml](../../playbooks/verify-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `verify` |
+| [verify-unifi-host.yml](../../playbooks/verify-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `verify` |
+| [verify-unifi-restore-ready.yml](../../playbooks/verify-unifi-restore-ready.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `restore_ready` |
+| [verify-unifi-vm.yml](../../playbooks/verify-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `verify` |
 
 ## Custom action selection
 
@@ -112,6 +122,9 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `proxmox_api_options` | `enroll` |
 | `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |
 | `proxmox_installer_options` | `prepare` |
+| `unifi_host_options` | `configure`, `verify`, `restore_ready` |
+| `unifi_network_options` | `configure`, `verify` |
+| `unifi_vm_options` | `prepare`, `create`, `verify`, `start`, `stop` |
 
 ## Inputs and execution environment
 
@@ -138,3 +151,5 @@ With a local ISO source, media operations run from the native Mac. ISO status di
 `configure-opnsense-{bmc,dev}.yml`, `verify-opnsense-{bmc,dev}.yml`, `disable-opnsense-{bmc,dev}.yml` and `verify-opnsense-{bmc,dev}-disabled.yml` invoke `opnsense_lab` with an explicit action and zone. `prepare-wireguard-clients.yml` refreshes both existing profiles from completed zone records; it performs no device writes. `verify-idrac-bmc-route.yml` reads the current static interface and gateway without requiring an old import task.
 
 `prepare-fedora-dev.yml`, `create-fedora-dev-vm.yml`, `verify-fedora-dev-vm.yml`, `start-fedora-dev-vm.yml` and `stop-fedora-dev-vm.yml` invoke `fedora_dev`. `configure-fedora-dev-host.yml`, `verify-fedora-dev-host.yml` and `verify-fedora-dev-connectivity.yml` invoke `fedora_host` with `configure`, `verify` and `connectivity`. See [lab access](configure-opnsense-lab.md) and [Fedora provisioning](fedora-dev.md) for dependencies and usage.
+
+The [isolated UniFi controller runbook](unifi-controller.md) orders preparation, scoped firewall/DNS, VM creation, guarded guest installation and the manual restoration gate. AP adoption remains a separate migration operation.

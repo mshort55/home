@@ -1,0 +1,260 @@
+- name: Provision the owned permanent UniFi guest
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: '{{ pve_api.api_host }}'
+      api_user: '{{ pve_api.api_user }}'
+      api_token_id: '{{ pve_api.api_token_id }}'
+      api_token_secret: '{{ pve_api.api_token_secret }}'
+      validate_certs: true
+      ca_path: '{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem'
+      api_timeout: 30
+  block:
+  - name: Verify controller network policy before any VM allocation
+    ansible.builtin.include_role:
+      name: unifi_network
+      public: false
+    vars:
+      unifi_network_options: {task_action: verify}
+      unifi_proxmox_host: '{{ inventory_hostname }}'
+  - name: Read VM ownership before any writes
+    ansible.builtin.include_tasks: _read.yml
+  - name: Require an owned disk boot before resuming a running first installation
+    ansible.builtin.assert:
+      that:
+      - unifi_current.state in ['absent', 'stopped'] or (unifi_current.has_disk and unifi_current.config.boot == 'order=scsi0')
+      fail_msg: Running guest has an unexpected boot state; no disk or boot changes were requested.
+  - name: Inspect verified private controller artifacts
+    ansible.builtin.stat:
+      path: '{{ item }}'
+      follow: false
+      checksum_algorithm: sha256
+    loop:
+    - '{{ unifi_artifact_directory }}/ubuntu-24.04-server-cloudimg-amd64.img'
+    - '{{ unifi_artifact_directory }}/completion.json'
+    - '{{ unifi_seed_directory }}/user-data.yml'
+    - '{{ unifi_seed_directory }}/known_hosts'
+    delegate_to: localhost
+    register: unifi_artifacts
+    no_log: true
+  - name: Require verified nonsymlink controller artifacts
+    ansible.builtin.assert:
+      that:
+      - item.stat.isreg | default(false)
+      - not item.stat.islnk | default(false)
+      - item.stat.mode == '0600'
+    loop: '{{ unifi_artifacts.results }}'
+    no_log: true
+  - name: Match the image and seeded keys to the previous VM intent
+    ansible.builtin.assert:
+      that:
+      - unifi_artifacts.results[0].stat.checksum == '6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2'
+      - (lookup('ansible.builtin.file', unifi_artifact_directory ~ '/completion.json') | from_json).signer == 'D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81'
+      - not unifi_current.previous or unifi_current.previous.seed_sha256 == unifi_artifacts.results[2].stat.checksum
+      fail_msg: Prepare the pinned image and stable private seed first; an existing guest never receives replacement bootstrap
+        keys.
+  - name: Finish creation preview before storage or VM writes
+    ansible.builtin.meta: end_role
+    when: ansible_check_mode
+  - name: Create the protected VM intent directory
+    ansible.builtin.file:
+      path: /var/lib/home-automation/unifi-110
+      state: directory
+      mode: '0700'
+  - name: Record ownership before any VM or disk allocation
+    ansible.builtin.copy:
+      content: '{{ {''version'': 1, ''phase'': ''pending'', ''allocation'': unifi_vm_allocation, ''seed_sha256'': unifi_artifacts.results[2].stat.checksum}
+        | to_nice_json }} '
+      dest: /var/lib/home-automation/unifi-110/intent.json
+      mode: '0600'
+      follow: false
+    when: not unifi_current.previous
+  - name: Prepare a dedicated local cloud-init snippet directory
+    ansible.builtin.file:
+      path: /var/lib/home-automation/cloud-init/snippets
+      state: directory
+      mode: '0700'
+  - name: Inspect the dedicated snippet storage before registration
+    ansible.builtin.command:
+      argv:
+      - pvesh
+      - get
+      - /storage
+      - --output-format
+      - json
+    changed_when: false
+    register: unifi_storage_read
+  - name: Refuse a conflicting dedicated snippet storage
+    ansible.builtin.assert:
+      that:
+      - not snippet_storage or (snippet_storage | length == 1 and snippet_storage[0].type == 'dir' and snippet_storage[0].path
+        == '/var/lib/home-automation/cloud-init' and snippet_storage[0].content == 'snippets' and snippet_storage[0].nodes
+        == inventory_hostname)
+    vars:
+      snippet_storage: '{{ unifi_storage_read.stdout | from_json | selectattr(''storage'', ''equalto'', ''home-cloudinit'')
+        | list }}'
+  - name: Register only the dedicated node-local snippet storage
+    ansible.builtin.command:
+      argv:
+      - pvesm
+      - add
+      - dir
+      - home-cloudinit
+      - --path
+      - /var/lib/home-automation/cloud-init
+      - --content
+      - snippets
+      - --nodes
+      - '{{ inventory_hostname }}'
+      - --shared
+      - '0'
+    when: unifi_storage_read.stdout | from_json | selectattr('storage', 'equalto', 'home-cloudinit') | list | length == 0
+  - name: Stage the protected cloud-init seed without displaying its host key
+    ansible.builtin.copy:
+      src: '{{ unifi_seed_directory }}/user-data.yml'
+      dest: /var/lib/home-automation/cloud-init/snippets/unifi01-user.yml
+      mode: '0600'
+      follow: false
+    no_log: true
+    diff: false
+  - name: Create the VM shell and cloud-init disk once through the community API
+    community.proxmox.proxmox_kvm:
+      node: '{{ inventory_hostname }}'
+      vmid: 110
+      name: '{{ unifi_vm_allocation.name }}'
+      description: Managed by create-unifi-vm.yml; vmid=110
+      cores: 2
+      sockets: 1
+      memory: 4096
+      balloon: 0
+      bios: seabios
+      ostype: l26
+      scsihw: virtio-scsi-single
+      serial:
+        serial0: socket
+      vga: serial0
+      net:
+        net0: virtio={{ unifi_vm_allocation.mac }},bridge={{ unifi_vm_allocation.bridge }},tag=10
+      ide:
+        ide2: '{{ unifi_vm_allocation.storage }}:cloudinit'
+      ipconfig:
+        ipconfig0: ip={{ unifi_vm_allocation.address }},gw={{ unifi_vm_allocation.gateway }}
+      nameservers:
+      - '{{ unifi_vm_allocation.dns }}'
+      searchdomains:
+      - '{{ unifi_vm_allocation.domain }}'
+      cicustom: user=home-cloudinit:snippets/unifi01-user.yml
+      onboot: false
+      state: present
+      timeout: 180
+      agent: enabled=1
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    when: not unifi_current.exists
+  - name: Set only the owned controller startup order through trusted root SSH
+    ansible.builtin.command:
+      argv:
+      - /usr/bin/python3
+      - -c
+      - '{{ lookup("ansible.builtin.file", role_path ~ "/../../scripts/configure-unifi-vm-startup.py") }}'
+      - prepare
+      - '{{ unifi_vm_allocation | to_json }}'
+      - '{{ inventory_hostname }}'
+      - '{{ lookup("ansible.builtin.file", role_path ~ "/../../scripts/inspect-unifi-vm.py") }}'
+    register: unifi_startup_preparation
+    changed_when: unifi_startup_preparation.rc == 0 and (unifi_startup_preparation.stdout | from_json).changed
+  - name: Stage the exact verified cloud image only before its first disk import
+    ansible.builtin.copy:
+      src: '{{ unifi_artifact_directory }}/ubuntu-24.04-server-cloudimg-amd64.img'
+      dest: /var/lib/home-automation/unifi-110/source.qcow2
+      mode: '0600'
+      follow: false
+    when: not unifi_current.has_disk
+  - name: Verify the staged image before importing guest disk bytes
+    ansible.builtin.stat:
+      path: /var/lib/home-automation/unifi-110/source.qcow2
+      follow: false
+      checksum_algorithm: sha256
+    register: unifi_staged_image
+    when: not unifi_current.has_disk
+  - name: Require exact protected staged image bytes
+    ansible.builtin.assert:
+      that:
+      - unifi_staged_image.stat.isreg and not unifi_staged_image.stat.islnk
+      - unifi_staged_image.stat.mode == '0600'
+      - unifi_staged_image.stat.checksum == unifi_artifacts.results[0].stat.checksum
+    when: not unifi_current.has_disk
+  - name: Recheck ownership immediately before the first disk import
+    ansible.builtin.include_tasks: _read.yml
+  - name: Import and attach the verified image only to the stopped diskless owned VM
+    ansible.builtin.command:
+      argv:
+      - qm
+      - set
+      - '110'
+      - --scsi0
+      - '{{ unifi_vm_allocation.storage }}:0,import-from=/var/lib/home-automation/unifi-110/source.qcow2,discard=on,iothread=1'
+    when: not unifi_current.has_disk and unifi_current.state == 'stopped'
+  - name: Grow the owned system disk to its absolute allocation through the API
+    community.proxmox.proxmox_disk:
+      vmid: 110
+      disk: scsi0
+      state: resized
+      size: 32G
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    when: unifi_current.previous.phase != 'complete' and unifi_current.state == 'stopped'
+  - name: Select the imported disk for the first boot through the API
+    community.proxmox.proxmox_kvm:
+      node: '{{ inventory_hostname }}'
+      vmid: 110
+      update: true
+      boot: order=scsi0
+      state: present
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    when: unifi_current.previous.phase != 'complete' and unifi_current.state == 'stopped'
+  - name: Start the initial disk boot through the community API
+    community.proxmox.proxmox_kvm:
+      node: '{{ inventory_hostname }}'
+      vmid: 110
+      state: started
+      timeout: 120
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    when: unifi_current.previous.phase != 'complete' and unifi_current.state == 'stopped'
+  - name: Verify the installed Ubuntu guest through its pinned SSH identity
+    ansible.builtin.include_tasks: _guest.yml
+    when: unifi_current.previous.phase != 'complete' or unifi_current.state == 'running'
+  - name: Enable automatic startup only after the first-boot checks pass
+    ansible.builtin.command:
+      argv:
+      - /usr/bin/python3
+      - -c
+      - '{{ lookup("ansible.builtin.file", role_path ~ "/../../scripts/configure-unifi-vm-startup.py") }}'
+      - enable
+      - '{{ unifi_vm_allocation | to_json }}'
+      - '{{ inventory_hostname }}'
+      - '{{ lookup("ansible.builtin.file", role_path ~ "/../../scripts/inspect-unifi-vm.py") }}'
+    register: unifi_startup_activation
+    changed_when: unifi_startup_activation.rc == 0 and (unifi_startup_activation.stdout | from_json).changed
+  - name: Complete the protected VM record after first-boot validation
+    ansible.builtin.copy:
+      content: '{{ unifi_current.previous | combine({''phase'': ''complete''}) | to_nice_json }} '
+      dest: /var/lib/home-automation/unifi-110/intent.json
+      mode: '0600'
+      follow: false
+    when: unifi_current.previous.phase != 'complete'
+  - name: Verify final owned hardware
+    ansible.builtin.include_tasks: _read.yml
+  - name: Report the permanent controller guest
+    ansible.builtin.debug:
+      msg:
+        vmid: 110
+        address: '{{ unifi_vm_allocation.address }}'
+        login: '{{ unifi_vm_allocation.username }}'
+        state: '{{ unifi_current.state }}'
+        next: Use configure-unifi-host.yml to install the controller after verifying its isolation.

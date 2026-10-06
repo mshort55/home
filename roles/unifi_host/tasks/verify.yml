@@ -1,0 +1,17 @@
+---
+- name: Verify exact isolation and the named guest baseline
+  ansible.builtin.include_tasks: _baseline.yml
+- name: Verify the installed controller and guarded startup
+  ansible.builtin.include_tasks: _installed.yml
+- name: Read the protected completed installation record
+  ansible.builtin.slurp:
+    src: /var/lib/home-automation/unifi-installed.json
+  register: unifi_verified_record
+  check_mode: false
+- name: Require a completed matching installer record
+  ansible.builtin.assert:
+    that:
+    - (unifi_verified_record.content | b64decode | from_json).version == 1
+    - (unifi_verified_record.content | b64decode | from_json).phase == 'complete'
+    - (unifi_verified_record.content | b64decode | from_json).isolation == unifi_isolation_settings
+    - (unifi_verified_record.content | b64decode | from_json).installer_sha256 == 'f6111e9396a42c74016f5dde9b01fbef486a6fe69efe137935e6e38b7c22f94d'

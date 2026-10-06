@@ -58,6 +58,9 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [proxmox_api](../roles/proxmox_api/tasks/main.yml) | `enroll` | [defaults](../roles/proxmox_api/defaults/main.yml) | [schema](../roles/proxmox_api/meta/argument_specs.yml) |
 | [proxmox_host](../roles/proxmox_host/tasks/main.yml) | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` | [defaults](../roles/proxmox_host/defaults/main.yml) | [schema](../roles/proxmox_host/meta/argument_specs.yml) |
 | [proxmox_installer](../roles/proxmox_installer/tasks/main.yml) | `prepare` | [defaults](../roles/proxmox_installer/defaults/main.yml) | [schema](../roles/proxmox_installer/meta/argument_specs.yml) |
+| [unifi_vm](../roles/unifi_vm/tasks/main.yml) | `prepare`, `create`, `verify`, `start`, `stop` | [defaults](../roles/unifi_vm/defaults/main.yml) | [schema](../roles/unifi_vm/meta/argument_specs.yml) |
+| [unifi_network](../roles/unifi_network/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/unifi_network/defaults/main.yml) | [schema](../roles/unifi_network/meta/argument_specs.yml) |
+| [unifi_host](../roles/unifi_host/tasks/main.yml) | `configure`, `verify`, `restore_ready` | [defaults](../roles/unifi_host/defaults/main.yml) | [schema](../roles/unifi_host/meta/argument_specs.yml) |
 
 ## Shared workflow outputs
 
@@ -279,9 +282,32 @@ roles/
       prepare.yml
 ```
 
-All 47 orchestration files and their selected groups/actions are listed in [entry points](playbooks/entry-points.md). Generic `configure-*`/`manage-*` entry points require an explicit role action dictionary. Named entries keep their existing commands. Legacy action flags no longer select workflows; use the role parameter dictionary or the corresponding named entry.
+The orchestration files and their selected groups/actions are listed in [entry points](playbooks/entry-points.md). Generic `configure-*`/`manage-*` entry points require an explicit role action dictionary. Named entries keep their existing commands. Legacy action flags no longer select workflows; use the role parameter dictionary or the corresponding named entry.
 
 The former `playbooks/tasks/` helpers are now task modules in `community_api`, `idrac_snapshot`, `idrac_iso`, `idrac_boot`, `opnsense_vm`, `opnsense_pilot` and `proxmox_host`. `playbooks/templates/iso-server.plist.j2` belongs to `roles/idrac_iso/templates/`; `playbooks/templates/proxmox-guest-bridges.j2` belongs to `roles/proxmox_host/templates/`. `README.md` indexes this architecture and the workflow usage documents.
+
+## Isolated controller roles
+
+`unifi_vm` prepares stable controller artifacts and guards VM 110 ownership, first boot and explicit power operations. `unifi_network` configures/verifies the four named OPNsense rules and DNS record. `unifi_host` installs/verifies the guest and gates the supported manual backup restore. Each role has `defaults/main.yml`, `meta/argument_specs.yml`, a required role-scoped `task_action`, and dynamic `tasks/main.yml` dispatch. Entry points and invocation order are in the [UniFi runbook](playbooks/unifi-controller.md).
+
+```text
+roles/
+  unifi_vm/
+    defaults/main.yml
+    meta/argument_specs.yml
+    tasks/{main,prepare,create,verify,start,stop,_read,_guest}.yml
+    templates/{user-data.yml,isolation.json,isolation.service}.j2
+  unifi_network/
+    defaults/main.yml
+    meta/argument_specs.yml
+    tasks/{main,configure,verify,_load,_policy}.yml
+  unifi_host/
+    defaults/main.yml
+    meta/argument_specs.yml
+    tasks/{main,configure,verify,restore_ready,_baseline,_installed}.yml
+```
+
+Shared helpers live in `scripts/`: `prepare-unifi-artifacts.py`, `prepare-unifi-tls.py`, `inspect-unifi-vm.py`, `configure-unifi-vm-startup.py`, `unifi-isolation.py` and `configure-opnsense-unifi.php`. Ubuntu's pinned public signing key lives in `files/ubuntu-cloud-image-signing-key.asc`. Generated host keys, GUI private keys, seeds, backup copies and manifests stay in protected, Git-ignored controller directories. The existing Proxmox startup/reboot preflight invokes the controller ownership guard before accepting VM 110; it does not grant maintenance permission to arbitrary additional guests.
 
 ## Validation and execution
 

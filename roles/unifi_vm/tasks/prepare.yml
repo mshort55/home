@@ -1,0 +1,131 @@
+- name: Prepare private controller artifacts without touching Proxmox
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  block:
+  - name: Require approved single-line SSH public keys before preparing private seed material
+    ansible.builtin.assert:
+      that:
+      - 'approved_key is match(''^ssh-ed25519 [A-Za-z0-9+/]+={0,2}(?: [^\n]+)?$'')'
+      fail_msg: Use a single-line Ed25519 public key file; never supply a private key.
+    vars:
+      approved_key: '{{ lookup(''ansible.builtin.file'', item) | trim }}'
+    loop: '{{ unifi_vm_allocation.ssh_public_key_files }}'
+  - name: Verify the signed Ubuntu image and pinned official UniFi installer or preview missing downloads
+    ansible.builtin.command:
+      argv:
+      - '{{ ansible_playbook_python }}'
+      - '{{ role_path }}/../../scripts/prepare-unifi-artifacts.py'
+      - '{{ ''plan'' if ansible_check_mode else ''apply'' }}'
+      - '{{ unifi_artifact_directory }}'
+      - '{{ role_path }}/../../files/ubuntu-cloud-image-signing-key.asc'
+    check_mode: false
+    register: unifi_image_preparation
+    changed_when: (unifi_image_preparation.stdout | from_json).changed
+  - name: Inspect the authoritative backup without decoding it
+    ansible.builtin.stat:
+      path: '{{ unifi_backup_file }}'
+      follow: false
+      checksum_algorithm: sha256
+    register: unifi_backup_stat
+    no_log: true
+  - name: Require a protected authoritative Network backup when staged
+    ansible.builtin.assert:
+      that:
+      - unifi_backup_stat.stat.isreg | default(false)
+      - not unifi_backup_stat.stat.islnk | default(false)
+      - unifi_backup_stat.stat.mode == '0600'
+      - unifi_backup_stat.stat.size > 0
+    no_log: true
+    when: unifi_backup_stat.stat.exists
+  - name: Report the backup prerequisite without blocking isolated provisioning
+    ansible.builtin.debug:
+      msg: "Stage the authoritative .unf at {{ unifi_backup_file }} with mode 0600 before restore readiness, then rerun prepare-unifi.yml. No backup is uploaded by this workflow."
+    when: not unifi_backup_stat.stat.exists
+  - name: Inspect the protected bootstrap directory and existing host key
+    ansible.builtin.stat:
+      path: '{{ item }}'
+      follow: false
+    loop:
+    - '{{ unifi_seed_directory }}'
+    - '{{ unifi_seed_directory }}/ssh_host_ed25519_key'
+    - '{{ unifi_seed_directory }}/ssh_host_ed25519_key.pub'
+    - '{{ unifi_seed_directory }}/user-data.yml'
+    - '{{ unifi_seed_directory }}/known_hosts'
+    register: unifi_seed_files
+    no_log: true
+  - name: Refuse symlink or unprotected bootstrap artifacts
+    ansible.builtin.assert:
+      that:
+      - not item.stat.exists or (not item.stat.islnk and item.stat.mode == ('0700' if item.item == unifi_seed_directory else
+        ('0644' if item.item.endswith('.pub') else '0600')))
+    loop: '{{ unifi_seed_files.results }}'
+    no_log: true
+  - name: Create the protected controller seed directory
+    ansible.builtin.file:
+      path: '{{ unifi_seed_directory }}'
+      state: directory
+      mode: '0700'
+  - name: Create the stable guest host key once
+    ansible.builtin.command:
+      argv:
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ''
+      - -f
+      - '{{ unifi_seed_directory }}/ssh_host_ed25519_key'
+      creates: '{{ unifi_seed_directory }}/ssh_host_ed25519_key'
+    no_log: true
+  - name: Render the private cloud-init bootstrap with approved public keys
+    ansible.builtin.template:
+      src: user-data.yml.j2
+      dest: '{{ unifi_seed_directory }}/user-data.yml'
+      mode: '0600'
+      follow: false
+    no_log: true
+    diff: false
+    when: not ansible_check_mode or unifi_seed_files.results[1].stat.exists
+  - name: Pin the seeded guest public host key before its first network connection
+    ansible.builtin.copy:
+      content: '{{ hostvars[unifi_vm_allocation.guest_host].ansible_host }} {{ lookup(''ansible.builtin.file'', unifi_seed_directory
+        ~ ''/ssh_host_ed25519_key.pub'').split()[:2] | join('' '') }} '
+      dest: '{{ unifi_seed_directory }}/known_hosts'
+      mode: '0600'
+      follow: false
+    when: not ansible_check_mode or unifi_seed_files.results[2].stat.exists
+  - name: Inspect an existing frozen backup identity
+    ansible.builtin.stat:
+      path: '{{ unifi_seed_directory }}/backup.json'
+      follow: false
+    register: unifi_backup_manifest
+  - name: Refuse changed or unprotected frozen backup identity
+    ansible.builtin.assert:
+      that:
+      - unifi_backup_manifest.stat.isreg and not unifi_backup_manifest.stat.islnk and unifi_backup_manifest.stat.mode == '0600'
+      - (lookup('ansible.builtin.file', unifi_seed_directory ~ '/backup.json') | from_json).sha256 == unifi_backup_stat.stat.checksum
+    when: unifi_backup_stat.stat.exists and unifi_backup_manifest.stat.exists
+    no_log: true
+  - name: Record the exact authoritative backup identity without exporting its contents
+    ansible.builtin.copy:
+      content: '{{ {"version": 1, "network_version": "7.3.83", "sha256": unifi_backup_stat.stat.checksum} | to_nice_json }}'
+      dest: '{{ unifi_seed_directory }}/backup.json'
+      mode: '0600'
+      follow: false
+    no_log: true
+    diff: false
+    when: unifi_backup_stat.stat.exists
+  - name: Prepare stable GUI certificate inputs for the supported manual upload
+    ansible.builtin.command:
+      argv:
+      - '{{ ansible_playbook_python }}'
+      - '{{ role_path }}/../../scripts/prepare-unifi-tls.py'
+      - '{{ "plan" if ansible_check_mode else "apply" }}'
+      - '{{ unifi_seed_directory }}'
+      - '{{ unifi_vm_allocation.address.split("/")[0] }}'
+      - '{{ unifi_vm_allocation.name }}.{{ unifi_vm_allocation.domain }}'
+    check_mode: false
+    register: unifi_tls_preparation
+    changed_when: (unifi_tls_preparation.stdout | from_json).changed

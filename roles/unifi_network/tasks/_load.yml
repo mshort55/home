@@ -1,0 +1,9 @@
+---
+- name: Load the enrolled firewall API without changing privileges
+  ansible.builtin.include_role:
+    name: community_api
+    public: false
+  vars:
+    community_api_options: {task_action: load}
+    community_api_host: '{{ unifi_firewall_host }}'
+    community_api_var: opn_api

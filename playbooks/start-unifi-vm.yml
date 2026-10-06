@@ -1,0 +1,10 @@
+---
+- name: Start only the owned UniFi controller VM
+  hosts: proxmox_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+  - role: unifi_vm
+    unifi_vm_options:
+      task_action: start

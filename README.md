@@ -92,4 +92,5 @@ Entry points orchestrate roles with explicit, role-scoped `task_action` paramete
 | Temporary WireGuard access from existing Wi-Fi, reserved DHCP leases and removal before ISP cutover | [Configure private-WAN Wi-Fi access](docs/playbooks/configure-opnsense-wireguard-wifi.md) |
 | Permanent DEV/BMC routing and authenticated administration from Wi-Fi or port 8 | [Configure lab access](docs/playbooks/configure-opnsense-lab.md) |
 | Verified headless Fedora Cloud Base VM, SSH baseline and explicit power operations | [Fedora development VM](docs/playbooks/fedora-dev.md) |
+| Isolated UniFi controller VM, pinned Ubuntu/vendor artifacts and manual backup restore gate | [UniFi controller rehearsal](docs/playbooks/unifi-controller.md) |
 | Switch management return route | [Configure switch gateway](docs/playbooks/configure-switch-gateway.md) |

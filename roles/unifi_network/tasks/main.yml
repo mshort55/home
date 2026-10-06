@@ -1,0 +1,16 @@
+---
+- name: Validate the effective controller network contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+- name: Require the enrolled firewall and reviewed controller allocation
+  ansible.builtin.assert:
+    that:
+    - unifi_proxmox_host in groups.get('proxmox_hosts', [])
+    - unifi_firewall_host in groups.get('opnsense_hosts', [])
+    - hostvars[unifi_proxmox_host].unifi_vm_allocation.vmid == 110
+    - hostvars[unifi_proxmox_host].unifi_vm_allocation.gateway == hostvars[unifi_firewall_host].ansible_host
+- name: Dispatch the explicit controller network action
+  ansible.builtin.include_tasks: '{{ unifi_network_options.task_action }}.yml'
+  vars:
+    unifi_network_payload: '{{ hostvars[unifi_proxmox_host].unifi_vm_allocation }}'
+    unifi_network_prefix: "printf '%s' {{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-unifi.php') | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"

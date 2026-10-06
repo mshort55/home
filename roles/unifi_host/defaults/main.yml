@@ -1,0 +1,4 @@
+---
+unifi_artifact_directory: '{{ inventory_dir }}/.cache/unifi-artifacts'
+unifi_seed_directory: '{{ inventory_dir }}/.cache/unifi-seed/{{ inventory_hostname }}'
+unifi_backup_file: "{{ inventory_dir }}/.cache/unifi-backup/authoritative.unf"

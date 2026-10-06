@@ -69,7 +69,7 @@
       - "{{ opnsense_vm.vmid | string }}"
       - "{{ opnsense_guest }}"
       - "{{ boot_before.latest_installed_kernel }}"
-      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py')} | to_json }}"
+      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py'), 'unifi_allocation': unifi_vm_allocation | default(none), 'unifi_probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-unifi-vm.py')} | to_json }}"
     changed_when: false
     check_mode: false
     register: boot_identity_read
@@ -203,7 +203,7 @@
       - "{{ opnsense_vm.vmid | string }}"
       - "{{ opnsense_guest }}"
       - "{{ boot_before.latest_installed_kernel }}"
-      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py')} | to_json }}"
+      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py'), 'unifi_allocation': unifi_vm_allocation | default(none), 'unifi_probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-unifi-vm.py')} | to_json }}"
     changed_when: false
   - name: Reboot only when requested and required by kernel or package state
     ansible.builtin.reboot:
@@ -247,7 +247,7 @@
       - "{{ opnsense_vm.vmid | string }}"
       - "{{ opnsense_guest }}"
       - "{{ boot_after.latest_installed_kernel }}"
-      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py')} | to_json }}"
+      - "{{ {'action': proxmox_host_options.task_action, 'allocation': fedora_dev_vm | default(none), 'probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-fedora-vm.py'), 'unifi_allocation': unifi_vm_allocation | default(none), 'unifi_probe': lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-unifi-vm.py')} | to_json }}"
     changed_when: false
     register: boot_identity_after_read
   - name: Verify whether the host boot identity changed

@@ -1,0 +1,40 @@
+---
+- name: Verify vendor binaries, rootless networking and the startup guard
+  ansible.builtin.command:
+    argv:
+    - /usr/bin/python3
+    - -c
+    - |
+      import hashlib, json, pathlib, subprocess, socket, ssl, re
+      def read(*args: str) -> str:
+          return subprocess.run(args, check=True, capture_output=True, text=True).stdout.strip()
+      binaries = {'/usr/local/bin/uosserver': 'e9c091913c75c009fe256e20b9122d9a4bd55edf6642caaecbbf406fcb124368', '/var/lib/uosserver/bin/uosserver-service': 'aa78890df315425ccb092b982a805bb25865d4b012f476d161ef27a7f58cf4e1'}
+      for name, expected in binaries.items():
+          with pathlib.Path(name).open('rb') as stream:
+              if hashlib.file_digest(stream, 'sha256').hexdigest() != expected:
+                  raise SystemExit('Installed vendor binary differs from pinned UniFi OS 5.1.42: ' + name)
+      if read('systemctl', 'is-active', 'uosserver') != 'active' or read('systemctl', 'is-enabled', 'uosserver') != 'enabled':
+          raise SystemExit('Controller service is not active/enabled')
+      user = read('systemctl', 'show', 'uosserver', '--property=User', '--value')
+      if not user or user == 'root': raise SystemExit('Vendor service must retain rootless container operation')
+      for service in ['uosserver', 'uosserver-updater']:
+          guard = read('systemctl', 'cat', service)
+          if 'Requires=home-unifi-isolation.service' not in guard or 'ExecStartPre=+/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py verify /etc/home-automation/unifi-isolation.json' not in guard:
+              raise SystemExit('Vendor startup isolation guard is missing')
+      config = dict(line.split('=', 1) for line in pathlib.Path('/var/lib/uosserver/server.conf').read_text().splitlines() if '=' in line and not line.lstrip().startswith('#'))
+      if any(config.get(key) != value for key, value in {'NETWORK_MODE': 'pasta', 'WEB_PORT': '11443', 'APP_VERSION': '5.1.42'}.items()):
+          raise SystemExit('Explicit pasta networking, reviewed UI port or pinned application version differs')
+      with socket.create_connection(('127.0.0.1',11443),timeout=5): pass
+      # Bootstrap certificate identity is obtained inside the already pinned SSH
+      # channel. This loopback probe sends no HTTP request or credentials.
+      handshake = subprocess.run(['openssl', 's_client', '-connect', '127.0.0.1:11443', '-showcerts'], input='', capture_output=True, text=True, timeout=10)
+      certificate = re.search(r'-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----', handshake.stdout, re.DOTALL)
+      if certificate is None: raise SystemExit('Controller did not present a GUI certificate')
+      digest = hashlib.sha256(ssl.PEM_cert_to_DER_cert(certificate.group())).hexdigest()
+      print(json.dumps({'vendor': '5.1.42', 'ui_port': 11443, 'rootless': True, 'startup_guard': 'verified', 'gui_certificate_sha256': digest}))
+  check_mode: false
+  changed_when: false
+  register: unifi_installed_verification
+- name: Report the GUI certificate fingerprint obtained through pinned SSH
+  ansible.builtin.debug:
+    msg: 'GUI certificate SHA-256: {{ (unifi_installed_verification.stdout | from_json).gui_certificate_sha256 }}. Match this fingerprint in the native Mac browser before the first local login.'

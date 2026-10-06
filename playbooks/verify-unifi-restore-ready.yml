@@ -1,0 +1,9 @@
+---
+- name: Verify isolation and trust before manual backup restoration
+  hosts: unifi_hosts
+  gather_facts: false
+  become: true
+  roles:
+  - role: unifi_host
+    unifi_host_options:
+      task_action: restore_ready

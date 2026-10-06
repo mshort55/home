@@ -1,0 +1,111 @@
+argument_specs:
+  main:
+    short_description: Validate and dispatch the isolated permanent UniFi VM operations.
+    options:
+      unifi_vm_options:
+        type: dict
+        required: true
+        description: Explicit VM operation; no default.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - prepare
+            - create
+            - verify
+            - start
+            - stop
+            description: Matching action task file.
+      unifi_vm_allocation:
+        type: dict
+        required: true
+        description: Permanent MGMT controller allocation; restore remains isolated.
+        options:
+          vmid:
+            type: int
+            required: true
+            description: Permanent VM ID 110.
+          name:
+            type: str
+            required: true
+            description: Owned VM hostname.
+          guest_host:
+            type: str
+            required: true
+            description: UniFi inventory host.
+          cores:
+            type: int
+            required: true
+            description: Two virtual CPU cores.
+          memory_mib:
+            type: int
+            required: true
+            description: 4096 MiB guest RAM.
+          disk_gib:
+            type: int
+            required: true
+            description: 32 GiB system disk.
+          storage:
+            type: str
+            required: true
+            description: Existing image storage.
+          bridge:
+            type: str
+            required: true
+            description: Existing VLAN-aware data bridge.
+          vlan:
+            type: int
+            required: true
+            description: Single MGMT VLAN tag 10.
+          mac:
+            type: str
+            required: true
+            description: Stable guest VirtIO MAC.
+          address:
+            type: str
+            required: true
+            description: Static MGMT IPv4 CIDR.
+          gateway:
+            type: str
+            required: true
+            description: MGMT gateway IPv4.
+          dns:
+            type: str
+            required: true
+            description: MGMT resolver IPv4.
+          domain:
+            type: str
+            required: true
+            description: Local DNS domain.
+          username:
+            type: str
+            required: true
+            description: Named key-only SSH user.
+          ssh_public_key_files:
+            type: list
+            required: true
+            description: Approved controller public key files; no private keys.
+            elements: path
+          tunnel_address:
+            type: str
+            required: true
+            description: Authenticated administrator WireGuard IPv4.
+          recovery_address:
+            type: str
+            required: true
+            description: Wired MGMT recovery administrator IPv4.
+      unifi_artifact_directory:
+        type: path
+        default: '{{ inventory_dir }}/.cache/unifi-artifacts'
+        description: Protected controller image and vendor installer cache.
+      unifi_seed_directory:
+        type: path
+        default: '{{ inventory_dir }}/.cache/unifi-seed/{{ unifi_vm_allocation.name
+          }}'
+        description: Protected stable SSH key and cloud-init seed.
+      unifi_backup_file:
+        type: path
+        default: '{{ inventory_dir }}/.cache/unifi-backup/authoritative.unf'
+        description: Authoritative private Network 7.3.83 backup; inspected without
+          decoding secrets.

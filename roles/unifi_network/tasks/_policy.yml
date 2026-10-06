@@ -1,0 +1,53 @@
+---
+- name: Merge only the explicitly owned controller network objects
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  module_defaults:
+    group/oxlorg.opnsense.all:
+      firewall: '{{ opn_api.firewall }}'
+      api_key: '{{ opn_api.api_key }}'
+      api_secret: '{{ opn_api.api_secret }}'
+      ssl_verify: true
+      ssl_ca_file: '{{ inventory_dir }}/.cache/community-api/{{ unifi_firewall_host }}/ca.pem'
+  block:
+  - name: Merge the named controller update and tunnel administration rules
+    oxlorg.opnsense.rule:
+      match_fields: [description]
+      description: '{{ item.description }}'
+      enabled: true
+      sequence: '{{ item.sequence | int }}'
+      action: pass
+      quick: true
+      interface: ['{{ item.interface }}']
+      interface_invert: false
+      direction: in
+      ip_protocol: inet
+      protocol: TCP
+      source_net: '{{ item.source_net }}'
+      source_invert: false
+      source_port: ''
+      destination_net: '{{ item.destination_net }}'
+      destination_invert: false
+      destination_port: '{{ item.destination_port }}'
+      gateway: ''
+      replyto: ''
+      disable_replyto: false
+      state_type: keep
+      log: false
+      reload: false
+    loop: '{{ unifi_network_plan.rules }}'
+    loop_control:
+      label: '{{ item.description }}'
+    register: unifi_network_rule_changes
+  - name: Merge only the named controller DNS record
+    oxlorg.opnsense.unbound_host:
+      match_fields: [hostname, domain, record_type]
+      hostname: '{{ unifi_network_plan.host.hostname }}'
+      domain: '{{ unifi_network_plan.host.domain }}'
+      record_type: A
+      description: '{{ unifi_network_plan.host.description }}'
+      value: '{{ unifi_network_plan.host.server }}'
+      enabled: true
+      reload: false
+    register: unifi_network_dns_change

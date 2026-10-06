@@ -1,0 +1,32 @@
+---
+- name: Validate the effective permanent UniFi allocation
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+  tags: [always]
+- name: Require the reviewed MGMT allocation and installed firewall
+  ansible.builtin.assert:
+    that:
+      - inventory_hostname in groups.get('proxmox_hosts', [])
+      - unifi_vm_allocation.vmid == 110
+      - unifi_vm_allocation.cores == 2
+      - unifi_vm_allocation.memory_mib == 4096
+      - unifi_vm_allocation.disk_gib == 32
+      - unifi_vm_allocation.vlan == 10
+      - unifi_vm_allocation.guest_host in groups.get('unifi_hosts', [])
+      - unifi_vm_allocation.address == hostvars[unifi_vm_allocation.guest_host].ansible_host ~ '/24'
+      - unifi_vm_allocation.username == hostvars[unifi_vm_allocation.guest_host].ansible_user
+      - unifi_vm_allocation.username is match('^[a-z][a-z0-9_-]{0,30}$')
+      - unifi_vm_allocation.name == 'unifi01'
+      - unifi_vm_allocation.guest_host == unifi_vm_allocation.name
+      - unifi_vm_allocation.domain is match('^[a-z0-9]+(?:[.-][a-z0-9]+)*$')
+      - unifi_vm_allocation.ssh_public_key_files | length > 0
+      - unifi_vm_allocation.storage is match('^[A-Za-z][A-Za-z0-9_-]*$')
+      - unifi_vm_allocation.mac is match('^02:(?:[0-9a-f]{2}:){4}[0-9a-f]{2}$')
+      - unifi_vm_allocation.gateway == hostvars[opnsense_guest].ansible_host
+      - unifi_vm_allocation.dns == unifi_vm_allocation.gateway
+      - unifi_vm_allocation.bridge in (proxmox_network.guest_bridges | selectattr('vlan_aware', 'equalto', true) | map(attribute='name') | list)
+      - unifi_vm_allocation.tunnel_address == hostvars[opnsense_guest].opnsense_wireguard.peer_address
+      - unifi_vm_allocation.recovery_address in hostvars[opnsense_guest].opnsense_pilot.admin_addresses
+- name: Dispatch the explicit UniFi operation
+  ansible.builtin.include_tasks: "{{ unifi_vm_options.task_action }}.yml"
+  tags: [always]

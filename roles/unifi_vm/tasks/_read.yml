@@ -1,0 +1,18 @@
+---
+- name: Load the enrolled Proxmox API
+  ansible.builtin.include_role:
+    name: community_api
+    public: false
+  vars:
+    community_api_options: {task_action: load}
+    community_api_host: "{{ inventory_hostname }}"
+    community_api_var: pve_api
+- name: Inspect exact VM ownership and live host resources without writes
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, -c, "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-unifi-vm.py') }}", "{{ unifi_vm_allocation | to_json }}", "{{ inventory_hostname }}"]
+  check_mode: false
+  changed_when: false
+  register: unifi_vm_read
+- name: Select the guarded current VM state
+  ansible.builtin.set_fact:
+    unifi_current: "{{ unifi_vm_read.stdout | from_json }}"
