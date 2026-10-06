@@ -5,17 +5,17 @@ from __future__ import annotations
 
 import argparse
 import base64
-from dataclasses import dataclass
 import hashlib
 import ipaddress
 import json
 import os
-from pathlib import Path
 import re
 import stat
 import subprocess
 import sys
 import tomllib
+from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 
 
@@ -75,14 +75,24 @@ def read_settings(path: Path) -> Settings:
         parts = key.split()
         if len(parts) < 2 or any(char in key for char in "\0\r\n"):
             raise BuildError("Invalid SSH public key")
-        if parts[0] not in ("ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"):
+        if parts[0] not in (
+            "ssh-ed25519",
+            "ssh-rsa",
+            "ecdsa-sha2-nistp256",
+            "ecdsa-sha2-nistp384",
+            "ecdsa-sha2-nistp521",
+        ):
             raise BuildError("Unsupported SSH public key type")
         try:
             blob = base64.b64decode(parts[1], validate=True)
         except ValueError as error:
             raise BuildError("Invalid SSH public key encoding") from error
         algorithm = parts[0].encode()
-        if len(blob) <= 4 + len(algorithm) or blob[:4] != len(algorithm).to_bytes(4, "big") or blob[4:4 + len(algorithm)] != algorithm:
+        if (
+            len(blob) <= 4 + len(algorithm)
+            or blob[:4] != len(algorithm).to_bytes(4, "big")
+            or blob[4 : 4 + len(algorithm)] != algorithm
+        ):
             raise BuildError("SSH public key algorithm does not match its encoding")
     settings = Settings(
         fqdn=require_string(data, "fqdn"),
@@ -113,9 +123,16 @@ def read_settings(path: Path) -> Settings:
         dns = ipaddress.IPv4Address(settings.dns)
     except ValueError as error:
         raise BuildError("Invalid static IPv4 network setting") from error
-    if network.network.prefixlen > 30 or network.ip in (network.network.network_address, network.network.broadcast_address):
+    if network.network.prefixlen > 30 or network.ip in (
+        network.network.network_address,
+        network.network.broadcast_address,
+    ):
         raise BuildError("Management address must be a usable host on a subnet")
-    if gateway not in network.network or gateway == network.ip or gateway in (network.network.network_address, network.network.broadcast_address):
+    if (
+        gateway not in network.network
+        or gateway == network.ip
+        or gateway in (network.network.network_address, network.network.broadcast_address)
+    ):
         raise BuildError("Gateway must be another usable host on the management subnet")
     if dns.is_unspecified or dns.is_multicast:
         raise BuildError("DNS must be a specific unicast address")
@@ -142,26 +159,33 @@ def write_answer(path: Path, settings: Settings, password_hash: str) -> None:
     def quoted(value: str) -> str:
         return json.dumps(value, ensure_ascii=True)
 
-    text = "\n".join((
-        "[global]",
-        f"keyboard = {quoted(settings.keyboard)}",
-        f"country = {quoted(settings.country)}",
-        f"fqdn = {quoted(settings.fqdn)}",
-        f"mailto = {quoted(settings.mailto)}",
-        f"timezone = {quoted(settings.timezone)}",
-        f"root-password-hashed = {quoted(password_hash)}",
-        f"root-ssh-keys = {json.dumps(settings.ssh_public_keys)}",
-        "", "[network]", 'source = "from-answer"',
-        f"cidr = {quoted(settings.cidr)}",
-        f"dns = {quoted(settings.dns)}",
-        f"gateway = {quoted(settings.gateway)}",
-        f"filter.ID_NET_NAME_MAC = {quoted('enx' + settings.management_mac.replace(':', ''))}",
-        "", "[disk-setup]", 'filesystem = "ext4"',
-        f"filter.ID_SERIAL = {quoted(settings.disk_serial)}",
-        f"lvm.maxroot = {settings.maxroot}",
-        f"lvm.swapsize = {settings.swapsize}",
-        f"lvm.minfree = {settings.minfree}", "",
-    ))
+    text = "\n".join(
+        (
+            "[global]",
+            f"keyboard = {quoted(settings.keyboard)}",
+            f"country = {quoted(settings.country)}",
+            f"fqdn = {quoted(settings.fqdn)}",
+            f"mailto = {quoted(settings.mailto)}",
+            f"timezone = {quoted(settings.timezone)}",
+            f"root-password-hashed = {quoted(password_hash)}",
+            f"root-ssh-keys = {json.dumps(settings.ssh_public_keys)}",
+            "",
+            "[network]",
+            'source = "from-answer"',
+            f"cidr = {quoted(settings.cidr)}",
+            f"dns = {quoted(settings.dns)}",
+            f"gateway = {quoted(settings.gateway)}",
+            f"filter.ID_NET_NAME_MAC = {quoted('enx' + settings.management_mac.replace(':', ''))}",
+            "",
+            "[disk-setup]",
+            'filesystem = "ext4"',
+            f"filter.ID_SERIAL = {quoted(settings.disk_serial)}",
+            f"lvm.maxroot = {settings.maxroot}",
+            f"lvm.swapsize = {settings.swapsize}",
+            f"lvm.minfree = {settings.minfree}",
+            "",
+        )
+    )
     path.write_text(text)
     path.chmod(0o600)
 
@@ -188,7 +212,10 @@ def build(arguments: Arguments) -> None:
         raise BuildError("Root password must have at least eight characters and no NUL or newline")
     hashed = subprocess.run(
         ["mkpasswd", "--method=yescrypt", "--stdin"],
-        input=password, capture_output=True, text=True, check=False,
+        input=password,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     del password
     password_hash = hashed.stdout.strip()
@@ -198,20 +225,45 @@ def build(arguments: Arguments) -> None:
     run_step(["proxmox-auto-install-assistant", "validate-answer", str(answer)], log, "Answer validation")
     staging = arguments.work_dir / "staging"
     staging.mkdir(mode=0o700)
-    run_step([
-        "proxmox-auto-install-assistant", "prepare-iso", str(arguments.source),
-        "--fetch-from", "iso", "--answer-file", str(answer),
-        "--output", str(output), "--tmp", str(staging),
-    ], log, "ISO preparation")
+    run_step(
+        [
+            "proxmox-auto-install-assistant",
+            "prepare-iso",
+            str(arguments.source),
+            "--fetch-from",
+            "iso",
+            "--answer-file",
+            str(answer),
+            "--output",
+            str(output),
+            "--tmp",
+            str(staging),
+        ],
+        log,
+        "ISO preparation",
+    )
     output.chmod(0o600)
     verification = arguments.work_dir / "verification"
     verification.mkdir(mode=0o700)
-    boot_report = run_step([
-        "xorriso", "-osirrox", "on", "-indev", str(output),
-        "-extract", "/answer.toml", str(verification / "answer.toml"),
-        "-extract", "/auto-installer-mode.toml", str(verification / "auto-installer-mode.toml"),
-        "-report_el_torito", "plain",
-    ], log, "Embedded answers and boot catalog verification")
+    boot_report = run_step(
+        [
+            "xorriso",
+            "-osirrox",
+            "on",
+            "-indev",
+            str(output),
+            "-extract",
+            "/answer.toml",
+            str(verification / "answer.toml"),
+            "-extract",
+            "/auto-installer-mode.toml",
+            str(verification / "auto-installer-mode.toml"),
+            "-report_el_torito",
+            "plain",
+        ],
+        log,
+        "Embedded answers and boot catalog verification",
+    )
     for extracted in verification.iterdir():
         extracted.chmod(0o600)
     if (verification / "answer.toml").read_bytes() != answer.read_bytes():
@@ -223,9 +275,13 @@ def build(arguments: Arguments) -> None:
     if not re.search(r"El Torito boot img\s*:[^\n]*\bUEFI\b", boot_report):
         raise BuildError("Generated ISO has no verified UEFI boot image")
     source_after = arguments.source.stat()
-    if (source_stat.st_size, source_stat.st_mtime_ns) != (source_after.st_size, source_after.st_mtime_ns) or checksum(arguments.source) != settings.source_sha256:
+    if (source_stat.st_size, source_stat.st_mtime_ns) != (source_after.st_size, source_after.st_mtime_ns) or checksum(
+        arguments.source
+    ) != settings.source_sha256:
         raise BuildError("Source ISO changed during the build")
-    package = run_step(["dpkg-query", "-W", "-f=${Version}", "proxmox-auto-install-assistant"], log, "Preparation tool version").strip()
+    package = run_step(
+        ["dpkg-query", "-W", "-f=${Version}", "proxmox-auto-install-assistant"], log, "Preparation tool version"
+    ).strip()
     record = {
         "iso_filename": output.name,
         "iso_sha256": checksum(output),

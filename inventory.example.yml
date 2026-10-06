@@ -108,7 +108,7 @@ all:
             domain: lab.home.arpa
             username: mjs
             ssh_public_key_files:
-            - '{{ inventory_dir }}/.cache/proxmox-installer-inputs/admin.pub'
+              - '{{ inventory_dir }}/.cache/proxmox-installer-inputs/admin.pub'
             tunnel_address: 10.77.99.2
             recovery_address: 10.77.10.250
           fedora_dev_vm:

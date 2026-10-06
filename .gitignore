@@ -1,6 +1,8 @@
 # Local environment and downloaded dependencies
 .venv/
-.venv-mac/
+.venv-macos/
+.venv-validation/
+.venv-validation-macos/
 .collections/
 .ansible/
 .cache/
@@ -8,6 +10,11 @@ __pycache__/
 *.pyc
 *.retry
 *.log
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+reports/
 
 # Real inventory, credentials and generated artifacts
 *.private.*

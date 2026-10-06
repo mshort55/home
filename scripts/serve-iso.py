@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from ipaddress import IPv4Address
 import os
-from pathlib import Path
 import re
 import stat
 import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import IPv4Address
+from pathlib import Path
 from typing import cast, override
 from urllib.parse import quote
 
@@ -192,7 +192,10 @@ def main() -> None:
             allowed_clients={args.bind, args.allow_client},
             etag='"' + args.sha256 + '"',
         ) as server:
-            print(f"Serving {after.st_size} verified bytes at http://{args.bind}:{args.port}{server.image_path}", flush=True)
+            print(
+                f"Serving {after.st_size} verified bytes at http://{args.bind}:{args.port}{server.image_path}",
+                flush=True,
+            )
             print("Allowed clients: " + ", ".join(sorted(server.allowed_clients)), flush=True)
             try:
                 server.serve_forever()

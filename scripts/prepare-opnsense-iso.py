@@ -9,10 +9,10 @@ import bz2
 import hashlib
 import json
 import os
-from pathlib import Path
 import stat
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import TypedDict
 
 
@@ -44,17 +44,23 @@ def sha256(path: Path) -> str:
 def verify(image: Path, public_key: Path, signature: Path, openssl: str) -> None:
     regular_file(image)
     result = subprocess.run(
-        [openssl, "dgst", "-sha256", "-verify", str(public_key),
-         "-signature", str(signature), str(image)],
-        check=False, capture_output=True, text=True,
+        [openssl, "dgst", "-sha256", "-verify", str(public_key), "-signature", str(signature), str(image)],
+        check=False,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         raise ValueError("OPNsense ISO signature verification failed")
 
 
 def prepare(
-    directory: Path, filename: str, version: str, archive_sha256: str,
-    public_key: Path, public_key_sha256: str, openssl: str,
+    directory: Path,
+    filename: str,
+    version: str,
+    archive_sha256: str,
+    public_key: Path,
+    public_key_sha256: str,
+    openssl: str,
 ) -> tuple[Manifest, bool]:
     if Path(filename).name != filename or not filename.endswith(".iso"):
         raise ValueError("Use a single ISO filename without path components")
@@ -99,9 +105,13 @@ def prepare(
             image.chmod(0o600)
             changed = True
         manifest: Manifest = {
-            "schema_version": 1, "version": version, "filename": filename,
-            "archive_sha256": archive_sha256, "public_key_sha256": public_key_sha256,
-            "iso_sha256": sha256(image), "iso_size": image.stat().st_size,
+            "schema_version": 1,
+            "version": version,
+            "filename": filename,
+            "archive_sha256": archive_sha256,
+            "public_key_sha256": public_key_sha256,
+            "iso_sha256": sha256(image),
+            "iso_size": image.stat().st_size,
             "signature_verified": True,
         }
         encoded_manifest = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
@@ -130,8 +140,13 @@ def main() -> None:
     parser.add_argument("--openssl", default="openssl")
     args = parser.parse_args()
     manifest, changed = prepare(
-        args.directory, args.filename, args.version, args.archive_sha256,
-        args.public_key, args.public_key_sha256, args.openssl,
+        args.directory,
+        args.filename,
+        args.version,
+        args.archive_sha256,
+        args.public_key,
+        args.public_key_sha256,
+        args.openssl,
     )
     print(json.dumps({"changed": changed, "manifest": manifest}, sort_keys=True))
 

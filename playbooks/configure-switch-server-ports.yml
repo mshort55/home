@@ -4,7 +4,7 @@
   gather_facts: false
   become: true
   serial: 1
-  become_method: enable
+  become_method: ansible.netcommon.enable
   vars_files:
   - "{{ vault_file | default(((playbook_dir ~ '/..') | realpath) ~ '/secrets/vault.yml') }}"
   roles:

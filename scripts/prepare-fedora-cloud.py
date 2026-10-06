@@ -1,16 +1,17 @@
 """Verify a pinned Fedora cloud image and its release signature on the controller."""
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import tempfile
-from typing import Any
 import urllib.request
+from pathlib import Path
+from typing import Any
 
 FILENAME = "Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2"
 SHA256 = "28680fe5b371a5a82ebf43a31926e086a168e59949d03969c5093e7071f90b7f"
@@ -81,16 +82,29 @@ def main() -> None:
             changed = download(url, destination) or changed
     # No import into the user's GPG keyring; verify against a dedicated downloaded keyring.
     with tempfile.TemporaryDirectory(prefix="fedora-gpg-") as home:
-        result = subprocess.run(["gpgv", "--homedir", home, "--status-fd", "1", "--keyring", str(keyring), str(checksum)], check=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ["gpgv", "--homedir", home, "--status-fd", "1", "--keyring", str(keyring), str(checksum)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
     if not any(line.startswith("[GNUPG:] VALIDSIG " + SIGNER + " ") for line in result.stdout.splitlines()):
         raise ValueError("Checksum was not signed by the pinned Fedora 44 release key")
-    if re.findall(r"^SHA256 \(" + re.escape(FILENAME) + r"\) = ([0-9a-f]{64})$", checksum.read_text(), re.MULTILINE) != [SHA256]:
+    if re.findall(
+        r"^SHA256 \(" + re.escape(FILENAME) + r"\) = ([0-9a-f]{64})$", checksum.read_text(), re.MULTILINE
+    ) != [SHA256]:
         raise ValueError("Signed checksum differs from the pinned Fedora image")
     if args.operation == "apply":
         changed = download(ORIGIN + FILENAME, image) or changed
     if digest(image) != SHA256:
         raise ValueError("Cached Fedora image checksum differs; refusing to replace it automatically")
-    content: dict[str, Any] = {"version": 1, "filename": FILENAME, "sha256": SHA256, "signer": SIGNER, "size": image.stat().st_size}
+    content: dict[str, Any] = {
+        "version": 1,
+        "filename": FILENAME,
+        "sha256": SHA256,
+        "signer": SIGNER,
+        "size": image.stat().st_size,
+    }
     encoded = json.dumps(content, indent=2) + "\n"
     if not manifest.exists() or manifest.read_text() != encoded:
         changed = True

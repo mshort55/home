@@ -1,4 +1,5 @@
 """Set only the owned controller's host startup options over trusted root SSH."""
+
 from __future__ import annotations
 
 import json
@@ -13,7 +14,9 @@ STARTUP = "order=2,up=30,down=120"
 def inspect(allocation: dict[str, Any], node: str, probe: str) -> dict[str, Any]:
     result = subprocess.run(
         [sys.executable, "-c", probe, json.dumps(allocation), node],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     observed: dict[str, Any] = json.loads(result.stdout)
     if not observed.get("exists") or observed["previous"].get("phase") not in ["pending", "complete"]:

@@ -42,25 +42,31 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 |---|---|---|---|
 | [cisco_switch](../roles/cisco_switch/tasks/main.yml) | `backup`, `management`, `ports`, `gateway` | [defaults](../roles/cisco_switch/defaults/main.yml) | [schema](../roles/cisco_switch/meta/argument_specs.yml) |
 | [community_api](../roles/community_api/tasks/main.yml) | `load`, `prepare` | [defaults](../roles/community_api/defaults/main.yml) | [schema](../roles/community_api/meta/argument_specs.yml) |
+| [fedora_dev](../roles/fedora_dev/tasks/main.yml) | `prepare`, `create`, `verify`, `start`, `stop` | [defaults](../roles/fedora_dev/defaults/main.yml) | [schema](../roles/fedora_dev/meta/argument_specs.yml) |
+| [fedora_host](../roles/fedora_host/tasks/main.yml) | `configure`, `verify`, `connectivity` | [defaults](../roles/fedora_host/defaults/main.yml) | [schema](../roles/fedora_host/meta/argument_specs.yml) |
 | [fortigate_backup](../roles/fortigate_backup/tasks/main.yml) | `backup` | [defaults](../roles/fortigate_backup/defaults/main.yml) | [schema](../roles/fortigate_backup/meta/argument_specs.yml) |
 | [fortigate_controller](../roles/fortigate_controller/tasks/main.yml) | `prepare`, `verify` | [defaults](../roles/fortigate_controller/defaults/main.yml) | [schema](../roles/fortigate_controller/meta/argument_specs.yml) |
+| [fortigate_pilot_dhcp](../roles/fortigate_pilot_dhcp/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/fortigate_pilot_dhcp/defaults/main.yml) | [schema](../roles/fortigate_pilot_dhcp/meta/argument_specs.yml) |
 | [idrac_backup](../roles/idrac_backup/tasks/main.yml) | `export` | [defaults](../roles/idrac_backup/defaults/main.yml) | [schema](../roles/idrac_backup/meta/argument_specs.yml) |
 | [idrac_boot](../roles/idrac_boot/tasks/main.yml) | `boot`, `verify`, `uefi` | [defaults](../roles/idrac_boot/defaults/main.yml) | [schema](../roles/idrac_boot/meta/argument_specs.yml) |
 | [idrac_iso](../roles/idrac_iso/tasks/main.yml) | `mount`, `eject`, `status` | [defaults](../roles/idrac_iso/defaults/main.yml) | [schema](../roles/idrac_iso/meta/argument_specs.yml) |
-| [idrac_network](../roles/idrac_network/tasks/main.yml) | `preview`, `apply`, `status`, `verify` | [defaults](../roles/idrac_network/defaults/main.yml) | [schema](../roles/idrac_network/meta/argument_specs.yml) |
+| [idrac_network](../roles/idrac_network/tasks/main.yml) | `preview`, `apply`, `status`, `verify`, `verify_current` | [defaults](../roles/idrac_network/defaults/main.yml) | [schema](../roles/idrac_network/meta/argument_specs.yml) |
 | [idrac_snapshot](../roles/idrac_snapshot/tasks/main.yml) | `snapshot` | [defaults](../roles/idrac_snapshot/defaults/main.yml) | [schema](../roles/idrac_snapshot/meta/argument_specs.yml) |
 | [opnsense_api](../roles/opnsense_api/tasks/main.yml) | `enroll` | [defaults](../roles/opnsense_api/defaults/main.yml) | [schema](../roles/opnsense_api/meta/argument_specs.yml) |
 | [opnsense_install](../roles/opnsense_install/tasks/main.yml) | `install` | [defaults](../roles/opnsense_install/defaults/main.yml) | [schema](../roles/opnsense_install/meta/argument_specs.yml) |
+| [opnsense_lab](../roles/opnsense_lab/tasks/main.yml) | `configure`, `verify`, `disable`, `verify_disabled` | [defaults](../roles/opnsense_lab/defaults/main.yml) | [schema](../roles/opnsense_lab/meta/argument_specs.yml) |
 | [opnsense_media](../roles/opnsense_media/tasks/main.yml) | `download`, `bootstrap` | [defaults](../roles/opnsense_media/defaults/main.yml) | [schema](../roles/opnsense_media/meta/argument_specs.yml) |
 | [opnsense_pilot](../roles/opnsense_pilot/tasks/main.yml) | `management`, `home` | [defaults](../roles/opnsense_pilot/defaults/main.yml) | [schema](../roles/opnsense_pilot/meta/argument_specs.yml) |
-| [opnsense_wireguard](../roles/opnsense_wireguard/tasks/main.yml) | `prepare`, `configure`, `verify` | [defaults](../roles/opnsense_wireguard/defaults/main.yml) | [schema](../roles/opnsense_wireguard/meta/argument_specs.yml) |
 | [opnsense_vm](../roles/opnsense_vm/tasks/main.yml) | `describe`, `create`, `verify` | [defaults](../roles/opnsense_vm/defaults/main.yml) | [schema](../roles/opnsense_vm/meta/argument_specs.yml) |
+| [opnsense_wireguard](../roles/opnsense_wireguard/tasks/main.yml) | `prepare`, `configure`, `verify` | [defaults](../roles/opnsense_wireguard/defaults/main.yml) | [schema](../roles/opnsense_wireguard/meta/argument_specs.yml) |
+| [opnsense_wireguard_wifi](../roles/opnsense_wireguard_wifi/tasks/main.yml) | `inspect`, `configure`, `verify`, `remove`, `verify_absent`, `prepare` | [defaults](../roles/opnsense_wireguard_wifi/defaults/main.yml) | [schema](../roles/opnsense_wireguard_wifi/meta/argument_specs.yml) |
 | [proxmox_api](../roles/proxmox_api/tasks/main.yml) | `enroll` | [defaults](../roles/proxmox_api/defaults/main.yml) | [schema](../roles/proxmox_api/meta/argument_specs.yml) |
 | [proxmox_host](../roles/proxmox_host/tasks/main.yml) | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` | [defaults](../roles/proxmox_host/defaults/main.yml) | [schema](../roles/proxmox_host/meta/argument_specs.yml) |
 | [proxmox_installer](../roles/proxmox_installer/tasks/main.yml) | `prepare` | [defaults](../roles/proxmox_installer/defaults/main.yml) | [schema](../roles/proxmox_installer/meta/argument_specs.yml) |
-| [unifi_vm](../roles/unifi_vm/tasks/main.yml) | `prepare`, `create`, `verify`, `start`, `stop` | [defaults](../roles/unifi_vm/defaults/main.yml) | [schema](../roles/unifi_vm/meta/argument_specs.yml) |
+| [unifi_host](../roles/unifi_host/tasks/main.yml) | `configure`, `verify`, `restore_ready`, `configuration_ready` | [defaults](../roles/unifi_host/defaults/main.yml) | [schema](../roles/unifi_host/meta/argument_specs.yml) |
 | [unifi_network](../roles/unifi_network/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/unifi_network/defaults/main.yml) | [schema](../roles/unifi_network/meta/argument_specs.yml) |
-| [unifi_host](../roles/unifi_host/tasks/main.yml) | `configure`, `verify`, `restore_ready` | [defaults](../roles/unifi_host/defaults/main.yml) | [schema](../roles/unifi_host/meta/argument_specs.yml) |
+| [unifi_site](../roles/unifi_site/tasks/main.yml) | `inspect`, `configure`, `verify` | [defaults](../roles/unifi_site/defaults/main.yml) | [schema](../roles/unifi_site/meta/argument_specs.yml) |
+| [unifi_vm](../roles/unifi_vm/tasks/main.yml) | `prepare`, `create`, `verify`, `start`, `stop` | [defaults](../roles/unifi_vm/defaults/main.yml) | [schema](../roles/unifi_vm/meta/argument_specs.yml) |
 
 ## Shared workflow outputs
 

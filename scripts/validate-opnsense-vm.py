@@ -63,16 +63,24 @@ def validate(payload: dict[str, object]) -> bool:
     memory = properties(str(config.get("memory", "")), "current")
     require(memory == {"current": str(integer(desired["memory"]))}, "VM memory conflicts")
     require(properties(config.get("cpu", ""), "cputype") == {"cputype": "host"}, "VM CPU conflicts")
-    require(properties(config.get("startup", ""), "order") ==
-            {"order": "1", "up": "30", "down": "120"}, "VM startup ordering conflicts")
-    require(properties(str(config.get("agent", "0")), "enabled").get("enabled") == "0",
-            "Guest agent must remain disabled during bootstrap")
+    require(
+        properties(config.get("startup", ""), "order") == {"order": "1", "up": "30", "down": "120"},
+        "VM startup ordering conflicts",
+    )
+    require(
+        properties(str(config.get("agent", "0")), "enabled").get("enabled") == "0",
+        "Guest agent must remain disabled during bootstrap",
+    )
     require(properties(config.get("vga", "std"), "type") == {"type": "std"}, "VM VGA conflicts")
     boot = properties(config.get("boot", ""), "legacy")
-    require(boot in ({"order": "scsi0;ide2"}, {"order": "scsi0"}),
-            "Use explicit disk-first boot order; installation media must not have priority")
-    require(not any(key in config for key in ("args", "lock", "template")),
-            "VM has unexpected custom arguments, a lock or template state")
+    require(
+        boot in ({"order": "scsi0;ide2"}, {"order": "scsi0"}),
+        "Use explicit disk-first boot order; installation media must not have priority",
+    )
+    require(
+        not any(key in config for key in ("args", "lock", "template")),
+        "VM has unexpected custom arguments, a lock or template state",
+    )
 
     expected_networks = mapping(desired["networks"])
     actual_networks = {key: value for key, value in config.items() if re.fullmatch(r"net[0-9]+", key)}
@@ -90,44 +98,60 @@ def validate(payload: dict[str, object]) -> bool:
             actual["macaddr"] = actual["macaddr"].lower()
         if actual.get("link_down") == "0":
             del actual["link_down"]
-        if device == 'net0':
-            actual_link = actual.pop('link_down', '0')
-            desired_link = text(target.get('link_down', '0'))
-            require(actual_link in ('0', '1'), 'Invalid WAN link state')
-            target = {key: value for key, value in target.items() if key != 'link_down'}
+        if device == "net0":
+            actual_link = actual.pop("link_down", "0")
+            desired_link = text(target.get("link_down", "0"))
+            require(actual_link in ("0", "1"), "Invalid WAN link state")
+            target = {key: value for key, value in target.items() if key != "link_down"}
             wan_link_change = actual_link != desired_link
         require(actual == target, f"VM {device} MAC, bridge, VLAN or firewall settings conflict")
 
     disk = properties(config.get("scsi0", ""), "file")
-    require(re.fullmatch(disk_pattern, disk.get("file", "")) is not None,
-            "System disk does not belong to this VM and storage")
+    require(
+        re.fullmatch(disk_pattern, disk.get("file", "")) is not None,
+        "System disk does not belong to this VM and storage",
+    )
     require(disk.get("size") == f"{integer(desired['disk_gib'])}G", "System disk size conflicts")
     require(disk.get("cache") == "none" and disk.get("iothread") == "1", "System disk I/O policy conflicts")
     disk_defaults = {"discard": "ignore", "ssd": "0", "backup": "1", "replicate": "1", "format": "raw"}
     for key, value in disk_defaults.items():
         require(disk.get(key, value) == value, f"System disk {key} conflicts")
-    require(disk.keys() <= {"file", "size", "cache", "iothread", *disk_defaults},
-            "System disk contains unreviewed settings")
+    require(
+        disk.keys() <= {"file", "size", "cache", "iothread", *disk_defaults}, "System disk contains unreviewed settings"
+    )
 
     efi = properties(config.get("efidisk0", ""), "file")
-    require(re.fullmatch(disk_pattern, efi.get("file", "")) is not None,
-            "EFI variable disk does not belong to this VM and storage")
+    require(
+        re.fullmatch(disk_pattern, efi.get("file", "")) is not None,
+        "EFI variable disk does not belong to this VM and storage",
+    )
     require(efi.get("file") != disk.get("file"), "System disk and EFI disk must be distinct")
-    require(efi.get("efitype") == "4m" and efi.get("pre-enrolled-keys") == "0",
-            "EFI type or Secure Boot policy conflicts")
+    require(
+        efi.get("efitype") == "4m" and efi.get("pre-enrolled-keys") == "0", "EFI type or Secure Boot policy conflicts"
+    )
     require(efi.get("format", "raw") == "raw", "EFI disk format conflicts")
-    require(efi.keys() <= {"file", "size", "efitype", "pre-enrolled-keys", "format", "ms-cert"},
-            "EFI disk contains unreviewed settings")
+    require(
+        efi.keys() <= {"file", "size", "efitype", "pre-enrolled-keys", "format", "ms-cert"},
+        "EFI disk contains unreviewed settings",
+    )
 
     cdrom = properties(config.get("ide2", "none,media=cdrom"), "file")
-    require(cdrom.get("media") == "cdrom" and cdrom.get("file") in
-            (desired["iso_volume"], desired.get("bootstrap_iso_volume", desired["iso_volume"]), "none"),
-            "Attached installation media conflicts")
+    require(
+        cdrom.get("media") == "cdrom"
+        and cdrom.get("file")
+        in (desired["iso_volume"], desired.get("bootstrap_iso_volume", desired["iso_volume"]), "none"),
+        "Attached installation media conflicts",
+    )
     require(cdrom.keys() <= {"file", "media", "size"}, "CD-ROM contains unreviewed settings")
     allowed_drives = {"scsi0", "efidisk0", "ide2"}
     for key in config:
-        require(not (re.fullmatch(r"(?:scsi|sata|ide|virtio|efidisk|tpmstate|hostpci|usb|unused)[0-9]+", key)
-                     and key not in allowed_drives), f"Unexpected VM device: {key}")
+        require(
+            not (
+                re.fullmatch(r"(?:scsi|sata|ide|virtio|efidisk|tpmstate|hostpci|usb|unused)[0-9]+", key)
+                and key not in allowed_drives
+            ),
+            f"Unexpected VM device: {key}",
+        )
     return wan_link_change
 
 

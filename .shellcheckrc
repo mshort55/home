@@ -1,0 +1,3 @@
+# Separate stage redirects are intentional. Preserve the installer's exact bytes:
+# its checksum is part of existing bootstrap seed identities.
+disable=SC2129

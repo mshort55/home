@@ -3,18 +3,19 @@
 Network 10.6.106 contract: https://developer.ui.com/network/v10.6.106/openapi.json
 No adoption, device actions, firmware, gateway configuration or WLAN activation.
 """
+
 from __future__ import annotations
 
-import http.client
 import fcntl
+import http.client
 import ipaddress
 import json
 import os
-from pathlib import Path
 import re
 import ssl
 import sys
 import tempfile
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -24,20 +25,70 @@ BASE = "/proxy/network/integration"
 # Error bodies may echo the submitted SSID/PSK. Report only these documented
 # field/constraint names; never a vendor message, rejected value or response body.
 VALIDATION_FIELDS = {
-    "type", "name", "enabled", "network", "networkId", "management", "vlanId", "dhcpGuarding",
-    "securityConfiguration", "passphrase", "presharedKeys", "pmfMode", "fastRoamingEnabled",
-    "wpa3FastRoamingEnabled", "saeConfiguration", "anticloggingThresholdSeconds", "syncTimeSeconds",
-    "groupRekeyIntervalSeconds", "radiusConfiguration", "broadcastingFrequenciesGHz",
-    "broadcastingDeviceFilter", "deviceIds", "deviceTagIds", "hideName", "clientIsolationEnabled",
-    "multicastToUnicastConversionEnabled", "uapsdEnabled", "channel2gLockedTo6", "dtimPeriod2gLockedTo3",
-    "advertiseDeviceName", "arpProxyEnabled", "bandSteeringEnabled", "bssTransitionEnabled", "mloEnabled",
-    "hotspotConfiguration", "blackoutScheduleConfiguration", "clientFilteringPolicy",
-    "multicastFilteringPolicy", "mdnsProxyConfiguration", "handoffSuggestionsConfiguration",
-    "dnsAssistanceConfiguration", "dtimPeriodByFrequencyGHzOverride", "basicDataRateKbpsByFrequencyGHz",
+    "type",
+    "name",
+    "enabled",
+    "network",
+    "networkId",
+    "management",
+    "vlanId",
+    "dhcpGuarding",
+    "securityConfiguration",
+    "passphrase",
+    "presharedKeys",
+    "pmfMode",
+    "fastRoamingEnabled",
+    "wpa3FastRoamingEnabled",
+    "saeConfiguration",
+    "anticloggingThresholdSeconds",
+    "syncTimeSeconds",
+    "groupRekeyIntervalSeconds",
+    "radiusConfiguration",
+    "broadcastingFrequenciesGHz",
+    "broadcastingDeviceFilter",
+    "deviceIds",
+    "deviceTagIds",
+    "hideName",
+    "clientIsolationEnabled",
+    "multicastToUnicastConversionEnabled",
+    "uapsdEnabled",
+    "channel2gLockedTo6",
+    "dtimPeriod2gLockedTo3",
+    "advertiseDeviceName",
+    "arpProxyEnabled",
+    "bandSteeringEnabled",
+    "bssTransitionEnabled",
+    "mloEnabled",
+    "hotspotConfiguration",
+    "blackoutScheduleConfiguration",
+    "clientFilteringPolicy",
+    "multicastFilteringPolicy",
+    "mdnsProxyConfiguration",
+    "handoffSuggestionsConfiguration",
+    "dnsAssistanceConfiguration",
+    "dtimPeriodByFrequencyGHzOverride",
+    "basicDataRateKbpsByFrequencyGHz",
 }
-VALIDATION_REASONS = {"NotNull", "NotBlank", "NotEmpty", "Size", "Min", "Max", "required", "must not be null",
-                      "INVALID_REQUEST", "INVALID_PAYLOAD", "VALIDATION_FAILED", "api.err.InvalidPayload", "api.err.InvalidValue"}
-API_ERROR_CODES = {"api.request.error", "api.authentication.missing-credentials", "api.authentication.invalid-credentials"}
+VALIDATION_REASONS = {
+    "NotNull",
+    "NotBlank",
+    "NotEmpty",
+    "Size",
+    "Min",
+    "Max",
+    "required",
+    "must not be null",
+    "INVALID_REQUEST",
+    "INVALID_PAYLOAD",
+    "VALIDATION_FAILED",
+    "api.err.InvalidPayload",
+    "api.err.InvalidValue",
+}
+API_ERROR_CODES = {
+    "api.request.error",
+    "api.authentication.missing-credentials",
+    "api.authentication.invalid-credentials",
+}
 
 
 def rejection_summary(encoded: bytes) -> str:
@@ -46,14 +97,27 @@ def rejection_summary(encoded: bytes) -> str:
     except (ValueError, UnicodeDecodeError):
         return "validation details unavailable"
     text = json.dumps(error)
-    fields = sorted(field for field in VALIDATION_FIELDS if re.search(r"(?<![A-Za-z0-9_])" + re.escape(field) + r"(?![A-Za-z0-9_])", text))
-    reasons = sorted(reason for reason in VALIDATION_REASONS if re.search(r"(?<![A-Za-z0-9_])" + re.escape(reason) + r"(?![A-Za-z0-9_])", text))
+    fields = sorted(
+        field
+        for field in VALIDATION_FIELDS
+        if re.search(r"(?<![A-Za-z0-9_])" + re.escape(field) + r"(?![A-Za-z0-9_])", text)
+    )
+    reasons = sorted(
+        reason
+        for reason in VALIDATION_REASONS
+        if re.search(r"(?<![A-Za-z0-9_])" + re.escape(reason) + r"(?![A-Za-z0-9_])", text)
+    )
     if isinstance(error, dict):
         if isinstance(error.get("code"), str) and error["code"] in API_ERROR_CODES:
             reasons.append(error["code"])
         if error.get("message") == "MLO setting requires all of [broadcasting on multiple bands, WPA3 security]":
             reasons.append("MLO setting requires multiple bands and WPA3 security")
-    return "validation fields: " + (", ".join(fields) or "unspecified") + "; constraints: " + (", ".join(reasons) or "unspecified")
+    return (
+        "validation fields: "
+        + (", ".join(fields) or "unspecified")
+        + "; constraints: "
+        + (", ".join(reasons) or "unspecified")
+    )
 
 
 def protected(path: Path, directory: bool = False) -> None:
@@ -84,7 +148,7 @@ class Api:
             raise ValueError("Only the enrolled private IPv4 controller is supported")
         protected(certificate_file)
         self.endpoint = endpoint
-        self.key = key.strip() if isinstance(key, str) else ''
+        self.key = key.strip() if isinstance(key, str) else ""
         if not self.key or any(character.isspace() for character in self.key):
             raise ValueError("The vaulted local API key must contain one nonempty token")
         certificate = certificate_file.read_text()
@@ -105,8 +169,12 @@ class Api:
             # Connect and pin before transmitting the key; never follow redirects or use environment proxies.
             if method != "GET":
                 self.writes = True
-            connection.request(method, BASE + path, body=json.dumps(body) if body is not None else None,
-                               headers={"X-API-Key": self.key, "Accept": "application/json", "Content-Type": "application/json"})
+            connection.request(
+                method,
+                BASE + path,
+                body=json.dumps(body) if body is not None else None,
+                headers={"X-API-Key": self.key, "Accept": "application/json", "Content-Type": "application/json"},
+            )
             response = connection.getresponse()
             encoded = response.read(5 * 1024 * 1024 + 1)
             if len(encoded) > 5 * 1024 * 1024:
@@ -130,9 +198,16 @@ class Api:
         while True:
             page = self.request("GET", f"{path}?offset={len(rows)}&limit=200")
             count, reported_total, data = page.get("count"), page.get("totalCount"), page.get("data")
-            if (type(count) is not int or type(reported_total) is not int or reported_total < 0
-                    or reported_total > 2000 or not isinstance(data, list) or count != len(data)
-                    or page.get("offset") != len(rows) or (total is not None and total != reported_total)):
+            if (
+                type(count) is not int
+                or type(reported_total) is not int
+                or reported_total < 0
+                or reported_total > 2000
+                or not isinstance(data, list)
+                or count != len(data)
+                or page.get("offset") != len(rows)
+                or (total is not None and total != reported_total)
+            ):
                 raise ValueError("Incomplete or concurrently changed UniFi API collection")
             total = reported_total
             rows.extend(object_value(row) for row in data)
@@ -149,10 +224,14 @@ def snapshot(api: Api, site_id: str) -> dict[str, Any]:
     prefix = f"/v1/sites/{site_id}"
     return {
         "devices": api.collection(prefix + "/devices"),
-        "networks": [api.request("GET", prefix + "/networks/" + identifier(row["id"]))
-                     for row in api.collection(prefix + "/networks")],
-        "wifi": [api.request("GET", prefix + "/wifi/broadcasts/" + identifier(row["id"]))
-                 for row in api.collection(prefix + "/wifi/broadcasts")],
+        "networks": [
+            api.request("GET", prefix + "/networks/" + identifier(row["id"]))
+            for row in api.collection(prefix + "/networks")
+        ],
+        "wifi": [
+            api.request("GET", prefix + "/wifi/broadcasts/" + identifier(row["id"]))
+            for row in api.collection(prefix + "/wifi/broadcasts")
+        ],
     }
 
 
@@ -169,25 +248,40 @@ def wifi_inputs(value: Any) -> dict[str, str]:
 
 def desired_wifi(inputs: dict[str, str], network_id: str) -> dict[str, Any]:
     return {
-        "type": "STANDARD", "name": inputs["ssid"], "enabled": False,
+        "type": "STANDARD",
+        "name": inputs["ssid"],
+        "enabled": False,
         "network": {"type": "SPECIFIC", "networkId": network_id},
         "securityConfiguration": {
-            "type": "WPA2_WPA3_PERSONAL", "passphrase": inputs["passphrase"],
-            "pmfMode": "OPTIONAL", "fastRoamingEnabled": False, "wpa3FastRoamingEnabled": False,
+            "type": "WPA2_WPA3_PERSONAL",
+            "passphrase": inputs["passphrase"],
+            "pmfMode": "OPTIONAL",
+            "fastRoamingEnabled": False,
+            "wpa3FastRoamingEnabled": False,
             "saeConfiguration": {"anticloggingThresholdSeconds": 5, "syncTimeSeconds": 5},
         },
-        "broadcastingFrequenciesGHz": [2.4, 5], "broadcastingDeviceFilter": None,
-        "hideName": False, "clientIsolationEnabled": False, "multicastToUnicastConversionEnabled": False,
-        "uapsdEnabled": False, "channel2gLockedTo6": False, "dtimPeriod2gLockedTo3": False,
-        "advertiseDeviceName": False, "arpProxyEnabled": False, "bandSteeringEnabled": False,
+        "broadcastingFrequenciesGHz": [2.4, 5],
+        "broadcastingDeviceFilter": None,
+        "hideName": False,
+        "clientIsolationEnabled": False,
+        "multicastToUnicastConversionEnabled": False,
+        "uapsdEnabled": False,
+        "channel2gLockedTo6": False,
+        "dtimPeriod2gLockedTo3": False,
+        "advertiseDeviceName": False,
+        "arpProxyEnabled": False,
+        "bandSteeringEnabled": False,
         # Network 10.6.106 validates MLO prerequisites when this optional field
         # is present, even for false. Omit it for the compatibility profile;
         # readback checks below
         # still require the feature to be absent or explicitly disabled.
         "bssTransitionEnabled": False,
-        "hotspotConfiguration": None, "blackoutScheduleConfiguration": None,
-        "clientFilteringPolicy": None, "multicastFilteringPolicy": None,
-        "mdnsProxyConfiguration": None, "handoffSuggestionsConfiguration": None,
+        "hotspotConfiguration": None,
+        "blackoutScheduleConfiguration": None,
+        "clientFilteringPolicy": None,
+        "multicastFilteringPolicy": None,
+        "mdnsProxyConfiguration": None,
+        "handoffSuggestionsConfiguration": None,
     }
 
 
@@ -218,7 +312,9 @@ def atomic_json(path: Path, value: dict[str, Any]) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
-def plan(current: dict[str, Any], record: dict[str, Any], inputs: dict[str, str]) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
+def plan(
+    current: dict[str, Any], record: dict[str, Any], inputs: dict[str, str]
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     if current["devices"]:
         raise ValueError("Isolated staging requires zero adopted devices; AP migration is a separate action")
     network: dict[str, Any] | None = None
@@ -232,15 +328,23 @@ def plan(current: dict[str, Any], record: dict[str, Any], inputs: dict[str, str]
             network = selected[0] if selected else None
         else:
             wifi = selected[0] if selected else None
-    if any(row is not network and (row.get("name") == "HOME" or row.get("vlanId") == 20) for row in current["networks"]):
+    if any(
+        row is not network and (row.get("name") == "HOME" or row.get("vlanId") == 20) for row in current["networks"]
+    ):
         raise ValueError("An unowned HOME name or VLAN 20 exists; no automatic resource takeover")
     if any(row is not wifi for row in current["wifi"]):
         raise ValueError("An unowned WLAN exists; inspect the clean-controller baseline before staging")
-    if network and (network.get("default") is not False or network.get("management") != "UNMANAGED"
-                    or network.get("metadata", {}).get("origin") != "USER_DEFINED"):
+    if network and (
+        network.get("default") is not False
+        or network.get("management") != "UNMANAGED"
+        or network.get("metadata", {}).get("origin") != "USER_DEFINED"
+    ):
         raise ValueError("Owned HOME network type or ownership differs")
-    if wifi and (wifi.get("enabled") is not False or wifi.get("type") != "STANDARD"
-                 or wifi.get("metadata", {}).get("origin") != "USER_DEFINED"):
+    if wifi and (
+        wifi.get("enabled") is not False
+        or wifi.get("type") != "STANDARD"
+        or wifi.get("metadata", {}).get("origin") != "USER_DEFINED"
+    ):
         raise ValueError("Owned WLAN is active or its type/ownership differs; staging cannot alter it")
     if wifi and wifi.get("mloEnabled") is not None and wifi.get("mloEnabled") is not False:
         raise ValueError("Owned WLAN has an unexpected MLO setting; inspect before staging")
@@ -253,8 +357,9 @@ def plan(current: dict[str, Any], record: dict[str, Any], inputs: dict[str, str]
     # Fail closed if an API masks the password; never pretend a masked secret is verified.
     if wifi:
         saved_secret = wifi.get("securityConfiguration", {}).get("passphrase")
-        if (not isinstance(saved_secret, str)
-                or (saved_secret != inputs["passphrase"] and saved_secret and set(saved_secret) <= {"*", "•"})):
+        if not isinstance(saved_secret, str) or (
+            saved_secret != inputs["passphrase"] and saved_secret and set(saved_secret) <= {"*", "•"}
+        ):
             raise ValueError("API omits or masks the WLAN passphrase; exact secret drift verification is unavailable")
     return network, wifi, changes
 
@@ -262,17 +367,29 @@ def plan(current: dict[str, Any], record: dict[str, Any], inputs: dict[str, str]
 def reconcile(api: Api, mode: str, settings: dict[str, Any]) -> dict[str, Any]:
     installed_version = api.request("GET", "/v1/info").get("applicationVersion")
     if installed_version != VERSION:
-        observed = installed_version if isinstance(installed_version, str) and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", installed_version) else "missing or malformed"
-        raise ValueError(f"Installed UniFi Network version {observed} differs from the pinned {VERSION} API contract; no API writes performed")
+        observed = (
+            installed_version
+            if isinstance(installed_version, str) and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", installed_version)
+            else "missing or malformed"
+        )
+        raise ValueError(
+            f"Installed UniFi Network version {observed} differs from the pinned {VERSION} API contract; no API writes performed"
+        )
     sites = api.collection("/v1/sites")
     selected = [row for row in sites if row["id"] == settings.get("site_id")] if settings.get("site_id") else sites
     if len(selected) != 1:
         raise ValueError("Select one exact site ID when the controller has multiple sites")
     site_id = identifier(selected[0]["id"])
     current = snapshot(api, site_id)
-    result: dict[str, Any] = {"changed": False, "application_version": VERSION, "site_id": site_id,
-                              "adopted_devices": len(current["devices"]), "network_count": len(current["networks"]),
-                              "wlan_count": len(current["wifi"]), "action": mode}
+    result: dict[str, Any] = {
+        "changed": False,
+        "application_version": VERSION,
+        "site_id": site_id,
+        "adopted_devices": len(current["devices"]),
+        "network_count": len(current["networks"]),
+        "wlan_count": len(current["wifi"]),
+        "action": mode,
+    }
     if mode == "inspect":
         return result
     inputs = wifi_inputs(settings["wifi"])
@@ -284,8 +401,12 @@ def reconcile(api: Api, mode: str, settings: dict[str, Any]) -> dict[str, Any]:
     if record_path.exists() or record_path.is_symlink():
         protected(record_path)
         record = object_value(json.loads(record_path.read_text()))
-        if (record.get("version") != 1 or record.get("endpoint") != api.endpoint or record.get("site_id") != site_id
-                or record.get("phase") not in ["pending", "complete"]):
+        if (
+            record.get("version") != 1
+            or record.get("endpoint") != api.endpoint
+            or record.get("site_id") != site_id
+            or record.get("phase") not in ["pending", "complete"]
+        ):
             raise ValueError("UniFi staging ownership record conflicts")
         protected(directory / "before.json")
     network, wifi, changes = plan(current, record, inputs)
@@ -316,20 +437,34 @@ def reconcile(api: Api, mode: str, settings: dict[str, Any]) -> dict[str, Any]:
     prefix = f"/v1/sites/{site_id}"
     desired_network = {"management": "UNMANAGED", "name": "HOME", "vlanId": 20, "enabled": True, "dhcpGuarding": None}
     if "HOME VLAN 20 definition" in changes:
-        network = api.request("PUT" if network else "POST", prefix + "/networks" + ("/" + identifier(network["id"]) if network else ""), desired_network)
+        network = api.request(
+            "PUT" if network else "POST",
+            prefix + "/networks" + ("/" + identifier(network["id"]) if network else ""),
+            desired_network,
+        )
         record["network_id"] = identifier(network["id"])
         atomic_json(record_path, record)
     if network is None:
         raise ValueError("HOME allocation did not return a resource")
     # Refuse an adopted device or concurrent unrelated change before the second write.
     latest = snapshot(api, site_id)
-    expected = {**current, "networks": [row for row in current["networks"] if row["id"] != record["network_id"]] + [network]}
-    if (latest["devices"] or latest["wifi"] != current["wifi"]
-            or sorted(latest["networks"], key=lambda r: r["id"]) != sorted(expected["networks"], key=lambda r: r["id"])):
+    expected = {
+        **current,
+        "networks": [row for row in current["networks"] if row["id"] != record["network_id"]] + [network],
+    }
+    if (
+        latest["devices"]
+        or latest["wifi"] != current["wifi"]
+        or sorted(latest["networks"], key=lambda r: r["id"]) != sorted(expected["networks"], key=lambda r: r["id"])
+    ):
         raise ValueError("UniFi changed during staged allocation; inspect protected pending ownership before resuming")
     if "disabled household WLAN" in changes:
         payload = desired_wifi(inputs, identifier(network["id"]))
-        wifi = api.request("PUT" if wifi else "POST", prefix + "/wifi/broadcasts" + ("/" + identifier(wifi["id"]) if wifi else ""), payload)
+        wifi = api.request(
+            "PUT" if wifi else "POST",
+            prefix + "/wifi/broadcasts" + ("/" + identifier(wifi["id"]) if wifi else ""),
+            payload,
+        )
         record["wifi_id"] = identifier(wifi["id"])
         atomic_json(record_path, record)
     _, _, remaining = plan(snapshot(api, site_id), record, inputs)
@@ -372,10 +507,14 @@ def main() -> None:
         print(json.dumps(reconcile(api, mode, settings)))
     except Exception as error:
         # Vendor responses, payloads and tracebacks can contain keys/passwords.
-        safe = str(error) if type(error) is ValueError and not isinstance(error, json.JSONDecodeError) else "UniFi staging failed; inspect protected inputs and local API/TLS reachability"
+        safe = (
+            str(error)
+            if type(error) is ValueError and not isinstance(error, json.JSONDecodeError)
+            else "UniFi staging failed; inspect protected inputs and local API/TLS reachability"
+        )
         print(json.dumps({"changed": bool(api and api.writes), "error": safe}))
         print(safe, file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
     finally:
         if lock is not None:
             lock.close()

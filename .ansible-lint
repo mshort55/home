@@ -1,0 +1,23 @@
+---
+offline: true
+profile: safety
+# Roles intentionally keep established host-scoped workflow outputs and use
+# role: action play names. Key ordering does not change their block semantics.
+# Retain all other naming checks and all correctness/security checks.
+skip_list:
+  - var-naming[no-role-prefix]
+  - name[casing]
+  - key-order[task]
+exclude_paths:
+  - .cache/
+  - .collections/
+  - .venv/
+  - .venv-mac/
+  - .venv-macos/
+  - .venv-validation/
+  - backups/
+  - secrets/
+  - inventory.private.yml
+  - tests/
+extra_vars:
+  vault_file: "{{ lookup('ansible.builtin.env', 'HOME_VALIDATION_VAULT') }}"

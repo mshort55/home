@@ -1,9 +1,10 @@
 """Create stable X25519 keys using the controller's unlocked Ansible Vault."""
+
 from __future__ import annotations
 
 import base64
-import json
 import ipaddress
+import json
 import os
 import re
 import stat
@@ -11,10 +12,10 @@ from pathlib import Path
 from typing import Any, cast
 
 from ansible.errors import AnsibleActionFail
-from ansible.plugins.action import ActionBase
 from ansible.parsing.vault import VaultLib, match_encrypt_secret
+from ansible.plugins.action import ActionBase
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, PublicFormat, NoEncryption
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
 
 
 def keypair() -> dict[str, str]:
@@ -22,7 +23,10 @@ def keypair() -> dict[str, str]:
     raw[0] &= 248
     raw[31] = (raw[31] & 127) | 64
     key = X25519PrivateKey.from_private_bytes(bytes(raw))
-    return {"private": base64.b64encode(raw).decode(), "public": base64.b64encode(key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()}
+    return {
+        "private": base64.b64encode(raw).decode(),
+        "public": base64.b64encode(key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)).decode(),
+    }
 
 
 def protect(path: Path, mode: int, directory: bool = False) -> None:
@@ -47,23 +51,31 @@ def validate_pair(value: object) -> None:
 
 def validate_networks(settings: dict[str, Any]) -> None:
     try:
-        tunnel = ipaddress.IPv4Network(settings['tunnel_subnet'])
-        management = ipaddress.IPv4Network(settings['management_subnet'])
-        home = ipaddress.IPv4Network(settings['endpoint'] + '/24', strict=False)
-        server = ipaddress.IPv4Address(settings['server_address'])
-        client = ipaddress.IPv4Address(settings['peer_address'])
-        if any(network.prefixlen != 24 or not network.subnet_of(ipaddress.IPv4Network('10.0.0.0/8')) for network in (tunnel, management, home)):
-            raise ValueError('Unsupported subnet')
+        tunnel = ipaddress.IPv4Network(settings["tunnel_subnet"])
+        management = ipaddress.IPv4Network(settings["management_subnet"])
+        home = ipaddress.IPv4Network(settings["endpoint"] + "/24", strict=False)
+        server = ipaddress.IPv4Address(settings["server_address"])
+        client = ipaddress.IPv4Address(settings["peer_address"])
+        if any(
+            network.prefixlen != 24 or not network.subnet_of(ipaddress.IPv4Network("10.0.0.0/8"))
+            for network in (tunnel, management, home)
+        ):
+            raise ValueError("Unsupported subnet")
         if tunnel.overlaps(management) or tunnel.overlaps(home) or management.overlaps(home):
-            raise ValueError('Overlapping subnets')
-        if server == client or any(address not in tunnel or address in (tunnel.network_address, tunnel.broadcast_address) for address in (server, client)):
-            raise ValueError('Invalid tunnel addresses')
-        for name in ('management_address', 'proxmox_address', 'switch_address'):
+            raise ValueError("Overlapping subnets")
+        if server == client or any(
+            address not in tunnel or address in (tunnel.network_address, tunnel.broadcast_address)
+            for address in (server, client)
+        ):
+            raise ValueError("Invalid tunnel addresses")
+        for name in ("management_address", "proxmox_address", "switch_address"):
             address = ipaddress.IPv4Address(settings[name])
             if address not in management or address in (management.network_address, management.broadcast_address):
-                raise ValueError('Invalid management target')
+                raise ValueError("Invalid management target")
     except (ValueError, TypeError, KeyError) as error:
-        raise AnsibleActionFail('WireGuard requires distinct private /24 networks and ordinary IPv4 target addresses.') from error
+        raise AnsibleActionFail(
+            "WireGuard requires distinct private /24 networks and ordinary IPv4 target addresses."
+        ) from error
 
 
 class ActionModule(ActionBase):
@@ -73,9 +85,14 @@ class ActionModule(ActionBase):
     def run(self, tmp: str | None = None, task_vars: dict[str, Any] | None = None) -> dict[str, Any]:
         result: dict[str, Any] = super().run(tmp, task_vars)
         args: dict[str, Any] = self._task.args
-        if set(args) != {"directory", "identity", "settings"} or not isinstance(args["directory"], str) or not isinstance(args["identity"], str) or not isinstance(args['settings'], dict):
+        if (
+            set(args) != {"directory", "identity", "settings"}
+            or not isinstance(args["directory"], str)
+            or not isinstance(args["identity"], str)
+            or not isinstance(args["settings"], dict)
+        ):
             raise AnsibleActionFail("Supply a controller directory and inventory identity.")
-        validate_networks(args['settings'])
+        validate_networks(args["settings"])
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", args["identity"]):
             raise AnsibleActionFail("Invalid WireGuard inventory identity.")
         directory = Path(args["directory"])
@@ -92,19 +109,25 @@ class ActionModule(ActionBase):
         exists = path.exists() or path.is_symlink()
         if directory.exists():
             protect(directory, 0o700, True)
-        for filename in ('home-admin.conf', 'home-admin-wifi.conf'):
+        for filename in ("home-admin.conf", "home-admin-wifi.conf"):
             client_file = directory / filename
             if client_file.exists() or client_file.is_symlink():
                 protect(client_file, 0o600)
                 if not exists:
-                    raise AnsibleActionFail('Restore the original encrypted keys; refusing to replace an existing Mac client identity.')
+                    raise AnsibleActionFail(
+                        "Restore the original encrypted keys; refusing to replace an existing Mac client identity."
+                    )
         if exists:
             protect(path, 0o600)
             ciphertext = path.read_bytes()
             if not VaultLib.is_encrypted(ciphertext):
                 raise AnsibleActionFail("Saved WireGuard keys must be Vault encrypted.")
             data = json.loads(vault.decrypt(ciphertext))
-            if set(data) != {"version", "identity", "server", "client"} or data["version"] != 1 or data["identity"] != args["identity"]:
+            if (
+                set(data) != {"version", "identity", "server", "client"}
+                or data["version"] != 1
+                or data["identity"] != args["identity"]
+            ):
                 raise AnsibleActionFail("Saved WireGuard identity conflicts; refusing replacement.")
             validate_pair(data["server"])
             validate_pair(data["client"])

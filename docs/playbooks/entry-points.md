@@ -10,15 +10,21 @@ Role argument schemas validate the action and typed options before dispatch. The
 |---|---|---|---|
 | [apply-idrac-network.yml](../../playbooks/apply-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `apply` |
 | [backup-fortigate.yml](../../playbooks/backup-fortigate.yml) | `fortigates` | [fortigate_backup](../../roles/fortigate_backup/tasks/main.yml) | `backup` |
-| [prepare-fortigate-controller.yml](../../playbooks/prepare-fortigate-controller.yml) | `fortigates` (local controller tasks) | [fortigate_controller](../../roles/fortigate_controller/tasks/main.yml) | `prepare` |
 | [backup-idrac.yml](../../playbooks/backup-idrac.yml) | `idracs` | [idrac_backup](../../roles/idrac_backup/tasks/main.yml) | `export` |
 | [backup-switch.yml](../../playbooks/backup-switch.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `backup` |
 | [boot-idrac-iso.yml](../../playbooks/boot-idrac-iso.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | `boot` |
+| [configure-fedora-dev-host.yml](../../playbooks/configure-fedora-dev-host.yml) | `fedora_hosts` | [fedora_host](../../roles/fedora_host/tasks/main.yml) | `configure` |
+| [configure-fortigate-pilot-reservations.yml](../../playbooks/configure-fortigate-pilot-reservations.yml) | `fortigates` | [fortigate_pilot_dhcp](../../roles/fortigate_pilot_dhcp/tasks/main.yml) | `configure` |
 | [configure-idrac-network.yml](../../playbooks/configure-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | Required explicit `task_action` |
 | [configure-opnsense-api.yml](../../playbooks/configure-opnsense-api.yml) | `opnsense_hosts` | [opnsense_api](../../roles/opnsense_api/tasks/main.yml) | `enroll` |
+| [configure-opnsense-bmc.yml](../../playbooks/configure-opnsense-bmc.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `configure` |
+| [configure-opnsense-dev.yml](../../playbooks/configure-opnsense-dev.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `configure` |
 | [configure-opnsense-home.yml](../../playbooks/configure-opnsense-home.yml) | `proxmox_hosts` | [opnsense_pilot](../../roles/opnsense_pilot/tasks/main.yml) | `home` |
 | [configure-opnsense-management.yml](../../playbooks/configure-opnsense-management.yml) | `proxmox_hosts` | [opnsense_pilot](../../roles/opnsense_pilot/tasks/main.yml) | `management` |
 | [configure-opnsense-pilot.yml](../../playbooks/configure-opnsense-pilot.yml) | `proxmox_hosts` | [opnsense_pilot](../../roles/opnsense_pilot/tasks/main.yml) | Required explicit `task_action` |
+| [configure-opnsense-unifi.yml](../../playbooks/configure-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `configure` |
+| [configure-opnsense-wireguard-wifi.yml](../../playbooks/configure-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `configure` |
+| [configure-opnsense-wireguard.yml](../../playbooks/configure-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `configure` |
 | [configure-proxmox-api.yml](../../playbooks/configure-proxmox-api.yml) | `proxmox_hosts` | [proxmox_api](../../roles/proxmox_api/tasks/main.yml) | `enroll` |
 | [configure-proxmox-boot.yml](../../playbooks/configure-proxmox-boot.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | Required explicit `task_action` |
 | [configure-proxmox-bridges.yml](../../playbooks/configure-proxmox-bridges.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | `bridges` |
@@ -26,55 +32,68 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [configure-proxmox-host.yml](../../playbooks/configure-proxmox-host.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | Required explicit `task_action` |
 | [configure-proxmox-repositories.yml](../../playbooks/configure-proxmox-repositories.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | `repositories` |
 | [configure-switch-all-ports.yml](../../playbooks/configure-switch-all-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
+| [configure-switch-gateway.yml](../../playbooks/configure-switch-gateway.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `gateway` |
 | [configure-switch-home-pilot-port.yml](../../playbooks/configure-switch-home-pilot-port.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-idrac-port.yml](../../playbooks/configure-switch-idrac-port.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-management.yml](../../playbooks/configure-switch-management.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `management` |
 | [configure-switch-ports.yml](../../playbooks/configure-switch-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | Required explicit `task_action` |
 | [configure-switch-recovery-ports.yml](../../playbooks/configure-switch-recovery-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-server-ports.yml](../../playbooks/configure-switch-server-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
-| [configure-opnsense-wireguard.yml](../../playbooks/configure-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `configure` |
-| [configure-switch-gateway.yml](../../playbooks/configure-switch-gateway.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `gateway` |
-| [prepare-wireguard-client.yml](../../playbooks/prepare-wireguard-client.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
-| [verify-opnsense-wireguard.yml](../../playbooks/verify-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `verify` |
-| [configure-fortigate-pilot-reservations.yml](../../playbooks/configure-fortigate-pilot-reservations.yml) | `fortigates` | [fortigate_pilot_dhcp](../../roles/fortigate_pilot_dhcp/tasks/main.yml) | `configure` |
-| [verify-fortigate-pilot-reservations.yml](../../playbooks/verify-fortigate-pilot-reservations.yml) | `fortigates` | [fortigate_pilot_dhcp](../../roles/fortigate_pilot_dhcp/tasks/main.yml) | `verify` |
-| [inspect-opnsense-wireguard-wifi.yml](../../playbooks/inspect-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `inspect` |
-| [configure-opnsense-wireguard-wifi.yml](../../playbooks/configure-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `configure` |
-| [verify-opnsense-wireguard-wifi.yml](../../playbooks/verify-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `verify` |
-| [remove-opnsense-wireguard-wifi.yml](../../playbooks/remove-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `remove` |
-| [verify-opnsense-wireguard-wifi-absent.yml](../../playbooks/verify-opnsense-wireguard-wifi-absent.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `verify_absent` |
+| [configure-unifi-host.yml](../../playbooks/configure-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configure` |
+| [configure-unifi-site.yml](../../playbooks/configure-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `configure` |
+| [create-fedora-dev-vm.yml](../../playbooks/create-fedora-dev-vm.yml) | `proxmox_hosts` | [fedora_dev](../../roles/fedora_dev/tasks/main.yml) | `create` |
 | [create-opnsense-vm.yml](../../playbooks/create-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | `create` |
+| [create-unifi-vm.yml](../../playbooks/create-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `create` |
+| [disable-opnsense-bmc.yml](../../playbooks/disable-opnsense-bmc.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `disable` |
+| [disable-opnsense-dev.yml](../../playbooks/disable-opnsense-dev.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `disable` |
 | [eject-idrac-iso.yml](../../playbooks/eject-idrac-iso.yml) | `idracs` | [idrac_iso](../../roles/idrac_iso/tasks/main.yml) | `eject` |
+| [inspect-opnsense-wireguard-wifi.yml](../../playbooks/inspect-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `inspect` |
+| [inspect-unifi-site.yml](../../playbooks/inspect-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `inspect` |
 | [install-opnsense.yml](../../playbooks/install-opnsense.yml) | `proxmox_hosts` | [opnsense_install](../../roles/opnsense_install/tasks/main.yml) | `install` |
 | [manage-idrac-iso-boot.yml](../../playbooks/manage-idrac-iso-boot.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | Required explicit `task_action` |
 | [manage-idrac-iso.yml](../../playbooks/manage-idrac-iso.yml) | `idracs` | [idrac_iso](../../roles/idrac_iso/tasks/main.yml) | Required explicit `task_action` |
 | [manage-opnsense-vm.yml](../../playbooks/manage-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | Required explicit `task_action` |
 | [mount-idrac-iso.yml](../../playbooks/mount-idrac-iso.yml) | `idracs` | [idrac_iso](../../roles/idrac_iso/tasks/main.yml) | `mount` |
+| [prepare-fedora-dev.yml](../../playbooks/prepare-fedora-dev.yml) | `proxmox_hosts` | [fedora_dev](../../roles/fedora_dev/tasks/main.yml) | `prepare` |
+| [prepare-fortigate-controller.yml](../../playbooks/prepare-fortigate-controller.yml) | `fortigates` | [fortigate_controller](../../roles/fortigate_controller/tasks/main.yml) | `prepare` |
 | [prepare-opnsense-bootstrap.yml](../../playbooks/prepare-opnsense-bootstrap.yml) | `proxmox_hosts` | [opnsense_media](../../roles/opnsense_media/tasks/main.yml) | `bootstrap` |
 | [prepare-opnsense-iso.yml](../../playbooks/prepare-opnsense-iso.yml) | `proxmox_hosts` | [opnsense_media](../../roles/opnsense_media/tasks/main.yml) | `download` |
 | [prepare-proxmox-iso.yml](../../playbooks/prepare-proxmox-iso.yml) | `proxmox_hosts` | [proxmox_installer](../../roles/proxmox_installer/tasks/main.yml) | `prepare` |
+| [prepare-unifi.yml](../../playbooks/prepare-unifi.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `prepare` |
+| [prepare-wireguard-client.yml](../../playbooks/prepare-wireguard-client.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
+| [prepare-wireguard-clients.yml](../../playbooks/prepare-wireguard-clients.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
+| [prepare-wireguard-clients.yml](../../playbooks/prepare-wireguard-clients.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `prepare` |
 | [preview-idrac-network.yml](../../playbooks/preview-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `preview` |
 | [reboot-proxmox-host.yml](../../playbooks/reboot-proxmox-host.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | `reboot` |
+| [remove-opnsense-wireguard-wifi.yml](../../playbooks/remove-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `remove` |
 | [set-idrac-uefi.yml](../../playbooks/set-idrac-uefi.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | `uefi` |
 | [snapshot-idrac.yml](../../playbooks/snapshot-idrac.yml) | `idracs` | [idrac_snapshot](../../roles/idrac_snapshot/tasks/main.yml) | `snapshot` |
+| [start-fedora-dev-vm.yml](../../playbooks/start-fedora-dev-vm.yml) | `proxmox_hosts` | [fedora_dev](../../roles/fedora_dev/tasks/main.yml) | `start` |
+| [start-unifi-vm.yml](../../playbooks/start-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `start` |
 | [status-idrac-iso.yml](../../playbooks/status-idrac-iso.yml) | `idracs` | [idrac_iso](../../roles/idrac_iso/tasks/main.yml) | `status` |
 | [status-idrac-network.yml](../../playbooks/status-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `status` |
+| [stop-fedora-dev-vm.yml](../../playbooks/stop-fedora-dev-vm.yml) | `proxmox_hosts` | [fedora_dev](../../roles/fedora_dev/tasks/main.yml) | `stop` |
+| [stop-unifi-vm.yml](../../playbooks/stop-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `stop` |
 | [update-proxmox-host.yml](../../playbooks/update-proxmox-host.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | `upgrade` |
+| [verify-fedora-dev-connectivity.yml](../../playbooks/verify-fedora-dev-connectivity.yml) | `fedora_hosts` | [fedora_host](../../roles/fedora_host/tasks/main.yml) | `connectivity` |
+| [verify-fedora-dev-host.yml](../../playbooks/verify-fedora-dev-host.yml) | `fedora_hosts` | [fedora_host](../../roles/fedora_host/tasks/main.yml) | `verify` |
+| [verify-fedora-dev-vm.yml](../../playbooks/verify-fedora-dev-vm.yml) | `proxmox_hosts` | [fedora_dev](../../roles/fedora_dev/tasks/main.yml) | `verify` |
+| [verify-fortigate-pilot-reservations.yml](../../playbooks/verify-fortigate-pilot-reservations.yml) | `fortigates` | [fortigate_pilot_dhcp](../../roles/fortigate_pilot_dhcp/tasks/main.yml) | `verify` |
+| [verify-idrac-bmc-route.yml](../../playbooks/verify-idrac-bmc-route.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `verify_current` |
 | [verify-idrac-iso-boot.yml](../../playbooks/verify-idrac-iso-boot.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | `verify` |
 | [verify-idrac-network.yml](../../playbooks/verify-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `verify` |
-| [verify-opnsense-vm.yml](../../playbooks/verify-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | `verify` |
-| [configure-opnsense-unifi.yml](../../playbooks/configure-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `configure` |
-| [configure-unifi-host.yml](../../playbooks/configure-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configure` |
-| [create-unifi-vm.yml](../../playbooks/create-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `create` |
-| [prepare-unifi.yml](../../playbooks/prepare-unifi.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `prepare` |
-| [start-unifi-vm.yml](../../playbooks/start-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `start` |
-| [stop-unifi-vm.yml](../../playbooks/stop-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `stop` |
+| [verify-opnsense-bmc-disabled.yml](../../playbooks/verify-opnsense-bmc-disabled.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `verify_disabled` |
+| [verify-opnsense-bmc.yml](../../playbooks/verify-opnsense-bmc.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `verify` |
+| [verify-opnsense-dev-disabled.yml](../../playbooks/verify-opnsense-dev-disabled.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `verify_disabled` |
+| [verify-opnsense-dev.yml](../../playbooks/verify-opnsense-dev.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `verify` |
 | [verify-opnsense-unifi.yml](../../playbooks/verify-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `verify` |
+| [verify-opnsense-vm.yml](../../playbooks/verify-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | `verify` |
+| [verify-opnsense-wireguard-wifi-absent.yml](../../playbooks/verify-opnsense-wireguard-wifi-absent.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `verify_absent` |
+| [verify-opnsense-wireguard-wifi.yml](../../playbooks/verify-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `verify` |
+| [verify-opnsense-wireguard.yml](../../playbooks/verify-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `verify` |
+| [verify-unifi-config-ready.yml](../../playbooks/verify-unifi-config-ready.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configuration_ready` |
 | [verify-unifi-host.yml](../../playbooks/verify-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `verify` |
 | [verify-unifi-restore-ready.yml](../../playbooks/verify-unifi-restore-ready.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `restore_ready` |
-| [verify-unifi-config-ready.yml](../../playbooks/verify-unifi-config-ready.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configuration_ready` |
-| [inspect-unifi-site.yml](../../playbooks/inspect-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `inspect` |
-| [configure-unifi-site.yml](../../playbooks/configure-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `configure` |
 | [verify-unifi-site.yml](../../playbooks/verify-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `verify` |
 | [verify-unifi-vm.yml](../../playbooks/verify-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `verify` |
 
@@ -108,27 +127,30 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 |---|---|
 | `cisco_switch_options` | `backup`, `management`, `ports`, `gateway` |
 | `community_api_options` | `load`, `prepare` |
+| `fedora_dev_options` | `prepare`, `create`, `verify`, `start`, `stop` |
+| `fedora_host_options` | `configure`, `verify`, `connectivity` |
 | `fortigate_backup_options` | `backup` |
 | `fortigate_controller_options` | `prepare`, `verify` |
+| `fortigate_pilot_dhcp_options` | `configure`, `verify` |
 | `idrac_backup_options` | `export` |
 | `idrac_boot_options` | `boot`, `verify`, `uefi` |
 | `idrac_iso_options` | `mount`, `eject`, `status` |
-| `idrac_network_options` | `preview`, `apply`, `status`, `verify` |
+| `idrac_network_options` | `preview`, `apply`, `status`, `verify`, `verify_current` |
 | `idrac_snapshot_options` | `snapshot` |
 | `opnsense_api_options` | `enroll` |
 | `opnsense_install_options` | `install` |
+| `opnsense_lab_options` | `configure`, `verify`, `disable`, `verify_disabled` |
 | `opnsense_media_options` | `download`, `bootstrap` |
 | `opnsense_pilot_options` | `management`, `home` |
-| `opnsense_wireguard_options` | `prepare`, `configure`, `verify` |
-| `opnsense_wireguard_wifi_options` | `inspect`, `configure`, `verify`, `remove`, `verify_absent` |
-| `fortigate_pilot_dhcp_options` | `configure`, `verify` |
 | `opnsense_vm_options` | `describe`, `create`, `verify` |
+| `opnsense_wireguard_options` | `prepare`, `configure`, `verify` |
+| `opnsense_wireguard_wifi_options` | `inspect`, `configure`, `verify`, `remove`, `verify_absent`, `prepare` |
 | `proxmox_api_options` | `enroll` |
 | `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |
 | `proxmox_installer_options` | `prepare` |
-| `unifi_host_options` | `configure`, `verify`, `configuration_ready`, `restore_ready` |
-| `unifi_site_options` | `inspect`, `configure`, `verify` |
+| `unifi_host_options` | `configure`, `verify`, `restore_ready`, `configuration_ready` |
 | `unifi_network_options` | `configure`, `verify` |
+| `unifi_site_options` | `inspect`, `configure`, `verify` |
 | `unifi_vm_options` | `prepare`, `create`, `verify`, `start`, `stop` |
 
 ## Inputs and execution environment

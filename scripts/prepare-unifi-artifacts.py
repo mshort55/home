@@ -1,14 +1,15 @@
 """Verify the pinned Ubuntu image and official UniFi installer on the controller."""
+
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import Any
 
 IMAGE = "ubuntu-24.04-server-cloudimg-amd64.img"
@@ -46,9 +47,27 @@ def download(url: str, path: Path) -> bool:
     try:
         # Resume interrupted large transfers within the private temporary file.
         for attempt in range(8):
-            result = subprocess.run(["curl", "--fail", "--silent", "--show-error", "--location",
-                                     "--proto", "=https", "--proto-redir", "=https", "--max-time", "240",
-                                     "--continue-at", "-", "--output", name, url], timeout=250)
+            result = subprocess.run(
+                [
+                    "curl",
+                    "--fail",
+                    "--silent",
+                    "--show-error",
+                    "--location",
+                    "--proto",
+                    "=https",
+                    "--proto-redir",
+                    "=https",
+                    "--max-time",
+                    "240",
+                    "--continue-at",
+                    "-",
+                    "--output",
+                    name,
+                    url,
+                ],
+                timeout=250,
+            )
             if result.returncode == 0:
                 break
             if result.returncode not in [18, 28, 56] or attempt == 7:
@@ -85,9 +104,37 @@ def main() -> None:
             changed = download(IMAGE_ORIGIN + name, directory / name) or changed
     with tempfile.TemporaryDirectory(prefix="unifi-gpg-") as home:
         keyring = Path(home) / "cloudimage.gpg"
-        subprocess.run(["gpg", "--batch", "--yes", "--homedir", home, "--dearmor", "--output", str(keyring), str(arguments.signing_key)], check=True, capture_output=True)
-        result = subprocess.run(["gpgv", "--homedir", home, "--status-fd", "1", "--keyring", str(keyring),
-                                 str(directory / "SHA256SUMS.gpg"), str(directory / "SHA256SUMS")], check=True, capture_output=True, text=True)
+        subprocess.run(
+            [
+                "gpg",
+                "--batch",
+                "--yes",
+                "--homedir",
+                home,
+                "--dearmor",
+                "--output",
+                str(keyring),
+                str(arguments.signing_key),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        result = subprocess.run(
+            [
+                "gpgv",
+                "--homedir",
+                home,
+                "--status-fd",
+                "1",
+                "--keyring",
+                str(keyring),
+                str(directory / "SHA256SUMS.gpg"),
+                str(directory / "SHA256SUMS"),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
     if not any(line.startswith("[GNUPG:] VALIDSIG " + SIGNER + " ") for line in result.stdout.splitlines()):
         raise ValueError("Ubuntu checksum does not have the pinned cloud-image signature")
     checksum = (directory / "SHA256SUMS").read_text()
@@ -99,9 +146,15 @@ def main() -> None:
     for name, expected in [(IMAGE, IMAGE_SHA256), (INSTALLER, INSTALLER_SHA256)]:
         if digest(directory / name) != expected:
             raise ValueError("Artifact checksum differs: " + name + "; automatic replacement refused")
-    value: dict[str, Any] = {"version": 1, "ubuntu_release": "20260926", "signer": SIGNER,
-                             "image_sha256": IMAGE_SHA256, "installer_sha256": INSTALLER_SHA256,
-                             "unifi_os": "5.1.42", "network": "10.5.67"}
+    value: dict[str, Any] = {
+        "version": 1,
+        "ubuntu_release": "20260926",
+        "signer": SIGNER,
+        "image_sha256": IMAGE_SHA256,
+        "installer_sha256": INSTALLER_SHA256,
+        "unifi_os": "5.1.42",
+        "network": "10.5.67",
+    }
     encoded = json.dumps(value, indent=2) + "\n"
     if not manifest.exists() or manifest.read_text() != encoded:
         changed = True

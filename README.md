@@ -28,6 +28,10 @@ Use `.venv-macos/bin/ansible-playbook` for native Mac runs. Linux virtual enviro
 
 ## Shared inventory and credentials
 
+Repository changes are checked with the [automated validation suite](docs/validation.md).
+After its one-time setup, run `python3 tools/run-validation.py` from the repository root.
+The suite uses synthetic inputs and performs no device configuration operations.
+
 Keep real device addresses and connection settings in `inventory.private.yml`, mode 0600 and Git-ignored. Use `inventory.example.yml` as the starting structure for another installation. Store login usernames and passwords in the encrypted, Git-ignored `secrets/vault.yml`; inventory contains references rather than credential literals. Use the [native Vault commands](docs/credentials.md) to create, edit, view and rekey the store. The repo's `ansible.cfg` sets `ask_vault_pass = True`, so playbook commands prompt automatically without `--ask-vault-pass`. Keep the unlock password separately in your password manager and keep secrets out of command arguments and committed files.
 
 Keep SSH host-key checking and TLS certificate validation enabled. Verify and establish trust before connecting. Scope legacy compatibility exceptions to the affected device/group; each workflow documents its requirements. Do not disable verification to bypass a mismatch.

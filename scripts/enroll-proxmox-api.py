@@ -1,12 +1,13 @@
 """Enroll a scoped API account through an already trusted root SSH connection."""
+
 from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import socket
 import subprocess
 import sys
+from pathlib import Path
 from typing import cast
 
 USER = "home-ansible@pve"
@@ -14,7 +15,9 @@ ROLE = "HomeAutomation"
 TOKEN = "controller"
 MARKER = "Managed by configure-proxmox-api.yml"
 OWNERSHIP_MARKERS = {MARKER, "Managed by configure-community-api.yml"}
-PRIVILEGES = sorted("Sys.Audit Datastore.Audit Datastore.AllocateSpace Datastore.AllocateTemplate SDN.Use VM.Allocate VM.Audit VM.Config.CDROM VM.Config.Cloudinit VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.PowerMgmt".split())
+PRIVILEGES = sorted(
+    "Sys.Audit Datastore.Audit Datastore.AllocateSpace Datastore.AllocateTemplate SDN.Use VM.Allocate VM.Audit VM.Config.CDROM VM.Config.Cloudinit VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.PowerMgmt".split()
+)
 LEGACY_PRIVILEGES = [privilege for privilege in PRIVILEGES if privilege != "VM.Config.Cloudinit"]
 DIRECTORY = Path("/root/.home-automation-api")
 RECORD = DIRECTORY / "credentials.json"
@@ -57,7 +60,9 @@ def main() -> None:
     if operation not in ("plan", "apply") or os.geteuid() != 0 or socket.gethostname().split(".")[0] != node:
         raise ValueError("Unexpected API enrollment host or operation")
     # openssl -checkip prints its verdict but exits zero on mismatch on some versions.
-    if "does match certificate" not in run("openssl", "x509", "-in", "/etc/pve/local/pve-ssl.pem", "-noout", "-checkip", address):
+    if "does match certificate" not in run(
+        "openssl", "x509", "-in", "/etc/pve/local/pve-ssl.pem", "-noout", "-checkip", address
+    ):
         raise ValueError("Proxmox certificate does not identify the inventory IP")
     protect(DIRECTORY, 0o700)
     protect(RECORD, 0o600)
@@ -78,7 +83,12 @@ def main() -> None:
         raise ValueError("Conflicting automation ACL")
     tokens: list[dict[str, object]] = records("pveum", "user", "token", "list", USER) if user else []
     token = next((t for t in tokens if t["tokenid"] == TOKEN), None)
-    if token and (not RECORD.exists() or token.get("comment") not in OWNERSHIP_MARKERS or token.get("privsep", 1) or token.get("expire", 0)):
+    if token and (
+        not RECORD.exists()
+        or token.get("comment") not in OWNERSHIP_MARKERS
+        or token.get("privsep", 1)
+        or token.get("expire", 0)
+    ):
         raise ValueError("Existing API token needs its original protected record; refusing rotation")
     if RECORD.exists() and not token:
         raise ValueError("Saved API token is absent on the host")
@@ -86,7 +96,12 @@ def main() -> None:
         raise ValueError("Cloud-init privilege upgrade requires the original owned enrollment")
     if RECORD.exists():
         existing: dict[str, object] = mapping(json.loads(RECORD.read_text()))
-        if existing["api_host"] != address or existing["node"] != node or existing["api_user"] != USER or existing["api_token_id"] != TOKEN:
+        if (
+            existing["api_host"] != address
+            or existing["node"] != node
+            or existing["api_user"] != USER
+            or existing["api_token_id"] != TOKEN
+        ):
             raise ValueError("Saved API enrollment identity conflicts")
     changed = not user or not role or not owned_acls or not token or role_upgrade
     if operation == "apply":
@@ -100,13 +115,26 @@ def main() -> None:
             run("pveum", "acl", "modify", "/", "--users", USER, "--roles", ROLE, "--propagate", "1")
         if not token:
             DIRECTORY.mkdir(mode=0o700, exist_ok=True)
-            created: dict[str, object] = mapping(read("pveum", "user", "token", "add", USER, TOKEN, "--privsep", "0", "--comment", MARKER))
-            credentials = {"api_host": address, "api_user": USER, "api_token_id": TOKEN, "api_token_secret": created["value"], "node": node}
+            created: dict[str, object] = mapping(
+                read("pveum", "user", "token", "add", USER, TOKEN, "--privsep", "0", "--comment", MARKER)
+            )
+            credentials = {
+                "api_host": address,
+                "api_user": USER,
+                "api_token_id": TOKEN,
+                "api_token_secret": created["value"],
+                "node": node,
+            }
             fd = os.open(RECORD, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w") as output:
                 json.dump(credentials, output)
         saved: dict[str, object] = mapping(json.loads(RECORD.read_text()))
-        if saved["api_host"] != address or saved["node"] != node or saved["api_user"] != USER or saved["api_token_id"] != TOKEN:
+        if (
+            saved["api_host"] != address
+            or saved["node"] != node
+            or saved["api_user"] != USER
+            or saved["api_token_id"] != TOKEN
+        ):
             raise ValueError("Saved API enrollment identity conflicts")
     print(json.dumps({"changed": bool(changed)}))
 

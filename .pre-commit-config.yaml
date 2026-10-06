@@ -1,0 +1,10 @@
+---
+repos:
+  - repo: local
+    hooks:
+      - id: home-validation
+        name: Offline repository validation
+        entry: python3 tools/run-validation.py --quick
+        language: system
+        pass_filenames: false
+        always_run: true

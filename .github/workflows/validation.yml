@@ -1,0 +1,33 @@
+---
+name: Validation
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline:
+    name: Offline validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install validation dependencies
+        run: |
+          python -m venv .venv-validation
+          .venv-validation/bin/python -m pip install -r requirements-dev.txt
+          .venv-validation/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
+          .venv-validation/bin/python tools/install-validation-tools.py
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends php-cli
+      - name: Validate source and safety contracts
+        run: python3 tools/run-validation.py

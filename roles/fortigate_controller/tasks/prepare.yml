@@ -35,7 +35,7 @@
         # Container runtimes bind-mount this file; allow fallback if atomic rename is unavailable.
         unsafe_writes: true
       become: true
-      become_method: sudo
+      become_method: ansible.builtin.sudo
       become_user: root
       when: fortigate_controller_host_lines | length == 0
     - name: Verify actual controller resolution after preparation

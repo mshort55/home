@@ -1,5 +1,7 @@
 FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # The Proxmox package is pinned; APT checks the signed repository metadata.
 RUN set -eu; \
     apt-get update; \
