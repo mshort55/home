@@ -1,9 +1,9 @@
 ---
 name: Security audit
-on:
-  push:
-  pull_request:
-  workflow_dispatch:
+'on':
+  push: {}
+  pull_request: {}
+  workflow_dispatch: {}
   schedule:
     - cron: '23 7 * * 1'
 permissions:

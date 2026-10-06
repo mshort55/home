@@ -1,7 +1,6 @@
 ---
-# The builder base image is pinned by digest. Distribution packages follow its
-# signed repositories; the Proxmox assistant is separately version-pinned.
-ignored:
-  - DL3008
+# Distribution-package exceptions are documented at their RUN instructions,
+# so new Dockerfiles receive the package-pinning check by default.
+failure-threshold: style
 trustedRegistries:
   - docker.io

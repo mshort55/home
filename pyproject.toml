@@ -1,27 +1,52 @@
 [tool.ruff]
 target-version = "py312"
 line-length = 120
-include = ["scripts/**/*.py", "plugins/**/*.py", "tools/**/*.py", "tests/**/*.py"]
+include = ["*.py", "*.pyi"]
+extend-exclude = [".venv*", ".cache", ".collections", "backups", "secrets", "private", "rendered"]
+force-exclude = true
+
+[tool.ruff.format]
 # This builder hashes its own bytes into existing installation identities.
-# Preserve its current formatting until an explicit media recipe migration.
-extend-exclude = ["scripts/prepare-opnsense-bootstrap.py"]
+# Lint it normally, but preserve its bytes until an explicit media migration.
+exclude = ["scripts/prepare-opnsense-bootstrap.py"]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "S", "A", "BLE", "DTZ", "LOG", "G", "RUF", "T10", "PGH"]
+# En dashes are intentional typography in human-readable error messages.
+allowed-confusables = ["–"]
+
+[tool.ruff.lint.per-file-ignores]
+# Assertions are pytest's assertion mechanism, not production safety guards.
+"tests/**/*.py" = ["S101"]
+# Reviewed byte-frozen builder: imports, exception chaining and a constant
+# f-string need edits; XML comes only from a SHA-256-verified vendor ISO.
+# Subprocess arguments are bounded builder commands, with shell=False.
+"scripts/prepare-opnsense-bootstrap.py" = ["I001", "B904", "F541", "S314", "S603"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config -ra"
+xfail_strict = true
+filterwarnings = ["error"]
 
 [tool.coverage.run]
 branch = true
-include = [
-  "plugins/action/fortigate_dhcp_plan.py",
-  "plugins/action/wireguard_keys.py",
-  "scripts/validate-opnsense-vm.py",
-  "scripts/unifi-isolation.py",
-]
+source = ["scripts", "plugins", "tools"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 85
+include_namespace_packages = true
+# Whole-source coverage is about 30%; retain a close regression floor and make
+# unexecuted modules visible rather than borrowing the focused 85% threshold.
+fail_under = 29.5
+
+[tool.home_validation.coverage]
+# Preserve the original focused aggregate floor and prevent one critical file
+# from borrowing all its coverage from the others.
+focused_fail_under = 85
+
+[tool.home_validation.coverage.minimum_per_file]
+"plugins/action/fortigate_dhcp_plan.py" = 95
+"plugins/action/wireguard_keys.py" = 95
+"scripts/validate-opnsense-vm.py" = 85
+"scripts/unifi-isolation.py" = 80

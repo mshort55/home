@@ -43,7 +43,7 @@ def sha256(path: Path) -> str:
 
 def verify(image: Path, public_key: Path, signature: Path, openssl: str) -> None:
     regular_file(image)
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 -- Reviewed administrative argv; no shell.
         [openssl, "dgst", "-sha256", "-verify", str(public_key), "-signature", str(signature), str(image)],
         check=False,
         capture_output=True,

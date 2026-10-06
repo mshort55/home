@@ -32,6 +32,7 @@
     - sysctl
     - --system
   when: fedora_sysctl_change.changed or fedora_ipv6_before.stdout != '1'
+  changed_when: true  # Runs only for a changed file or observed runtime drift.
 - name: Enforce named-user key-only SSH
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/00-home-automation.conf
@@ -77,6 +78,7 @@
     - --remove-service=ssh
   when: (fedora_firewall_before.stdout | regex_search('(?m)^  services:.*\bssh\b')) is not none
   register: fedora_firewall_remove
+  changed_when: true  # The preceding inspection requires the service to exist.
 - name: Permit SSH only from the authenticated laptop tunnel address
   ansible.builtin.command:
     argv:
@@ -90,12 +92,14 @@
       }}/32" service name="ssh" accept
   when: fedora_ssh_rule not in fedora_firewall_before.stdout
   register: fedora_firewall_add
+  changed_when: true  # The preceding inspection requires the rule to be absent.
 - name: Reload only changed firewall policy
   ansible.builtin.command:
     argv:
     - firewall-cmd
     - --reload
   when: fedora_firewall_remove.changed or fedora_firewall_add.changed
+  changed_when: true  # Reloads only after a permanent policy mutation.
 - name: Reload changed SSH settings
   ansible.builtin.systemd_service:
     name: sshd

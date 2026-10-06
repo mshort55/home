@@ -31,7 +31,7 @@ NON_PUBLIC = [
 
 
 def run(*arguments: str, content: str | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(arguments, input=content, check=True, capture_output=True, text=True, timeout=15)
+    return subprocess.run(arguments, input=content, check=True, capture_output=True, text=True, timeout=15)  # noqa: S603 -- Reviewed administrative argv; no shell.
 
 
 def match(left: dict[str, Any], right: object, operator: str = "==") -> dict[str, Any]:

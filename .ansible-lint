@@ -1,9 +1,20 @@
 ---
 offline: true
 profile: safety
+strict: true
+# Safety does not include every correctness rule. Enable these explicitly while
+# keeping collection-publishing requirements out of this private repository.
+enable_list:
+  - fqcn
+  - ignore-errors
+  - no-changed-when
+  - no-log-password
+  - no-same-owner
+# The experimental args rule falsely reports inherited group module_defaults
+# as missing arguments. Keep syntax/schema and role-contract validation active.
 # Roles intentionally keep established host-scoped workflow outputs and use
 # role: action play names. Key ordering does not change their block semantics.
-# Retain all other naming checks and all correctness/security checks.
+# Retain other naming checks; the two formatting exceptions avoid broad churn.
 skip_list:
   - var-naming[no-role-prefix]
   - name[casing]
@@ -15,6 +26,7 @@ exclude_paths:
   - .venv-mac/
   - .venv-macos/
   - .venv-validation/
+  - .venv-validation-macos/
   - backups/
   - secrets/
   - inventory.private.yml

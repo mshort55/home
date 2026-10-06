@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 def run(*arguments: str) -> str:
-    return subprocess.run(arguments, check=True, capture_output=True, text=True, timeout=60).stdout
+    return subprocess.run(arguments, check=True, capture_output=True, text=True, timeout=60).stdout  # noqa: S603 -- Reviewed administrative argv; no shell.
 
 
 def main() -> None:
@@ -26,9 +26,8 @@ def main() -> None:
         raise ValueError("Use a private absolute TLS directory")
     certificate, key = directory / "gui-cert.pem", directory / "gui-key.pem"
     for path in [certificate, key]:
-        if (
-            path.is_symlink()
-            or path.exists()
+        if path.is_symlink() or (
+            path.exists()
             and (not path.is_file() or path.stat().st_uid != os.getuid() or path.stat().st_mode & 0o777 != 0o600)
         ):
             raise ValueError("Unprotected GUI TLS artifact")

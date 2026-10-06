@@ -18,17 +18,15 @@ def mapping(value: object) -> dict[str, Any]:
 
 
 def read(*arguments: str) -> Any:
-    return json.loads(subprocess.run(arguments, check=True, capture_output=True, text=True).stdout)
+    return json.loads(subprocess.run(arguments, check=True, capture_output=True, text=True).stdout)  # noqa: S603 -- Reviewed administrative argv; no shell.
 
 
 def protected(path: Path, directory: bool = False) -> None:
-    if (
-        path.is_symlink()
-        or path.exists()
-        and (path.stat().st_uid != 0 or path.stat().st_mode & 0o777 != (0o700 if directory else 0o600))
+    if path.is_symlink() or (
+        path.exists() and (path.stat().st_uid != 0 or path.stat().st_mode & 0o777 != (0o700 if directory else 0o600))
     ):
         raise ValueError("Unprotected VM installation record")
-    if path.exists() and (directory and not path.is_dir() or not directory and not path.is_file()):
+    if path.exists() and ((directory and not path.is_dir()) or (not directory and not path.is_file())):
         raise ValueError("Unexpected installation artifact type")
 
 
@@ -51,7 +49,7 @@ def main() -> None:
     node = sys.argv[2]
     if (
         os.geteuid() != 0
-        or subprocess.run(["hostname", "-s"], check=True, capture_output=True, text=True).stdout.strip() != node
+        or subprocess.run(["hostname", "-s"], check=True, capture_output=True, text=True).stdout.strip() != node  # noqa: S607 -- Executable uses the trusted host/container PATH.
     ):
         raise ValueError("Unexpected Proxmox host")
     if (

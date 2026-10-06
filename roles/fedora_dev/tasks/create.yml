@@ -109,6 +109,7 @@
       - --shared
       - '0'
     when: fedora_storage_read.stdout | from_json | selectattr('storage', 'equalto', 'home-cloudinit') | list | length == 0
+    changed_when: true  # Successful creation changes state; the absence guard prevents reapplication.
   - name: Stage the protected cloud-init seed without displaying its host key
     ansible.builtin.copy:
       src: '{{ fedora_seed_directory }}/user-data.yml'
@@ -184,6 +185,7 @@
       - --scsi0
       - '{{ fedora_dev_vm.storage }}:0,import-from=/var/lib/home-automation/fedora-200/source.qcow2,discard=on,iothread=1'
     when: not fedora_current.has_disk and fedora_current.state == 'stopped'
+    changed_when: true  # A successful first import changes state; the diskless guard prevents reimport.
   - name: Grow the owned system disk to its absolute allocation through the API
     community.proxmox.proxmox_disk:
       vmid: 200

@@ -505,7 +505,7 @@ def main() -> None:
             except BlockingIOError:
                 raise ValueError("Another controller process is already applying this UniFi site") from None
         print(json.dumps(reconcile(api, mode, settings)))
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 -- CLI boundary must redact unexpected vendor errors too.
         # Vendor responses, payloads and tracebacks can contain keys/passwords.
         safe = (
             str(error)

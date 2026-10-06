@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -20,7 +21,7 @@ CHECKS = ["repository", "python", "yaml", "ansible", "shell", "php", "containers
 
 
 def command(arguments: list[str], env: dict[str, str], *, timeout: int = 600) -> None:
-    subprocess.run(arguments, cwd=ROOT, env=env, check=True, timeout=timeout)
+    subprocess.run(arguments, cwd=ROOT, env=env, check=True, timeout=timeout)  # noqa: S603 -- Reviewed administrative argv; no shell.
 
 
 def binary(name: str) -> str:
@@ -39,7 +40,8 @@ def binary(name: str) -> str:
 def validation_environment(directory: Path) -> dict[str, str]:
     # Operator inventory, Vault sources, callback plugins and connection overrides
     # must never affect a validation run. Keep the infrastructure config unchanged.
-    env = {key: value for key, value in os.environ.items() if not key.startswith(("ANSIBLE_", "GITLEAKS_"))}
+    overrides = ("ANSIBLE_", "GITLEAKS_", "HADOLINT_", "PYTEST_", "COVERAGE_", "RUFF_")
+    env = {key: value for key, value in os.environ.items() if not key.startswith(overrides)}
     fixture = directory / "credentials.yml"
     fixture.write_text("vault_devices: {}\n")
     config = configparser.ConfigParser()
@@ -112,6 +114,30 @@ def secret_checks(files: list[Path], env: dict[str, str], directory: Path) -> No
     command([binary("gitleaks"), "dir", str(public), "--redact", "--no-banner"], env)
 
 
+def coverage_checks(report: dict, files: list[Path]) -> None:
+    """Require measured source completeness and preserve critical-file floors."""
+    measured = report["files"]
+    expected = {path.as_posix() for path in files if path.suffix == ".py" and path.parts[0] != "tests"}
+    missing = expected - measured.keys()
+    if missing:
+        raise ValueError("Python source missing from coverage report: " + ", ".join(sorted(missing)))
+    settings = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["home_validation"]["coverage"]
+    covered = possible = 0
+    for path, minimum in settings["minimum_per_file"].items():
+        if path not in expected or path not in measured:
+            raise ValueError(f"Critical coverage file is missing: {path}")
+        summary = measured[path]["summary"]
+        if summary["percent_covered"] < minimum:
+            raise ValueError(f"Coverage for {path} is {summary['percent_covered']:.2f}%, requires {minimum}%")
+        covered += summary["covered_lines"] + summary["covered_branches"]
+        possible += summary["num_statements"] + summary["num_branches"]
+    percentage = 100 * covered / possible if possible else 100
+    minimum = settings["focused_fail_under"]
+    if percentage < minimum:
+        raise ValueError(f"Focused coverage is {percentage:.2f}%, requires {minimum}%")
+    print(f"Focused branch-aware coverage: {percentage:.2f}% (minimum {minimum}%)", flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -134,21 +160,9 @@ def main() -> int:
         for check in selected:
             print(f"\nChecking {check}...", flush=True)
             if check == "python":
-                command([binary("ruff"), "check", "scripts", "plugins", "tools", "tests"], env)
-                command(
-                    [
-                        binary("ruff"),
-                        "check",
-                        "--isolated",
-                        "--select",
-                        "E4,E7,E9,F",
-                        "--ignore",
-                        "F541",
-                        "scripts/prepare-opnsense-bootstrap.py",
-                    ],
-                    env,
-                )
-                command([binary("ruff"), "format", "--check", "scripts", "plugins", "tools", "tests"], env)
+                python_files = [str(path) for path in files if path.suffix in {".py", ".pyi"}]
+                command([binary("ruff"), "check", *python_files], env)
+                command([binary("ruff"), "format", "--check", "."], env)
             elif check == "yaml":
                 paths = [str(path) for path in files if path.suffix in {".yml", ".yaml"}]
                 command([binary("yamllint"), "-s", ".ansible-lint", *paths], env)
@@ -171,11 +185,25 @@ def main() -> int:
                         fixture.write_text(ast.literal_eval(node.value))
                         command([binary("php"), "-l", str(fixture)], env)
             elif check == "containers":
-                command([binary("hadolint"), *map(str, sorted((ROOT / "containers").glob("*/Dockerfile")))], env)
+                from repository_checks import dockerfiles
+
+                command([binary("hadolint"), *map(str, dockerfiles(files))], env)
             elif check == "secrets":
                 secret_checks(files, env, directory)
             elif check == "tests":
-                command([sys.executable, "-m", "pytest", "--cov", "--cov-report=term-missing"], env)
+                report = directory / "coverage.json"
+                command(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        "--cov",
+                        "--cov-report=term-missing",
+                        f"--cov-report=json:{report}",
+                    ],
+                    env,
+                )
+                coverage_checks(json.loads(report.read_text()), files)
             elif check == "dependencies":
                 command([sys.executable, "-m", "pip", "check"], env)
                 command([sys.executable, "tools/check-ssh.py"], env)
@@ -201,7 +229,7 @@ def main() -> int:
                         if resolved is None or resolved not in direct.specifier:
                             raise ValueError(f"Direct dependency differs from {filename}: {direct.name}")
                 for name, pin in json.loads((ROOT / "tools/native-tools.json").read_text()).items():
-                    result = subprocess.run(
+                    result = subprocess.run(  # noqa: S603 -- Reviewed administrative argv; no shell.
                         [binary(name), "version" if name == "gitleaks" else "--version"],
                         env=env,
                         capture_output=True,

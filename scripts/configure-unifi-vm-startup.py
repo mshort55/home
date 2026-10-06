@@ -12,7 +12,7 @@ STARTUP = "order=2,up=30,down=120"
 
 
 def inspect(allocation: dict[str, Any], node: str, probe: str) -> dict[str, Any]:
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 -- Reviewed administrative argv; no shell.
         [sys.executable, "-c", probe, json.dumps(allocation), node],
         check=True,
         capture_output=True,
@@ -43,7 +43,7 @@ def configure(operation: str, allocation: dict[str, Any], node: str, probe: str)
         digest = config.get("digest", "")
         if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{40}", digest) is None:
             raise ValueError("Require the current VM configuration digest")
-        subprocess.run(["qm", "set", "110", "--digest", digest, *changes], check=True, capture_output=True, text=True)
+        subprocess.run(["qm", "set", "110", "--digest", digest, *changes], check=True, capture_output=True, text=True)  # noqa: S603, S607 -- Executable uses the trusted host/container PATH.
         after = inspect(allocation, node, probe)
         excluded = {"digest", "startup", "onboot"}
         if {key: value for key, value in config.items() if key not in excluded} != {

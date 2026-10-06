@@ -31,7 +31,7 @@ def require(condition: bool, message: str) -> None:
 
 
 def run(*arguments: str) -> str:
-    return subprocess.run(arguments, check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(arguments, check=True, capture_output=True, text=True).stdout.strip()  # noqa: S603 -- Reviewed administrative argv; no shell.
 
 
 def regular(path: Path) -> None:

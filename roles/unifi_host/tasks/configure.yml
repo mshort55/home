@@ -107,6 +107,7 @@
   ansible.builtin.command:
     argv: [/var/lib/home-automation/unifi-installer, --non-interactive, --network-mode, pasta, --web-port, '11443']
   when: not unifi_installation_paths.results[0].stat.exists
+  changed_when: true  # Successful installation changes state; the ownership guard permits only the first install.
 - name: Verify the original installer marker before resuming or completing
   ansible.builtin.slurp:
     src: /var/lib/home-automation/unifi-installed.json

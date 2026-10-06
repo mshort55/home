@@ -3,6 +3,8 @@ FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # The Proxmox package is pinned; APT checks the signed repository metadata.
+# Distribution packages follow signed repositories for security updates.
+# hadolint ignore=DL3008
 RUN set -eu; \
     apt-get update; \
     apt-get install --yes --no-install-recommends ca-certificates curl python3 whois xorriso; \

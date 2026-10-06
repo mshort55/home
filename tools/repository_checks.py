@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def source_files(root: Path = ROOT) -> list[Path]:
     result = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],  # noqa: S607 -- Executable uses the trusted host/container PATH.
         cwd=root,
         capture_output=True,
         check=True,
@@ -25,13 +25,48 @@ def source_files(root: Path = ROOT) -> list[Path]:
     return sorted({Path(name.decode()) for name in result.stdout.split(b"\0") if name})
 
 
+def dockerfiles(files: list[Path]) -> list[Path]:
+    return sorted(
+        path
+        for path in files
+        if path.name == "Dockerfile" or path.name.startswith("Dockerfile.") or path.name.endswith(".Dockerfile")
+    )
+
+
+def container_errors(root: Path, files: list[Path]) -> list[str]:
+    """External base images must be immutable; scratch and prior stages are local."""
+    errors = []
+    for path in dockerfiles(files):
+        if private_path(path) or (root / path).is_symlink() or not (root / path).is_file():
+            continue  # Privacy/type errors are reported without reading the artifact.
+        stages = set()
+        for line_number, line in enumerate((root / path).read_text().splitlines(), 1):
+            if not re.match(r"^\s*FROM\s", line, re.IGNORECASE):
+                continue
+            fields = line.split()[1:]
+            if fields and fields[0].startswith("--platform="):
+                fields.pop(0)
+            if not fields:
+                errors.append(f"missing container base: {path}:{line_number}")
+                continue
+            image = fields[0]
+            if (
+                image.lower() != "scratch"
+                and image.lower() not in stages
+                and not re.fullmatch(r"[^\s@]+@sha256:[0-9a-f]{64}", image)
+            ):
+                errors.append(f"container base requires a literal SHA-256 digest: {path}:{line_number}")
+            if len(fields) == 3 and fields[1].lower() == "as":
+                stages.add(fields[2].lower())
+    return errors
+
+
 def private_path(path: Path) -> bool:
     private_dirs = {"secrets", "backups", "private", "rendered", ".cache", ".collections", ".ssh", "node_modules"}
     return (
         any(part in private_dirs or part.startswith(".venv") for part in path.parts)
         or ".private." in path.name
-        or path.name.startswith((".env", ".vault-pass", "vault_password"))
-        and path.name != ".env.example"
+        or (path.name.startswith((".env", ".vault-pass", "vault_password")) and path.name != ".env.example")
         or path.suffix in {".unf", ".key", ".pem", ".p12", ".pfx"}
         or path.name in {"vault.yml", "vault.yaml"}
     )
@@ -52,7 +87,7 @@ UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, uni
 
 
 def load_yaml(path: Path):
-    return yaml.load(path.read_text(), Loader=UniqueLoader)
+    return yaml.load(path.read_text(), Loader=UniqueLoader)  # noqa: S506 -- UniqueLoader subclasses SafeLoader.
 
 
 def walk_strings(value):
@@ -97,7 +132,7 @@ def documentation_tables(root: Path = ROOT) -> dict[tuple[str, str], str]:
             for item in play["roles"]:
                 role = item if isinstance(item, str) else item["role"]
                 action = None if isinstance(item, str) else item.get(f"{role}_options", {}).get("task_action")
-                if role not in actions or action is not None and action not in actions[role]:
+                if role not in actions or (action is not None and action not in actions[role]):
                     raise ValueError(f"{path.name}: unknown role or action")
                 selected = f"`{action}`" if action else "Required explicit `task_action`"
                 entries.append(
@@ -170,7 +205,8 @@ def ssh_policy_errors(root: Path = ROOT) -> list[str]:
 def check_repository(root: Path = ROOT) -> list[str]:
     errors = ssh_policy_errors(root)
     files = source_files(root)
-    environment = Environment()
+    errors.extend(container_errors(root, files))
+    environment = Environment(autoescape=False)  # noqa: S701 -- Parses infrastructure templates, never renders HTML.
     for relative in files:
         path = root / relative
         if private_path(relative):
@@ -223,7 +259,7 @@ def check_repository(root: Path = ROOT) -> list[str]:
         "reports/junit.xml",
     ]
     result = subprocess.run(
-        ["git", "check-ignore", "--no-index", "--stdin"],
+        ["git", "check-ignore", "--no-index", "--stdin"],  # noqa: S607 -- Executable uses the trusted host/container PATH.
         cwd=root,
         input="\n".join(ignored) + "\n",
         text=True,

@@ -145,7 +145,7 @@ def checksum(path: Path) -> str:
 
 
 def run_step(argv: list[str], log: Path, stage: str) -> str:
-    result = subprocess.run(argv, capture_output=True, text=True, check=False)
+    result = subprocess.run(argv, capture_output=True, text=True, check=False)  # noqa: S603 -- Reviewed administrative argv; no shell.
     with log.open("a") as stream:
         stream.write(f"\n{stage}: exit {result.returncode}\n")
         stream.write(result.stdout)
@@ -211,7 +211,7 @@ def build(arguments: Arguments) -> None:
     if len(password) < 8 or any(char in password for char in "\0\r\n"):
         raise BuildError("Root password must have at least eight characters and no NUL or newline")
     hashed = subprocess.run(
-        ["mkpasswd", "--method=yescrypt", "--stdin"],
+        ["mkpasswd", "--method=yescrypt", "--stdin"],  # noqa: S607 -- Executable uses the trusted host/container PATH.
         input=password,
         capture_output=True,
         text=True,

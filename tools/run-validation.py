@@ -11,4 +11,4 @@ environment = ".venv-validation-macos" if platform.system() == "Darwin" else ".v
 python = root / environment / "bin/python"
 if not python.is_file():
     raise SystemExit(f"Create {environment} using docs/validation.md before running validation")
-os.execv(str(python), [str(python), str(root / "tools/validate.py"), *sys.argv[1:]])
+os.execv(str(python), [str(python), str(root / "tools/validate.py"), *sys.argv[1:]])  # noqa: S606 -- Fixed local runner.

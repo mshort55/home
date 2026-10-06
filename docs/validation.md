@@ -53,8 +53,51 @@ Fixtures contain synthetic inputs and ephemeral keys. Tests cover DHCP merge
 preservation/conflicts, Vault-encrypted WireGuard identity preservation,
 check-mode refusal paths, VM ownership/hardware guards, UniFi firewall policy
 and update failures, and interrupted artifact completion. Coverage applies to
-the four focused planner/guard files, with an 85% branch-aware aggregate floor;
-it is not a claim of coverage for all infrastructure workflows.
+all maintained Python in `scripts`, `plugins` and `tools`, including unexecuted
+modules and namespace directories. The whole-source branch-aware regression
+floor is 29.5%; the four focused planner/guard files retain their separate 85%
+aggregate floor and individual floors of 95%, 95%, 85% and 80%. The runner rejects
+any Git-visible production Python missing from the coverage report, so adding a
+new source directory requires adding it to coverage too. Many workflows still
+need behavior tests; the focused percentage is not a whole-repository claim.
+
+Ruff checks all Git-visible Python and type stubs, including root-level files,
+with security, exception, logging, debugger and suppression rules enabled.
+Pytest rejects warnings and unexpected xfail successes. The runner clears inherited
+Ansible, Gitleaks, Hadolint, Ruff, pytest and coverage environment overrides so
+operator settings cannot weaken the configured checks.
+
+YAML rejects empty values, boolean-like keys, duplicate anchors and duplicate
+merge keys. Workflow event names use quoted `'on'` and explicit empty mappings.
+All Git-visible Dockerfiles, including nested and variant names, receive Hadolint
+checks; external base images must have literal SHA-256 digests.
+
+## Deliberate exceptions
+
+- The bootstrap builder is excluded only from formatting because its bytes
+  determine existing media identities. It receives normal linting with five
+  documented rule exceptions for existing formatting/exception patterns and
+  reviewed checksum-verified XML and subprocess inputs. A media recipe migration
+  is required before editing this builder.
+- Administrative subprocess calls, the SafeLoader subclass, infrastructure-only
+  Jinja parser and CLI secret-redaction boundary have local, rule-specific Ruff
+  exceptions. New call sites are checked normally. Test assertions are exempt
+  only from `S101`; en dashes remain allowed in human-readable messages.
+- Ansible retains role-variable prefix, name casing and task ordering exceptions
+  to preserve shared outputs and avoid broad cosmetic changes. Safety is extended
+  with fully qualified module names, ignored-error/change-reporting checks and
+  opt-in password-logging/archive-owner checks; findings, including warnings,
+  fail validation. The experimental `args` rule is deferred because it reports
+  inherited group `module_defaults` as missing arguments. Immediate guarded
+  reloads remain immediate rather than moving to deferred handlers.
+- Distribution packages intentionally follow signed repositories. `DL3008`
+  exceptions are attached only to the current installation instructions;
+  future Dockerfiles must pin packages or document their own exception.
+- Long lines, optional document-start markers, comment alignment and flexible
+  brace/list spacing remain readability choices. Private inputs, environments,
+  vendor downloads and device backups stay outside source validation.
+
+## Source privacy and local hooks
 
 Gitleaks scans a temporary copy of Git-visible source rather than the working
 directory containing private inventories, keys and backups. Findings are redacted.

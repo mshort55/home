@@ -12,6 +12,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 FILENAME = "Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2"
 SHA256 = "28680fe5b371a5a82ebf43a31926e086a168e59949d03969c5093e7071f90b7f"
@@ -37,13 +38,19 @@ def digest(path: Path) -> str:
 
 
 def download(url: str, destination: Path) -> bool:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username is not None or parsed.password is not None:
+        raise ValueError("Fedora downloads require an HTTPS URL without credentials")
     protect(destination)
     if destination.exists():
         return False
     descriptor, name = tempfile.mkstemp(prefix=".download-", dir=destination.parent)
     temporary = Path(name)
     try:
-        with os.fdopen(descriptor, "wb") as output, urllib.request.urlopen(url, timeout=60) as response:
+        with (
+            os.fdopen(descriptor, "wb") as output,
+            urllib.request.urlopen(url, timeout=60) as response,  # noqa: S310 -- HTTPS is required above.
+        ):
             if not response.geturl().startswith("https://"):
                 raise ValueError("Fedora download redirected outside HTTPS")
             while chunk := response.read(1024 * 1024):
@@ -82,8 +89,8 @@ def main() -> None:
             changed = download(url, destination) or changed
     # No import into the user's GPG keyring; verify against a dedicated downloaded keyring.
     with tempfile.TemporaryDirectory(prefix="fedora-gpg-") as home:
-        result = subprocess.run(
-            ["gpgv", "--homedir", home, "--status-fd", "1", "--keyring", str(keyring), str(checksum)],
+        result = subprocess.run(  # noqa: S603 -- Reviewed administrative argv; no shell.
+            ["gpgv", "--homedir", home, "--status-fd", "1", "--keyring", str(keyring), str(checksum)],  # noqa: S607 -- Executable uses the trusted host/container PATH.
             check=True,
             capture_output=True,
             text=True,

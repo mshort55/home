@@ -78,3 +78,21 @@ def test_compatibility_file_cannot_disable_trust_or_run_external_commands(load_m
     source = Path(__file__).resolve().parent.parent / "files/ssh/cisco-legacy.conf"
     path.write_text(source.read_text() + unsafe + "\n")
     assert any("beyond the reviewed" in message for message in checks.ssh_policy_errors(tmp_path))
+
+
+@pytest.mark.parametrize("url", ["http://source.example.test/file", "file:///private/file", "https:///missing-host"])
+def test_native_source_scheme_is_rejected_before_network_access(installer, url):
+    with pytest.raises(ValueError, match="require an HTTPS URL"):
+        installer.download_source(url)
+
+
+def test_native_source_redirect_outside_https_is_rejected_before_read(installer, monkeypatch):
+    from unittest.mock import MagicMock
+
+    response = MagicMock()
+    response.__enter__.return_value = response
+    response.geturl.return_value = "http://source.example.test/file"
+    monkeypatch.setattr(installer.urllib.request, "urlopen", lambda *args, **kwargs: response)
+    with pytest.raises(ValueError, match="left HTTPS"):
+        installer.download_source("https://source.example.test/file")
+    response.read.assert_not_called()

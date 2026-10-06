@@ -15,6 +15,7 @@ import sys
 import tarfile
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -33,9 +34,22 @@ def extract_source(data: bytes, checksum: str, destination: Path) -> Path:
     return destination / tops.pop()
 
 
+def download_source(url: str) -> bytes:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username is not None or parsed.password is not None:
+        raise ValueError("SSH sources require an HTTPS URL without credentials")
+    with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310 -- HTTPS is required above.
+        if not response.geturl().startswith("https://"):
+            raise ValueError("SSH source download left HTTPS")
+        data = response.read(16 * 1024 * 1024 + 1)
+    if len(data) > 16 * 1024 * 1024:
+        raise ValueError("SSH source download is too large")
+    return data
+
+
 def run(arguments: list[str], log: Path, env: dict[str, str] | None = None) -> None:
     with log.open("a") as stream:
-        subprocess.run(arguments, env=env, stdout=stream, stderr=subprocess.STDOUT, check=True, timeout=600)
+        subprocess.run(arguments, env=env, stdout=stream, stderr=subprocess.STDOUT, check=True, timeout=600)  # noqa: S603 -- Reviewed administrative argv; no shell.
 
 
 def enable_config_file(source: Path) -> None:
@@ -71,7 +85,7 @@ def enable_config_file(source: Path) -> None:
 def verify() -> None:
     # Use a fresh interpreter: rebuilding must not leave a previously imported
     # native module in memory, or accidentally validate the build environment.
-    subprocess.run([sys.executable, str(ROOT / "tools/check-ssh.py")], check=True, timeout=30)
+    subprocess.run([sys.executable, str(ROOT / "tools/check-ssh.py")], check=True, timeout=30)  # noqa: S603 -- Reviewed administrative argv; no shell.
 
 
 def main() -> None:
@@ -81,7 +95,7 @@ def main() -> None:
     if sys.prefix == sys.base_prefix:
         raise ValueError("Run with the target virtual environment's Python")
     if not args.force:
-        result = subprocess.run([sys.executable, str(ROOT / "tools/check-ssh.py")], capture_output=True, timeout=30)
+        result = subprocess.run([sys.executable, str(ROOT / "tools/check-ssh.py")], capture_output=True, timeout=30)  # noqa: S603 -- Reviewed administrative argv; no shell.
         if result.returncode == 0:
             print(result.stdout.decode().strip())
             return
@@ -99,12 +113,7 @@ def main() -> None:
     sources = {}
     for name, pin in pins.items():
         print(f"Downloading verified {name} {pin['version']} source", flush=True)
-        with urllib.request.urlopen(pin["url"], timeout=60) as response:
-            if not response.geturl().startswith("https://"):
-                raise ValueError("SSH source download left HTTPS")
-            data = response.read(16 * 1024 * 1024 + 1)
-        if len(data) > 16 * 1024 * 1024:
-            raise ValueError("SSH source download is too large")
+        data = download_source(pin["url"])
         sources[name] = extract_source(data, pin["sha256"], work)
     prefix = work / "native"
     cmake = [
@@ -126,7 +135,7 @@ def main() -> None:
     ]
     crypto_prefix = None
     if platform.system() == "Darwin":
-        crypto_prefix = Path(subprocess.check_output(["brew", "--prefix", "openssl@3"], text=True).strip())
+        crypto_prefix = Path(subprocess.check_output(["brew", "--prefix", "openssl@3"], text=True).strip())  # noqa: S607 -- Executable uses the trusted host/container PATH.
         cmake.append(f"-DOPENSSL_ROOT_DIR={crypto_prefix}")
     print("Building libssh without SSH server, GSSAPI or compression support", flush=True)
     run(cmake, log)

@@ -47,8 +47,8 @@ def download(url: str, path: Path) -> bool:
     try:
         # Resume interrupted large transfers within the private temporary file.
         for attempt in range(8):
-            result = subprocess.run(
-                [
+            result = subprocess.run(  # noqa: S603 -- Reviewed administrative argv; no shell.
+                [  # noqa: S607 -- Executable uses the trusted host/container PATH.
                     "curl",
                     "--fail",
                     "--silent",
@@ -104,8 +104,8 @@ def main() -> None:
             changed = download(IMAGE_ORIGIN + name, directory / name) or changed
     with tempfile.TemporaryDirectory(prefix="unifi-gpg-") as home:
         keyring = Path(home) / "cloudimage.gpg"
-        subprocess.run(
-            [
+        subprocess.run(  # noqa: S603 -- Reviewed administrative argv; no shell.
+            [  # noqa: S607 -- Executable uses the trusted host/container PATH.
                 "gpg",
                 "--batch",
                 "--yes",
@@ -119,8 +119,8 @@ def main() -> None:
             check=True,
             capture_output=True,
         )
-        result = subprocess.run(
-            [
+        result = subprocess.run(  # noqa: S603 -- Reviewed administrative argv; no shell.
+            [  # noqa: S607 -- Executable uses the trusted host/container PATH.
                 "gpgv",
                 "--homedir",
                 home,
