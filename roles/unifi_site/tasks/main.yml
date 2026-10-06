@@ -1,0 +1,21 @@
+---
+- name: Validate the effective isolated site contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+  no_log: true
+- name: Require explicit vaulted Wi-Fi inputs for configuration or verification
+  ansible.builtin.assert:
+    that:
+    - unifi_site_options.task_action == 'inspect' or (unifi_site_credentials.ssid is defined and unifi_site_credentials.passphrase is defined)
+    fail_msg: Add api_key, ssid and passphrase to vault_devices for this controller before configure or verify.
+  no_log: true
+- name: Require the enrolled MGMT controller and bounded API timeout
+  ansible.builtin.assert:
+    that:
+    - inventory_hostname in groups.get('unifi_hosts', [])
+    - inventory_hostname == hostvars[unifi_proxmox_host].unifi_vm_allocation.guest_host
+    - ansible_host ~ '/24' == hostvars[unifi_proxmox_host].unifi_vm_allocation.address
+    - unifi_site_timeout >= 1
+    - unifi_site_timeout <= 60
+- name: Dispatch the explicit isolated site action
+  ansible.builtin.include_tasks: '{{ unifi_site_options.task_action }}.yml'

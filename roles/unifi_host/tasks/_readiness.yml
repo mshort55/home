@@ -1,0 +1,29 @@
+- name: Verify selected GUI TLS, local DNS, public HTTPS and denied private-device connections
+  ansible.builtin.command:
+    argv:
+    - /usr/bin/python3
+    - -c
+    - "import hashlib, json, socket, ssl, subprocess, sys, urllib.request\nsettings = json.loads(sys.argv[1])\ncertificate\
+      \ = sys.argv[2]\ncontext = ssl.create_default_context(cadata=certificate)\ncontext.minimum_version = ssl.TLSVersion.TLSv1_2\n\
+      with socket.create_connection(('127.0.0.1',11443),timeout=5) as connection:\n    with context.wrap_socket(connection,\
+      \ server_hostname=settings['address']) as secure:\n        presented = secure.getpeercert(binary_form=True)\n      \
+      \  if presented != ssl.PEM_cert_to_DER_cert(certificate):\n            raise SystemExit('Select the prepared controller\
+      \ certificate in the GUI before restoring')\n        request = ('GET / HTTP/1.1\\r\\nHost: ' + settings['address'] +\
+      \ ':11443\\r\\nConnection: close\\r\\n\\r\\n').encode()\n        secure.sendall(request)\n        status = secure.recv(256).split(b'\\\
+      r\\n',1)[0].split()\n        if len(status) < 2 or status[1] not in [b'200',b'301',b'302',b'303',b'307',b'308']:\n \
+      \           raise SystemExit('The trusted controller UI did not return a ready HTTP response')\nanswers = subprocess.run(\n\
+      \    ['/usr/bin/dig', '-4', '+time=2', '+tries=1', '+short',\n     '@' + settings['dns'], settings['fqdn'], 'A'],\n\
+      \    check=True, capture_output=True, text=True, timeout=10,\n).stdout.strip().splitlines()\nif answers != [settings['address']]:\n\
+      \    raise SystemExit('Controller DNS identity differs')\nwith urllib.request.urlopen('https://example.com',timeout=15)\
+      \ as response:\n    if not 200 <= response.status < 400: raise SystemExit('Controller public HTTPS is unavailable')\n\
+      for address,port in settings['denied']:\n    try:\n        connection = socket.create_connection((address,port),timeout=2)\n\
+      \    except OSError:\n        continue\n    connection.close()\n    raise SystemExit('Controller reached a forbidden\
+      \ private device: ' + address)\nprint(json.dumps({'tls': 'pinned and hostname-verified', 'certificate_sha256': hashlib.sha256(presented).hexdigest(),\
+      \ 'dns': 'verified', 'https': 'verified', 'private_device_probes': 'denied'}))\n"
+    - '{{ {"address": ansible_host, "dns": unifi_allocation.dns, "fqdn": inventory_hostname ~ "." ~ unifi_allocation.domain,
+      "denied": [[hostvars[unifi_proxmox_host].ansible_host,22], [hostvars[hostvars[unifi_proxmox_host].opnsense_guest].opnsense_lab.bmc.target,443],
+      [hostvars[hostvars[unifi_proxmox_host].opnsense_guest].opnsense_wireguard_wifi.wan_gateway,443], [ansible_host.rsplit(".",1)[0]
+      ~ ".31",8080], [ansible_host.rsplit(".",1)[0] ~ ".32",8080]]} | to_json }}'
+    - '{{ lookup("ansible.builtin.file", unifi_seed_directory ~ "/gui-cert.pem") }}'
+  check_mode: false
+  changed_when: false

@@ -1,0 +1,5 @@
+---
+- name: Inspect the pinned local API and complete site collections without writes
+  ansible.builtin.include_tasks: _run.yml
+  vars:
+    unifi_site_operation: inspect

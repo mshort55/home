@@ -1,0 +1,50 @@
+---
+argument_specs:
+  main:
+    short_description: Inspect or stage a disabled household WLAN through the pinned local API.
+    options:
+      unifi_site_options:
+        type: dict
+        required: true
+        description: Explicit isolated site operation; no default action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices: [inspect, configure, verify]
+            description: Matching public task filename. Configuration stages a disabled WLAN only.
+      unifi_proxmox_host:
+        type: str
+        required: true
+        description: Inventory host owning this enrolled controller VM.
+      unifi_site_credentials:
+        type: dict
+        required: true
+        description: Decrypted Vault inputs passed privately through stdin, never credential files or command arguments.
+        options:
+          api_key:
+            type: str
+            required: true
+            description: Local Integrations API key; not a cloud Site Manager key.
+          ssid:
+            type: str
+            description: Existing household SSID; no fallback, required for configure/verify and unused by inspect.
+          passphrase:
+            type: str
+            description: Existing household Wi-Fi passphrase; no fallback, required for configure/verify and unused by inspect.
+      unifi_site_state_directory:
+        type: path
+        default: '{{ inventory_dir }}/.cache/unifi-site/{{ inventory_hostname }}'
+        description: Private mode 0700 directory holding immutable resource IDs and original API snapshot.
+      unifi_site_id:
+        type: str
+        default: ''
+        description: Exact API UUID; empty selects the sole site and refuses multiple sites.
+      unifi_site_seed_directory:
+        type: path
+        default: '{{ inventory_dir }}/.cache/unifi-seed/{{ inventory_hostname }}'
+        description: Protected prepared guest identity and gui-cert.pem; reused for TLS readiness and API trust.
+      unifi_site_timeout:
+        type: int
+        default: 15
+        description: Per-request timeout in seconds, bounded from 1 to 60.

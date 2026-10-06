@@ -1,0 +1,8 @@
+- name: Verify isolation and trust before declarative UniFi configuration
+  hosts: unifi_hosts
+  gather_facts: false
+  become: true
+  roles:
+  - role: unifi_host
+    unifi_host_options:
+      task_action: configuration_ready

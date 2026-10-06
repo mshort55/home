@@ -40,7 +40,7 @@
     when: unifi_backup_stat.stat.exists
   - name: Report the backup prerequisite without blocking isolated provisioning
     ansible.builtin.debug:
-      msg: "Stage the authoritative .unf at {{ unifi_backup_file }} with mode 0600 before restore readiness, then rerun prepare-unifi.yml. No backup is uploaded by this workflow."
+      msg: "The optional historical .unf is not staged at {{ unifi_backup_file }}. Fresh declarative configuration does not require it; an explicitly selected recovery restore would require a protected frozen copy."
     when: not unifi_backup_stat.stat.exists
   - name: Inspect the protected bootstrap directory and existing host key
     ansible.builtin.stat:

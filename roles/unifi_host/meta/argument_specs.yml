@@ -1,7 +1,7 @@
 argument_specs:
   main:
-    short_description: Install and verify an isolated UniFi OS Server; gate manual
-      restoration.
+    short_description: Install and verify an isolated UniFi OS Server; gate declarative configuration
+      or optional restoration.
     options:
       unifi_host_options:
         type: dict
@@ -15,6 +15,7 @@ argument_specs:
             - configure
             - verify
             - restore_ready
+            - configuration_ready
             description: Matching public task filename.
       unifi_proxmox_host:
         type: str
@@ -31,4 +32,4 @@ argument_specs:
       unifi_backup_file:
         type: path
         default: '{{ inventory_dir }}/.cache/unifi-backup/authoritative.unf'
-        description: Authoritative private Network backup; restoration remains operator-executed.
+        description: Optional historical Network recovery backup; unused by declarative configuration.

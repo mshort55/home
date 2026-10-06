@@ -1,0 +1,5 @@
+---
+unifi_site_state_directory: '{{ inventory_dir }}/.cache/unifi-site/{{ inventory_hostname }}'
+unifi_site_seed_directory: '{{ inventory_dir }}/.cache/unifi-seed/{{ inventory_hostname }}'
+unifi_site_id: ''
+unifi_site_timeout: 15

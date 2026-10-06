@@ -148,4 +148,4 @@
   ansible.builtin.debug:
     msg:
       url: 'https://{{ ansible_host }}:11443'
-      next: 'Complete local-only setup, disable automatic application/device updates, and upload the prepared GUI TLS certificate/key before verify-unifi-restore-ready.yml. Leave the authoritative backup unrestored until that gate passes.'
+      next: 'Complete local-only setup, disable automatic application/device updates, upload the prepared GUI TLS certificate/key, and run verify-unifi-config-ready.yml. Enroll a local Integrations API key before inspect-unifi-site.yml and configure-unifi-site.yml; keep APs isolated during staging.'

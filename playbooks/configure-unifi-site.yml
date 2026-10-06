@@ -1,0 +1,14 @@
+---
+- name: Stage HOME VLAN 20 and the disabled household WLAN
+  hosts: unifi_hosts
+  gather_facts: false
+  become: true
+  vars_files:
+  - "{{ vault_file | default(((playbook_dir ~ '/..') | realpath) ~ '/secrets/vault.yml') }}"
+  roles:
+  - role: unifi_site
+    unifi_site_options: {task_action: configure}
+    unifi_site_credentials: >-
+      {{ {'api_key': vault_devices[inventory_hostname].api_key,
+          'ssid': vault_devices[inventory_hostname].ssid | default(''),
+          'passphrase': vault_devices[inventory_hostname].passphrase | default('')} }}

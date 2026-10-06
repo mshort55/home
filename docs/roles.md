@@ -288,7 +288,7 @@ The former `playbooks/tasks/` helpers are now task modules in `community_api`, `
 
 ## Isolated controller roles
 
-`unifi_vm` prepares stable controller artifacts and guards VM 110 ownership, first boot and explicit power operations. `unifi_network` configures/verifies the four named OPNsense rules and DNS record. `unifi_host` installs/verifies the guest and gates the supported manual backup restore. Each role has `defaults/main.yml`, `meta/argument_specs.yml`, a required role-scoped `task_action`, and dynamic `tasks/main.yml` dispatch. Entry points and invocation order are in the [UniFi runbook](playbooks/unifi-controller.md).
+`unifi_vm` prepares stable controller artifacts and guards VM 110 ownership, first boot and explicit power operations. `unifi_network` configures/verifies the four named OPNsense rules and DNS record. `unifi_host` installs/verifies the guest and gates trusted isolated configuration; `unifi_site` stages/verifies the disabled desired household WLAN through the official local API. Historical restoration is an optional recovery path. Each role has `defaults/main.yml`, `meta/argument_specs.yml`, a required role-scoped `task_action`, and dynamic `tasks/main.yml` dispatch. Entry points and invocation order are in the [UniFi runbook](playbooks/unifi-controller.md).
 
 ```text
 roles/
@@ -304,10 +304,14 @@ roles/
   unifi_host/
     defaults/main.yml
     meta/argument_specs.yml
-    tasks/{main,configure,verify,restore_ready,_baseline,_installed}.yml
+    tasks/{main,configure,verify,configuration_ready,restore_ready,_baseline,_installed,_readiness}.yml
+  unifi_site/
+    defaults/main.yml
+    meta/argument_specs.yml
+    tasks/{main,inspect,configure,verify,_run}.yml
 ```
 
-Shared helpers live in `scripts/`: `prepare-unifi-artifacts.py`, `prepare-unifi-tls.py`, `inspect-unifi-vm.py`, `configure-unifi-vm-startup.py`, `unifi-isolation.py` and `configure-opnsense-unifi.php`. Ubuntu's pinned public signing key lives in `files/ubuntu-cloud-image-signing-key.asc`. Generated host keys, GUI private keys, seeds, backup copies and manifests stay in protected, Git-ignored controller directories. The existing Proxmox startup/reboot preflight invokes the controller ownership guard before accepting VM 110; it does not grant maintenance permission to arbitrary additional guests.
+Shared helpers live in `scripts/`: `prepare-unifi-artifacts.py`, `prepare-unifi-tls.py`, `inspect-unifi-vm.py`, `configure-unifi-vm-startup.py`, `unifi-isolation.py`, `configure-unifi-site.py` and `configure-opnsense-unifi.php`. Ubuntu's pinned public signing key lives in `files/ubuntu-cloud-image-signing-key.asc`. Generated host keys, GUI private keys, seeds, backup copies and manifests stay in protected, Git-ignored controller directories. The existing Proxmox startup/reboot preflight invokes the controller ownership guard before accepting VM 110; it does not grant maintenance permission to arbitrary additional guests.
 
 ## Validation and execution
 

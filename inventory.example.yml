@@ -266,3 +266,5 @@ all:
             -o IdentitiesOnly=yes -o UserKnownHostsFile={{ (inventory_dir ~ '/.cache/unifi-seed/unifi01/known_hosts')
             | quote }}
           unifi_proxmox_host: pve01
+          # Site/WLAN secrets belong in secrets/vault.yml under vault_devices.unifi01.
+          # Configure stages a disabled HOME VLAN 20 WLAN; AP adoption is a later action.

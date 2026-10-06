@@ -1,4 +1,3 @@
----
 - name: Verify the installed controller before any manual backup restoration
   ansible.builtin.include_tasks: verify.yml
 - name: Verify the scoped firewall and DNS transaction still matches
@@ -6,7 +5,8 @@
     name: unifi_network
     public: false
   vars:
-    unifi_network_options: {task_action: verify}
+    unifi_network_options:
+      task_action: verify
 - name: Inspect the authoritative backup and prepared GUI certificate privately
   ansible.builtin.stat:
     path: '{{ item }}'
@@ -33,54 +33,16 @@
 - name: Require the frozen authoritative Network 7.3.83 backup bytes
   ansible.builtin.assert:
     that:
-    - unifi_restore_artifacts.results[0].stat.checksum == (lookup('ansible.builtin.file', unifi_seed_directory ~ '/backup.json') | from_json).sha256
+    - unifi_restore_artifacts.results[0].stat.checksum == (lookup('ansible.builtin.file', unifi_seed_directory ~ '/backup.json')
+      | from_json).sha256
     - (lookup('ansible.builtin.file', unifi_seed_directory ~ '/backup.json') | from_json).network_version == '7.3.83'
   no_log: true
-- name: Verify selected GUI TLS, local DNS, public HTTPS and denied private-device connections
-  ansible.builtin.command:
-    argv:
-    - /usr/bin/python3
-    - -c
-    - |
-      import hashlib, json, socket, ssl, subprocess, sys, urllib.request
-      settings = json.loads(sys.argv[1])
-      certificate = sys.argv[2]
-      context = ssl.create_default_context(cadata=certificate)
-      context.minimum_version = ssl.TLSVersion.TLSv1_2
-      with socket.create_connection(('127.0.0.1',11443),timeout=5) as connection:
-          with context.wrap_socket(connection, server_hostname=settings['address']) as secure:
-              presented = secure.getpeercert(binary_form=True)
-              if presented != ssl.PEM_cert_to_DER_cert(certificate):
-                  raise SystemExit('Select the prepared controller certificate in the GUI before restoring')
-              request = ('GET / HTTP/1.1\r\nHost: ' + settings['address'] + ':11443\r\nConnection: close\r\n\r\n').encode()
-              secure.sendall(request)
-              status = secure.recv(256).split(b'\r\n',1)[0].split()
-              if len(status) < 2 or status[1] not in [b'200',b'301',b'302',b'303',b'307',b'308']:
-                  raise SystemExit('The trusted controller UI did not return a ready HTTP response')
-      answers = subprocess.run(
-          ['/usr/bin/dig', '-4', '+time=2', '+tries=1', '+short',
-           '@' + settings['dns'], settings['fqdn'], 'A'],
-          check=True, capture_output=True, text=True, timeout=10,
-      ).stdout.strip().splitlines()
-      if answers != [settings['address']]:
-          raise SystemExit('Controller DNS identity differs')
-      with urllib.request.urlopen('https://example.com',timeout=15) as response:
-          if not 200 <= response.status < 400: raise SystemExit('Controller public HTTPS is unavailable')
-      for address,port in settings['denied']:
-          try:
-              connection = socket.create_connection((address,port),timeout=2)
-          except OSError:
-              continue
-          connection.close()
-          raise SystemExit('Controller reached a forbidden private device: ' + address)
-      print(json.dumps({'tls': 'pinned and hostname-verified', 'certificate_sha256': hashlib.sha256(presented).hexdigest(), 'dns': 'verified', 'https': 'verified', 'private_device_probes': 'denied'}))
-    - '{{ {"address": ansible_host, "dns": unifi_allocation.dns, "fqdn": inventory_hostname ~ "." ~ unifi_allocation.domain, "denied": [[hostvars[unifi_proxmox_host].ansible_host,22], [hostvars[hostvars[unifi_proxmox_host].opnsense_guest].opnsense_lab.bmc.target,443], [hostvars[hostvars[unifi_proxmox_host].opnsense_guest].opnsense_wireguard_wifi.wan_gateway,443], [ansible_host.rsplit(".",1)[0] ~ ".31",8080], [ansible_host.rsplit(".",1)[0] ~ ".32",8080]]} | to_json }}'
-    - '{{ lookup("ansible.builtin.file", unifi_seed_directory ~ "/gui-cert.pem") }}'
-  check_mode: false
-  changed_when: false
+- name: Verify TLS and isolation before optional historical backup restoration
+  ansible.builtin.include_tasks: _readiness.yml
 - name: Report readiness for the supported manual Network backup restore
   ansible.builtin.debug:
     msg:
-      url: 'https://{{ ansible_host }}:11443'
+      url: https://{{ ansible_host }}:11443
       backup: '{{ unifi_backup_file }}'
-      next: 'Restore the authoritative .unf through the Network application backup interface, then review SSID/security/VLAN/mesh/inform settings while AP connectivity remains blocked. This playbook did not upload or restore the backup.'
+      next: Restore the authoritative .unf through the Network application backup interface, then review SSID/security/VLAN/mesh/inform
+        settings while AP connectivity remains blocked. This playbook did not upload or restore the backup.

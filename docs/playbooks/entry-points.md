@@ -72,6 +72,10 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [verify-opnsense-unifi.yml](../../playbooks/verify-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `verify` |
 | [verify-unifi-host.yml](../../playbooks/verify-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `verify` |
 | [verify-unifi-restore-ready.yml](../../playbooks/verify-unifi-restore-ready.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `restore_ready` |
+| [verify-unifi-config-ready.yml](../../playbooks/verify-unifi-config-ready.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configuration_ready` |
+| [inspect-unifi-site.yml](../../playbooks/inspect-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `inspect` |
+| [configure-unifi-site.yml](../../playbooks/configure-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `configure` |
+| [verify-unifi-site.yml](../../playbooks/verify-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `verify` |
 | [verify-unifi-vm.yml](../../playbooks/verify-unifi-vm.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `verify` |
 
 ## Custom action selection
@@ -122,7 +126,8 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `proxmox_api_options` | `enroll` |
 | `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |
 | `proxmox_installer_options` | `prepare` |
-| `unifi_host_options` | `configure`, `verify`, `restore_ready` |
+| `unifi_host_options` | `configure`, `verify`, `configuration_ready`, `restore_ready` |
+| `unifi_site_options` | `inspect`, `configure`, `verify` |
 | `unifi_network_options` | `configure`, `verify` |
 | `unifi_vm_options` | `prepare`, `create`, `verify`, `start`, `stop` |
 
@@ -152,4 +157,4 @@ With a local ISO source, media operations run from the native Mac. ISO status di
 
 `prepare-fedora-dev.yml`, `create-fedora-dev-vm.yml`, `verify-fedora-dev-vm.yml`, `start-fedora-dev-vm.yml` and `stop-fedora-dev-vm.yml` invoke `fedora_dev`. `configure-fedora-dev-host.yml`, `verify-fedora-dev-host.yml` and `verify-fedora-dev-connectivity.yml` invoke `fedora_host` with `configure`, `verify` and `connectivity`. See [lab access](configure-opnsense-lab.md) and [Fedora provisioning](fedora-dev.md) for dependencies and usage.
 
-The [isolated UniFi controller runbook](unifi-controller.md) orders preparation, scoped firewall/DNS, VM creation, guarded guest installation and the manual restoration gate. AP adoption remains a separate migration operation.
+The [isolated UniFi controller runbook](unifi-controller.md) orders preparation, scoped firewall/DNS, VM creation, guarded guest installation, TLS/isolation readiness, Vault enrollment and declarative site/WLAN staging. Historical restoration is optional recovery only. AP adoption remains a separate migration operation.

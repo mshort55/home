@@ -1,0 +1,5 @@
+---
+- name: Verify exact owned staging and original resource IDs without writes
+  ansible.builtin.include_tasks: _run.yml
+  vars:
+    unifi_site_operation: verify

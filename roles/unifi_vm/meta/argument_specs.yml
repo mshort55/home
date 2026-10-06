@@ -107,5 +107,5 @@ argument_specs:
       unifi_backup_file:
         type: path
         default: '{{ inventory_dir }}/.cache/unifi-backup/authoritative.unf'
-        description: Authoritative private Network 7.3.83 backup; inspected without
+        description: Optional historical Network 7.3.83 reference/recovery backup; inspected without
           decoding secrets.

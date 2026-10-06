@@ -1,0 +1,5 @@
+---
+- name: Preview or configure the isolated disabled household WLAN
+  ansible.builtin.include_tasks: _run.yml
+  vars:
+    unifi_site_operation: '{{ "plan" if ansible_check_mode else "apply" }}'

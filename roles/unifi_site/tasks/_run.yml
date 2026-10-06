@@ -1,0 +1,39 @@
+---
+- name: Require exact controller identity, trusted TLS and loaded isolation before API access
+  ansible.builtin.include_role:
+    name: unifi_host
+    public: false
+  vars:
+    unifi_host_options: {task_action: configuration_ready}
+    unifi_seed_directory: '{{ unifi_site_seed_directory }}'
+- name: Inspect or reconcile only the isolated HOME definition and disabled WLAN
+  ansible.builtin.command:
+    argv:
+    - '{{ ansible_playbook_python }}'
+    - '{{ role_path }}/../../scripts/configure-unifi-site.py'
+    - '{{ unifi_site_operation }}'
+    stdin: >-
+      {{ {'endpoint': ansible_host,
+          'api_key': unifi_site_credentials.api_key,
+          'wifi': {'ssid': unifi_site_credentials.ssid | default(''), 'passphrase': unifi_site_credentials.passphrase | default('')},
+          'certificate_file': unifi_site_seed_directory ~ '/gui-cert.pem',
+          'state_directory': unifi_site_state_directory,
+          'site_id': unifi_site_id,
+          'timeout': unifi_site_timeout} | to_json }}
+  delegate_to: localhost
+  become: false
+  check_mode: false
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  register: unifi_site_result
+  changed_when: >-
+    (unifi_site_result.stdout | default('{"changed": false}', true) | from_json).changed
+  failed_when: false
+  no_log: true
+- name: Surface only the helper's sanitized error after a refused API operation
+  ansible.builtin.fail:
+    msg: '{{ (unifi_site_result.stdout | from_json).error if unifi_site_result.stdout | default("") | trim | length > 0 else "UniFi helper failed before returning a safe summary; check local Python and protected inputs." }}'
+  when: unifi_site_result.rc != 0
+- name: Report the safe site summary without credentials or WLAN names
+  ansible.builtin.debug:
+    msg: '{{ unifi_site_result.stdout | from_json }}'

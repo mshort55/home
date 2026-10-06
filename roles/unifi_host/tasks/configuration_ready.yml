@@ -1,0 +1,24 @@
+---
+- name: Verify the installed isolated controller before declarative configuration
+  ansible.builtin.include_tasks: verify.yml
+- name: Verify the scoped firewall and DNS transaction still matches
+  ansible.builtin.include_role:
+    name: unifi_network
+    public: false
+  vars:
+    unifi_network_options: {task_action: verify}
+- name: Verify the prepared GUI certificate is a protected controller artifact
+  ansible.builtin.stat:
+    path: '{{ unifi_seed_directory }}/gui-cert.pem'
+    follow: false
+  delegate_to: localhost
+  become: false
+  register: unifi_configuration_certificate
+- name: Require the selected protected GUI certificate
+  ansible.builtin.assert:
+    that:
+    - unifi_configuration_certificate.stat.isreg | default(false)
+    - not unifi_configuration_certificate.stat.islnk | default(false)
+    - unifi_configuration_certificate.stat.mode == '0600'
+- name: Verify TLS, DNS, public HTTPS and denied private-device connections
+  ansible.builtin.include_tasks: _readiness.yml
