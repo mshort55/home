@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""Drive offline validation for the home repo and keep the proof."""
+
+from __future__ import annotations
+
+import os
+import platform
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+ROOT = Path(__file__).resolve().parents[4]
+EVIDENCE = ROOT / ".cache" / "verification"
+FEATURES = {
+    "repository-gate": ["--checks", "shell"],
+    "python-checks": ["--checks", "python"],
+    "quick-validation": ["--quick"],
+    "secrets-scan": ["--checks", "secrets"],
+    "full-offline": [],
+}
+
+
+def environment_name() -> str:
+    return ".venv-validation-macos" if platform.system() == "Darwin" else ".venv-validation"
+
+
+def doctor() -> int:
+    problems: list[str] = []
+    runner = ROOT / "tools" / "run-validation.py"
+    if not runner.is_file():
+        problems.append(f"missing runner: {runner}")
+    python = ROOT / environment_name() / "bin" / "python"
+    version = ""
+    if not python.is_file():
+        problems.append(f"missing {python}; follow docs/validation.md")
+    else:
+        probed = subprocess.run(
+            [str(python), "-c", "import sys; print(sys.version.split()[0])"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        version = probed.stdout.strip()
+        if probed.returncode != 0 or not version.startswith("3.12"):
+            problems.append(f"validation Python is not 3.12: {version} {probed.stderr.strip()}")
+    php = shutil.which("php")
+    if php is None:
+        problems.append("php is not on PATH")
+    tools = {}
+    for name in ("gitleaks", "hadolint"):
+        path = ROOT / ".cache" / "validation" / "bin" / name
+        tools[name] = path
+        if not os.access(path, os.X_OK):
+            problems.append(f"missing executable {path}; run tools/install-validation-tools.py")
+    if not (ROOT / "inventory.example.yml").is_file():
+        problems.append("missing inventory.example.yml")
+    if problems:
+        print("doctor: fail", file=sys.stderr)
+        print("\n".join(problems), file=sys.stderr)
+        return 1
+    print("doctor: ok")
+    print(f"root: {ROOT}")
+    print(f"python: {version}")
+    print(f"php: {php}")
+    print(f"gitleaks: {tools['gitleaks']}")
+    print(f"hadolint: {tools['hadolint']}")
+    print("scope: offline validation only; playbooks and inventory.private.yml are not driven")
+    return 0
+
+
+def recorded_pids() -> list[tuple[Path, int]]:
+    found: list[tuple[Path, int]] = []
+    if not EVIDENCE.is_dir():
+        return found
+    for pid_file in sorted(EVIDENCE.glob("*/pid")):
+        text = pid_file.read_text().strip()
+        if not text.isdigit():
+            continue
+        pid = int(text)
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            continue
+        found.append((pid_file, pid))
+    return found
+
+
+def stop(pid: int) -> None:
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    for _ in range(30):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.1)
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+
+
+def run(feature: str) -> int:
+    if feature not in FEATURES:
+        print(f"unknown feature: {feature}", file=sys.stderr)
+        print("known: " + ", ".join(FEATURES), file=sys.stderr)
+        return 2
+    active = recorded_pids()
+    if active:
+        print("refusing to start: a verification drive is already running in this checkout", file=sys.stderr)
+        for path, pid in active:
+            print(f"pid {pid} recorded at {path}", file=sys.stderr)
+        return 1
+    if doctor() != 0:
+        return 1
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = EVIDENCE / run_id
+    dest.mkdir(parents=True)
+    command = [sys.executable, str(ROOT / "tools" / "run-validation.py"), *FEATURES[feature]]
+    (dest / "feature").write_text(feature + "\n")
+    (dest / "command.txt").write_text(" ".join(command) + "\n")
+    before = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    (dest / "git-status-before.txt").write_text(before.stdout)
+    env = os.environ.copy()
+    env["NO_COLOR"] = "1"
+    env["TERM"] = "dumb"
+    process = subprocess.Popen(
+        command,
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    (dest / "pid").write_text(f"{process.pid}\n")
+    stdout, stderr = process.communicate()
+    code = process.returncode if process.returncode is not None else 1
+    # This Ruff still colors piped output when NO_COLOR is set. Evidence is plain text.
+    (dest / "stdout.txt").write_text(ANSI.sub("", stdout))
+    (dest / "stderr.txt").write_text(ANSI.sub("", stderr))
+    (dest / "exit-code.txt").write_text(f"{code}\n")
+    after = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    (dest / "git-status-after.txt").write_text(after.stdout)
+    same = before.stdout == after.stdout
+    (dest / "git-status-same.txt").write_text("yes\n" if same else "no\n")
+    pid_file = dest / "pid"
+    if pid_file.exists():
+        pid_file.unlink()
+    print(f"run: {run_id}")
+    print(f"feature: {feature}")
+    print(f"exit: {code}")
+    print(f"git-status-unchanged: {'yes' if same else 'no'}")
+    print(f"evidence: {dest}")
+    return code
+
+
+def cleanup() -> int:
+    active = recorded_pids()
+    if not active:
+        print("cleanup: no verification process to stop")
+    for path, pid in active:
+        stop(pid)
+        path.unlink(missing_ok=True)
+        print(f"stopped pid {pid}")
+    print(f"evidence retained under {EVIDENCE}")
+    return 0
+
+
+def main() -> int:
+    if len(sys.argv) == 2 and sys.argv[1] == "doctor":
+        return doctor()
+    if len(sys.argv) == 3 and sys.argv[1] == "run":
+        return run(sys.argv[2])
+    if len(sys.argv) == 2 and sys.argv[1] == "cleanup":
+        return cleanup()
+    print("usage: drive doctor | run <feature> | cleanup", file=sys.stderr)
+    print("features: " + ", ".join(FEATURES), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
