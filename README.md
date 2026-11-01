@@ -4,31 +4,67 @@ Run infrastructure backup, snapshot and configuration playbooks from the adminis
 
 ## Install the pinned local environment
 
-Run from this directory, using Python 3.12:
+Run once in each new container or workstation, using Python 3.12 or later:
 
 ```bash
-cd /Repos/home
-python3 -m venv .venv
-.venv/bin/python tools/install-ssh.py
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
+python3 tools/setup.py
 ```
 
-Install the SSH build prerequisites first: on Ubuntu use `sudo apt-get install cmake build-essential libssl-dev python3-dev`; on macOS install the Xcode command-line tools and run `brew install cmake openssl@3`. Keep operating-system/Homebrew security updates current. The [SSH transport guide](docs/ssh-transport.md) explains the native library and legacy compatibility scope.
+This single command installs missing system dependencies, prepares both the runtime
+and validation environments, builds the pinned SSH bindings, installs locked Python
+packages and Ansible collections, and prepares validation tools. It is safe to rerun:
+existing environments are preserved and satisfied dependencies are reused. Internet
+access is needed for missing or changed dependencies. System package installation
+may prompt for sudo.
 
-`requirements.in` records direct Python dependencies; `requirements.txt` pins their resolved dependencies. Run the SSH installer before installing either dependency lock; it builds verified libssh into the Python bindings. Collections and their dependencies are pinned separately. The virtual environment and downloaded collections stay local and Git-ignored. Installation changes laptop files only.
+Ubuntu/Debian setup installs system packages automatically. On macOS, install
+Homebrew and Apple's command-line tools first; setup installs missing Homebrew
+packages and selects `.venv-macos` and `.venv-validation-macos`. Linux uses `.venv`
+and `.venv-validation`. These environments stay separate when sharing the repository.
+Use `.venv/bin/ansible-playbook` on Linux or `.venv-macos/bin/ansible-playbook` on macOS.
+Native Mac execution is required when hosting an ISO on the Mac's Ethernet address.
 
-When the repository is shared between a Linux container and a Mac, create a separate native Mac environment. Python must be 3.12 or later. Run in the Mac's terminal:
+Setup does not read private inventory or credentials or contact network devices.
+It does not configure Git hooks or run playbooks. Keep system/Homebrew security
+updates current; setup installs missing packages rather than upgrading the OS.
+The [SSH transport guide](docs/ssh-transport.md) explains the native library and
+legacy compatibility scope. Python locks and collection pins remain the source
+of dependency versions; generated environments and tools stay Git-ignored.
+
+## Repository commands
+
+After `python3 tools/setup.py`, use the repository-pinned Just runner:
 
 ```bash
-cd /Users/$(whoami)/Repos/home
-python3 -m venv .venv-macos
-.venv-macos/bin/python tools/install-ssh.py
-.venv-macos/bin/python -m pip install -r requirements.txt
-.venv-macos/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
+./just                    # List commands
+./just setup              # Repeat dependency setup
+./just validate           # Full offline validation
+./just audit              # Online dependency and Git-history audit
+./just verify-migration   # Live network migration verification
 ```
 
-Use `.venv-macos/bin/ansible-playbook` for native Mac runs. Linux virtual environments cannot be reused on macOS. Native execution is required when hosting an ISO on the Mac's Ethernet address.
+`./just` requires no PATH changes or environment activation. Setup also exposes
+`just` in both native Python environments; after activating either environment,
+`just validate` works too. The runner is checksum-pinned in `tools/native-tools.json`.
+No dev-container image or global shell configuration changes are needed.
+
+Arguments are forwarded without shell interpolation, for example:
+
+```bash
+./just validate --checks php
+./just playbook playbooks/configure-unifi-firewall.yml --limit unifi01 --check
+```
+
+`playbook` selects `.venv` on Linux and `.venv-macos` on macOS and preserves
+Ansible's interactive prompts. `verify-migration` runs the thirteen verification
+playbooks in the migration runbook's order, limited to
+`pve01,opnsense01,unifi01,idrac01,dev01`. It contacts live devices and requires
+the normal private configuration and network access. Additional Ansible arguments
+can be supplied, including an explicit limit override. Live verification always
+runs; it is not cached or parallelized by Just.
+
+Recipes delegate to the existing scripts and playbooks. Direct Python and Ansible
+commands remain supported. Listing commands performs no setup or device operations.
 
 ## Shared inventory and credentials
 

@@ -25,7 +25,7 @@ def command(arguments: list[str], env: dict[str, str], *, timeout: int = 600) ->
 
 
 def binary(name: str) -> str:
-    if name in {"gitleaks", "hadolint"}:
+    if name in {"gitleaks", "hadolint", "just"}:
         candidate = ROOT / ".cache/validation/bin" / name
     else:
         candidate = Path(sys.executable).parent / name
@@ -145,12 +145,11 @@ def main() -> int:
     parser.add_argument(
         "--checks", nargs="+", choices=CHECKS, help="Run selected checks (repository checks always run)"
     )
-    parser.add_argument("--quick", action="store_true", help="Fast offline pre-commit checks; omits Ansible and tests")
     parser.add_argument(
         "--audit", action="store_true", help="Also audit locked dependencies online and all Git history"
     )
     args = parser.parse_args()
-    selected = args.checks or ([name for name in CHECKS if name not in {"ansible", "tests"}] if args.quick else CHECKS)
+    selected = args.checks or CHECKS
     errors = check_repository()
     if errors:
         print("\n".join(errors), file=sys.stderr)
@@ -172,7 +171,10 @@ def main() -> int:
                 ansible_checks(env, directory)
             elif check == "shell":
                 command(["sh", "-n", "scripts/opnsense-install.sh"], env)
-                command([binary("shellcheck"), "scripts/opnsense-install.sh"], env)
+                command(["bash", "-n", "tools/install-php.sh"], env)
+                command(["sh", "-n", "just"], env)
+                command([binary("just"), "--summary"], env)
+                command([binary("shellcheck"), "scripts/opnsense-install.sh", "tools/install-php.sh", "just"], env)
             elif check == "php":
                 for path in sorted((ROOT / "scripts").glob("*.php")):
                     command([binary("php"), "-l", str(path)], env)

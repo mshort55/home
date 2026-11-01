@@ -5,32 +5,26 @@ continue to use the environment and private inputs described in the README.
 
 ## Setup
 
-Run from the repository root on Linux:
+Use the shared repository setup command with Python 3.12 or later:
 
 ```bash
-python3 -m venv .venv-validation
-.venv-validation/bin/python tools/install-ssh.py
-.venv-validation/bin/python -m pip install -r requirements-dev.txt
-.venv-validation/bin/ansible-galaxy collection install -r collections/requirements.yml -p .collections
-.venv-validation/bin/python tools/install-validation-tools.py
+python3 tools/setup.py
+./just validate
 ```
 
-On macOS use `.venv-validation-macos` for these three environment commands. The
-convenience runner and pre-commit hook select that native environment automatically.
-Keep the Linux and macOS environments separate when sharing the repository.
+Setup prepares both runtime and validation dependencies. It selects `.venv-validation`
+on Linux and `.venv-validation-macos` on macOS, preserving the separate native
+environments when sharing the repository. See the [setup prerequisites](../README.md#install-the-pinned-local-environment).
+CI uses the same setup command and `./just validate` (or `./just audit`).
+`python3 tools/run-validation.py` remains available as a direct entry point.
+Pre-commit runs the full suite through `./just validate`. Validation itself never installs packages or configures devices.
 
-Install PHP CLI through the operating system package manager. ShellCheck is
-provided by `shellcheck-py`. The native tool installer downloads pinned Hadolint
-and Gitleaks releases, verifies committed SHA-256 values, and installs them in
-`.cache/validation/bin`. Linux and macOS on ARM64 and x86-64 are supported.
-
-Install the SSH build prerequisites from the [README](../README.md) first.
-Setup requires internet access. The standard validation command performs offline
-checks after dependencies and collections are installed:
-
-```bash
-python3 tools/run-validation.py
-```
+PHP CLI with SimpleXML is included in setup. `tools/install-php.sh` remains available
+for focused PHP repair on Ubuntu/Debian. ShellCheck comes from `shellcheck-py`.
+The native tool installer verifies committed SHA-256 values before installing
+Hadolint, Gitleaks and Just into `.cache/validation/bin`; setup reuses matching installed
+versions. Linux and macOS on ARM64 and x86-64 are supported by those tools.
+Setup needs internet access for missing dependencies; standard validation is offline.
 
 ## Checks
 
@@ -112,16 +106,16 @@ Gitleaks scans a temporary copy of Git-visible source rather than the working
 directory containing private inventories, keys and backups. Findings are redacted.
 Tracked private artifacts are rejected before copying any source for scanning.
 
-Fast local checks omit Ansible lint and unit tests:
+Run the full validation suite locally and enable the same check before commits:
 
 ```bash
-python3 tools/run-validation.py --quick
+./just validate
 .venv-validation/bin/pre-commit install
 .venv-validation/bin/pre-commit run --all-files
 ```
 
 Use the macOS environment path for the pre-commit commands on a Mac. The hook
-runs the fast command without modifying source files. CI runs the full command.
+runs `./just validate` without modifying source files, matching CI.
 Selected checks can be run with `--checks python tests`, for example. Repository
 privacy and contract checks always run first.
 

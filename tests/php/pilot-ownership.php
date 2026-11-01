@@ -28,6 +28,10 @@ namespace OPNsense\Core {
     }
 }
 namespace {
+    if (!class_exists(\SimpleXMLElement::class)) {
+        fwrite(STDERR, "PHP validation requires SimpleXML. On Ubuntu/Debian install php-cli and php-xml, then rerun validation.\n");
+        exit(1);
+    }
     function check(bool $condition, string $message): void {
         if (!$condition) { throw new \RuntimeException($message); }
     }

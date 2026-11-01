@@ -18,5 +18,16 @@
       "darwin-arm64": ["gitleaks_8.30.1_darwin_arm64.tar.gz", "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"],
       "darwin-x86_64": ["gitleaks_8.30.1_darwin_x64.tar.gz", "dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709"]
     }
+  },
+  "just": {
+    "version": "1.59.0",
+    "tag": "1.59.0",
+    "repository": "casey/just",
+    "assets": {
+      "linux-arm64": ["just-1.59.0-aarch64-unknown-linux-musl.tar.gz", "23871b1702bfd550fb5f901778fd4290ecf2ee034a45a889fbe96d89b188086d"],
+      "linux-x86_64": ["just-1.59.0-x86_64-unknown-linux-musl.tar.gz", "409044617b6f06517c1035e55ca38c8c856ff8b650e41bc2aa1ef82d5903a23e"],
+      "darwin-arm64": ["just-1.59.0-aarch64-apple-darwin.tar.gz", "6574cea774ed4cae12e24b6aa11857de33e80dab4667cf628fd5840df96a2a9d"],
+      "darwin-x86_64": ["just-1.59.0-x86_64-apple-darwin.tar.gz", "036ead9df9bc31dbae9934ae3b4236ed124d0bafcffd33439460ae084d5c9cb7"]
+    }
   }
 }

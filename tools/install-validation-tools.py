@@ -24,7 +24,8 @@ def main() -> None:
         if target not in pin["assets"]:
             raise SystemExit(f"Unsupported validation platform: {target}")
         asset, checksum = pin["assets"][target]
-        url = f"https://github.com/{pin['repository']}/releases/download/v{pin['version']}/{asset}"
+        tag = pin.get("tag", "v" + pin["version"])
+        url = f"https://github.com/{pin['repository']}/releases/download/{tag}/{asset}"
         with urllib.request.urlopen(url, timeout=60) as response:
             if not response.geturl().startswith("https://"):
                 raise ValueError("Validation binary download left HTTPS")
