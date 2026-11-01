@@ -1,4 +1,28 @@
 all:
+  vars:
+    home_dhcp:
+      subnet: 10.77.55.0/24
+      gateway: 10.77.55.254
+      primary_ranges:
+        - start: 10.77.55.20
+          end: 10.77.55.115
+        - start: 10.77.55.117
+          end: 10.77.55.134
+      standby_ranges:
+        - start: 10.77.55.135
+          end: 10.77.55.248
+      reservations:
+        - name: printer
+          address: 10.77.55.116
+          mac: 02:00:00:00:00:01
+      excluded_addresses:
+        - 10.77.55.249
+        - 10.77.55.250
+        - 10.77.55.251
+        - 10.77.55.252
+      known_static_addresses:
+        - 10.77.55.250
+        - 10.77.55.251
   children:
     cisco_switches:
       hosts:

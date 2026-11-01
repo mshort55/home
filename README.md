@@ -32,6 +32,15 @@ legacy compatibility scope. Python locks include SHA-256 download hashes,
 enforced by setup. Collection pins remain the source of collection versions;
 generated environments and tools stay Git-ignored.
 
+## Repository scope
+
+Keep reusable desired-state configuration, provisioning, maintenance, backups and
+verification here. Temporary migration sequencing, lease holds, cutover overlays
+and recovery coordination live outside this repository. Final DHCP declarations
+use `all.vars.home_dhcp`; transition metadata must not be added to that contract.
+Older pilot workflows still contain shared permanent logic and need separation
+before retirement; they are not the pattern for new final-state automation.
+
 ## Repository commands
 
 After `python3 tools/setup.py`, use the repository-pinned Just runner:
@@ -41,7 +50,6 @@ After `python3 tools/setup.py`, use the repository-pinned Just runner:
 ./just setup              # Repeat dependency setup
 ./just validate           # Full offline validation
 ./just audit              # Online dependency and Git-history audit
-./just verify-migration   # Live network migration verification
 ```
 
 `./just` requires no PATH changes or environment activation. Setup also exposes
@@ -57,12 +65,8 @@ Arguments are forwarded without shell interpolation, for example:
 ```
 
 `playbook` selects `.venv` on Linux and `.venv-macos` on macOS and preserves
-Ansible's interactive prompts. `verify-migration` runs the thirteen verification
-playbooks in the migration runbook's order, limited to
-`pve01,opnsense01,unifi01,idrac01,dev01`. It contacts live devices and requires
-the normal private configuration and network access. Additional Ansible arguments
-can be supplied, including an explicit limit override. Live verification always
-runs; it is not cached or parallelized by Just.
+Ansible's interactive prompts. Invoke each reusable verification playbook explicitly
+with `./just playbook`.
 
 Recipes delegate to the existing scripts and playbooks. Direct Python and Ansible
 commands remain supported. Listing commands performs no setup or device operations.
@@ -119,6 +123,7 @@ Entry points orchestrate roles with explicit, role-scoped `task_action` paramete
 
 | Workflow | Documentation |
 |---|---|
+| Permanent HOME DHCP allocation validation | [Validate HOME DHCP](docs/playbooks/validate-home-dhcp.md) |
 | Named operation entry points and their inputs | [Playbook entry points](docs/playbooks/entry-points.md) |
 | Shared credential management | [Ansible Vault CLI](docs/credentials.md) |
 | Cisco configuration backup | [Switch backup](docs/playbooks/backup-switch.md) |

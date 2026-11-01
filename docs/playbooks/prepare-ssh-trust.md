@@ -26,6 +26,49 @@ For a legacy switch, obtain its RSA public host key through a trusted console or
 SSH session. A network key scan alone does not verify a device's identity. Public host keys are
 separate from the client login keys and passwords; login credentials continue using existing sources.
 
+### Cisco switch enrollment and container recovery
+
+The `cisco_switch` role already depends on `ssh_trust`; no separate Cisco cache or
+automatic acceptance policy is needed. If preparation is skipped and libssh reports
+an unknown host, check whether `switch01` is missing `ssh_host_public_key` in private
+inventory.
+
+On a workstation that previously trusted the switch, retrieve its existing entry
+and fingerprint (substitute its actual address):
+
+```bash
+ssh-keygen -F 10.77.55.1 -f ~/.ssh/known_hosts
+ssh-keygen -F 10.77.55.1 -f ~/.ssh/known_hosts | ssh-keygen -lf -
+```
+
+Use the `ssh-rsa` key type and complete base64 key from that trusted entry as
+`ssh_host_public_key`. Do not copy the address, a hashed hostname, or a comment
+line into the key value. If using a newly collected candidate instead, match its
+fingerprint against that trusted entry or an independently trusted console before
+enrollment. A candidate remains outside both active known_hosts files until verified.
+
+```yaml
+switch01:
+  ansible_host: 10.77.55.1
+  ssh_host_public_key: "ssh-rsa <verified complete base64 public key>"
+  ssh_trust_names: [10.77.55.1, 10.77.10.2]
+```
+
+Include both addresses only when they are confirmed management addresses of the
+same switch. Keep the existing scoped Cisco legacy-algorithm configuration.
+
+```bash
+./just playbook playbooks/prepare-ssh-trust.yml --limit switch01 --check
+./just playbook playbooks/prepare-ssh-trust.yml --limit switch01 --check
+./just playbook playbooks/backup-switch.yml --limit switch01
+```
+
+The first command populates local trust, even in check mode; the repeat should
+report `changed=0`. The backup then proves that libssh accepts the enrolled key
+and that privileged read-only access works. Neither operation changes switch
+configuration. Subsequent switch workflows automatically reconstruct missing
+local trust from the enrolled inventory key.
+
 During a management address migration, explicitly list the verified names sharing the same key:
 
 ```yaml

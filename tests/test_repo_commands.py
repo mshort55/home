@@ -75,31 +75,5 @@ def test_recipes_forward_literal_arguments(just_stub, recipe, base):
 
 def test_default_only_lists_commands(just_stub):
     output = just_stub()
-    assert "Available recipes:" in output and "verify-migration" in output
+    assert "Available recipes:" in output and "playbook" in output
     assert "tools/setup.py" not in output
-
-
-def test_migration_preserves_order_and_limit(just_stub):
-    args = json.loads(just_stub("verify-migration", "--list-tasks"))
-    names = [
-        "opnsense-vm",
-        "opnsense-wireguard",
-        "opnsense-wireguard-wifi",
-        "opnsense-bmc",
-        "opnsense-dev",
-        "opnsense-unifi",
-        "idrac-bmc-route",
-        "unifi-vm",
-        "unifi-config-ready",
-        "unifi-site",
-        "fedora-dev-vm",
-        "fedora-dev-host",
-        "fedora-dev-connectivity",
-    ]
-    assert args == [
-        "tools/run-playbook.py",
-        *[f"playbooks/verify-{name}.yml" for name in names],
-        "--limit",
-        "pve01,opnsense01,unifi01,idrac01,dev01",
-        "--list-tasks",
-    ]

@@ -3,6 +3,12 @@
   hosts: all
   gather_facts: false
   become: false
+  vars:
+    # Controller-only preparation must not resolve device login credentials.
+    ansible_connection: local
+    ansible_user: "{{ lookup('ansible.builtin.env', 'USER') }}"
+    ansible_password: ''
+    ansible_become_password: ''
   roles:
   - role: ssh_trust
     ssh_trust_options:

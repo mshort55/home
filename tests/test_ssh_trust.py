@@ -117,6 +117,22 @@ def test_unenrolled_hosts_keep_their_existing_workflow(controller):
     assert not (home / ".ssh").exists()
 
 
+def test_preparation_does_not_require_vault_device_credentials(controller):
+    directory, home, run = controller
+    result = run(
+        {
+            "switch": host(
+                ansible_connection="ansible.netcommon.network_cli",
+                ansible_user="{{ vault_devices[inventory_hostname].username }}",
+                ansible_password="{{ vault_devices[inventory_hostname].ssh_password }}",  # noqa: S106 -- Unresolved template, not a credential.
+                ansible_become_password="{{ vault_devices[inventory_hostname].enable_password }}",  # noqa: S106 -- Unresolved template, not a credential.
+            )
+        }
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (directory / ".cache/ssh/known_hosts").read_text() == (home / ".ssh/known_hosts").read_text()
+
+
 def test_ssh_facing_roles_prepare_trust_before_their_operations():
     roles = {
         "cisco_switch",
