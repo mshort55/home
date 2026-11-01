@@ -25,6 +25,7 @@ def test_existing_environment_keeps_ssh_before_dependency_lock(setup, tmp_path, 
     assert not any("venv" in call for call in calls)
     assert calls[1][1].endswith("install-ssh.py")
     assert calls[2][1:4] == ["-m", "pip", "install"]
+    assert "--require-hashes" in calls[2]
     assert calls[-1][1].endswith("check-ssh.py")
 
 

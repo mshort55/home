@@ -151,11 +151,29 @@ Refresh the existing role and entry-point tables after adding actions/playbooks:
 
 Direct validation-tool dependencies live in `requirements-dev.in`; their resolved
 dependencies live in `requirements-dev.txt`, constrained by runtime pins. Update
-the lock with:
+the locks with hashes (runtime first, because validation includes it):
 
 ```bash
-.venv-validation/bin/pip-compile --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements-dev.txt requirements-dev.in
+.venv-validation/bin/pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements.txt requirements.in
+.venv-validation/bin/pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements-dev.txt requirements-dev.in
+.venv-validation/bin/pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file tools/requirements-ssh-build.txt tools/requirements-ssh-build.in
 ```
+
+All three locks must pin every package and include SHA-256 hashes. Repository
+validation rejects missing hashes; setup and SSH build dependency installation
+use `--require-hashes`. Setup allows hash-verified source archives where a platform
+has no wheel (for example, `shellcheck-py` on ARM); the SSH builder requires binary
+distributions for its build dependencies. Audits use
+`--require-hashes --disable-pip`, checking the fully resolved locks without
+executing a dependency resolver. Hashes authenticate incoming package artifacts;
+installed packages still receive version/dependency checks rather than a full
+installed-file integrity scan.
+
+The custom SSH package is installed first by its dedicated source-verified builder.
+Its upstream source hash remains in the runtime and validation locks for auditing;
+the verified local version satisfies the base requirement without downloading an
+upstream wheel. The builder records a platform-specific local wheel hash and
+installs those exact bytes offline. See the [SSH transport guide](ssh-transport.md).
 
 Native binary versions and release asset hashes live in `tools/native-tools.json`.
 Review upstream release checksums before changing them. CI actions are pinned to

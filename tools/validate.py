@@ -15,7 +15,7 @@ import tomllib
 from pathlib import Path
 
 import yaml
-from repository_checks import ROOT, check_repository, private_path, source_files
+from repository_checks import HASHED_LOCKS, ROOT, check_repository, hashed_requirements, private_path, source_files
 
 CHECKS = ["repository", "python", "yaml", "ansible", "shell", "php", "containers", "secrets", "tests", "dependencies"]
 
@@ -218,10 +218,8 @@ def main() -> int:
 
                 for filename in ["requirements.txt", "requirements-dev.txt"]:
                     locked = {}
-                    for line in (ROOT / filename).read_text().splitlines():
-                        if not line.strip() or line.lstrip().startswith(("#", "--")):
-                            continue
-                        pin = Requirement(line.strip())
+                    for requirement in hashed_requirements(ROOT / filename):
+                        pin = Requirement(requirement)
                         locked[pin.name.lower().replace("_", "-")] = version(pin.name)
                         if version(pin.name) not in pin.specifier:
                             raise ValueError(f"Installed dependency differs from {filename}: {pin.name}")
@@ -253,9 +251,9 @@ def main() -> int:
             command([sys.executable, "tools/check-ssh.py"], env)
             # Run every audit even when one reports a finding; do not hide existing vulnerabilities.
             failures = []
-            for filename in ["requirements.txt", "requirements-dev.txt", "tools/requirements-ssh-build.txt"]:
+            for filename in HASHED_LOCKS:
                 try:
-                    command([binary("pip-audit"), "--no-deps", "--disable-pip", "-r", filename], env)
+                    command([binary("pip-audit"), "--require-hashes", "--disable-pip", "-r", filename], env)
                 except subprocess.CalledProcessError:
                     failures.append(filename)
             try:

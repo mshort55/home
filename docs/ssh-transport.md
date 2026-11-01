@@ -39,12 +39,20 @@ host signatures/key exchanges, and missing-policy refusal. Python vulnerability
 scans do not inspect embedded native libraries: maintain `tools/ssh-sources.json`
 against upstream libssh security releases too. Build dependencies are isolated
 and locked in `tools/requirements-ssh-build.txt`; update that file with
-`pip-compile` from its `.in` file. Audit all three dependency locks.
+`pip-compile --generate-hashes` from its `.in` file. Audit all three dependency locks.
 
 The base requirement `ansible-pylibssh==1.4.0` accepts the local build under
 PEP 440; the SSH checker additionally requires the exact local version.
-The locks prohibit upstream wheels. Existing environments must also uninstall
-the obsolete Paramiko package after installing the replacement.
+The locks prohibit upstream wheels and pin the upstream source archive hash.
+Setup installs and verifies the local binding first, then installs the hashed
+package locks; pip retains the satisfying local version. The builder installs
+its dependencies with `--require-hashes --only-binary=:all:` and builds without
+build isolation or dependency downloads. It records the resulting wheel's SHA-256
+in `.cache/ssh/<platform>/wheel-requirements.txt` and requires that hash during
+an offline, dependency-free installation. The local wheel hash is generated
+rather than committed because wheel bytes depend on the build platform. Existing
+environments must also uninstall the obsolete Paramiko package after installing
+the replacement.
 
 ## Scoped compatibility
 

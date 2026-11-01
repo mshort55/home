@@ -144,7 +144,19 @@ def main() -> None:
     build = work / "build-env"
     run([sys.executable, "-m", "venv", str(build)], log)
     build_python = str(build / "bin/python")
-    run([build_python, "-m", "pip", "install", "-r", str(ROOT / "tools/requirements-ssh-build.txt")], log)
+    run(
+        [
+            build_python,
+            "-m",
+            "pip",
+            "install",
+            "--require-hashes",
+            "--only-binary=:all:",
+            "-r",
+            str(ROOT / "tools/requirements-ssh-build.txt"),
+        ],
+        log,
+    )
     # Statically embed libssh so wheels cannot accidentally load an older
     # system libssh or the upstream wheel's bundled copy. OpenSSL stays managed
     # by the distribution/Homebrew security updates.
@@ -181,7 +193,27 @@ def main() -> None:
     candidates = list(wheels.glob(f"ansible_pylibssh-{pins['ansible-pylibssh']['installed_version']}-*.whl"))
     if len(candidates) != 1:
         raise ValueError(f"Expected one SSH wheel; remove stale files in {wheels}")
-    run([sys.executable, "-m", "pip", "install", "--no-deps", "--force-reinstall", str(candidates[0])], log)
+    wheel_lock = work / "wheel-requirements.txt"
+    with candidates[0].open("rb") as stream:
+        wheel_hash = hashlib.file_digest(stream, "sha256").hexdigest()
+    # Platform-specific local output: authenticate its pinned source/build inputs
+    # above, then require these exact wheel bytes during the offline install.
+    wheel_lock.write_text(f"{candidates[0].resolve().as_uri()} --hash=sha256:{wheel_hash}\n")
+    run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-index",
+            "--no-deps",
+            "--require-hashes",
+            "--force-reinstall",
+            "-r",
+            str(wheel_lock),
+        ],
+        log,
+    )
     verify()
     print(f"SSH build log: {log}")
 

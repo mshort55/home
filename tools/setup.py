@@ -62,7 +62,7 @@ def prepare_environment(path: Path, requirements: str) -> Path:
         raise ValueError(f"{path} must be a native Python 3.12+ virtual environment; move it aside and rerun setup.")
     # The custom SSH binding must be installed before pip sees its lock entry.
     run([str(python), str(ROOT / "tools/install-ssh.py")])
-    run([str(python), "-m", "pip", "install", "-r", str(ROOT / requirements)])
+    run([str(python), "-m", "pip", "install", "--require-hashes", "-r", str(ROOT / requirements)])
     run([str(python), "-m", "pip", "check"])
     run([str(python), str(ROOT / "tools/check-ssh.py")])
     return python

@@ -11,8 +11,39 @@ from pathlib import Path
 
 import yaml
 from jinja2 import Environment
+from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+HASHED_LOCKS = ("requirements.txt", "requirements-dev.txt", "tools/requirements-ssh-build.txt")
+
+
+def hashed_requirements(path: Path) -> list[str]:
+    """Require complete SHA-256 pins and return requirements without hash options."""
+    logical = re.sub(r"\\\n[ \t]*", " ", path.read_text())
+    requirements = []
+    names = set()
+    for line in logical.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line == "--no-binary ansible-pylibssh":
+            continue
+        requirement, separator, hashes = line.partition(" --hash=")
+        if not separator or not re.fullmatch(r"sha256:[0-9a-f]{64}(?:\s+--hash=sha256:[0-9a-f]{64})*", hashes.strip()):
+            raise ValueError(f"{path}: every locked requirement needs SHA-256 hashes")
+        requirement = requirement.strip()
+        parsed = Requirement(requirement)
+        pins = list(parsed.specifier)
+        name = re.sub(r"[-_.]+", "-", parsed.name).lower()
+        if parsed.url or len(pins) != 1 or pins[0].operator != "==" or "*" in pins[0].version:
+            raise ValueError(f"{path}: require an exact package version: {requirement}")
+        if name in names:
+            raise ValueError(f"{path}: duplicate locked package: {name}")
+        names.add(name)
+        requirements.append(requirement)
+    if not requirements:
+        raise ValueError(f"{path}: empty dependency lock")
+    return requirements
 
 
 def source_files(root: Path = ROOT) -> list[Path]:
@@ -204,6 +235,11 @@ def ssh_policy_errors(root: Path = ROOT) -> list[str]:
 
 def check_repository(root: Path = ROOT) -> list[str]:
     errors = ssh_policy_errors(root)
+    for filename in HASHED_LOCKS:
+        try:
+            hashed_requirements(root / filename)
+        except (OSError, ValueError) as error:
+            errors.append(str(error))
     files = source_files(root)
     errors.extend(container_errors(root, files))
     environment = Environment(autoescape=False)  # noqa: S701 -- Parses infrastructure templates, never renders HTML.

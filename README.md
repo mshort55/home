@@ -28,8 +28,9 @@ Setup does not read private inventory or credentials or contact network devices.
 It does not configure Git hooks or run playbooks. Keep system/Homebrew security
 updates current; setup installs missing packages rather than upgrading the OS.
 The [SSH transport guide](docs/ssh-transport.md) explains the native library and
-legacy compatibility scope. Python locks and collection pins remain the source
-of dependency versions; generated environments and tools stay Git-ignored.
+legacy compatibility scope. Python locks include SHA-256 download hashes,
+enforced by setup. Collection pins remain the source of collection versions;
+generated environments and tools stay Git-ignored.
 
 ## Repository commands
 
