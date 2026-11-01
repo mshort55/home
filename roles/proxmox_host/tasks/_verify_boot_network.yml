@@ -1,6 +1,6 @@
 ---
 - name: Verify saved firewall policy and running DNS, time and pilot WAN services
-  ansible.builtin.raw: "{{ boot_pilot_prefix }} network {{ boot_pilot_payload | to_json | b64encode | quote }}"
+  ansible.builtin.raw: "{{ boot_services_prefix }} network {{ boot_services_payload | to_json | b64encode | quote }}"
   delegate_to: "{{ opnsense_guest }}"
   register: boot_guest_network
   changed_when: false

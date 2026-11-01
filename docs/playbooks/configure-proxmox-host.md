@@ -6,7 +6,7 @@ The entry points invoke the `proxmox_host` role. Its required `proxmox_host_opti
 
 ## Prerequisites and inventory
 
-Complete [Proxmox API enrollment](configure-proxmox-api.md), host bridges, OPNsense installation and the [management pilot](configure-opnsense-pilot.md). The owned firewall VM must be running with no pending hardware changes and its WAN connected. The host needs its management DNS/gateway and outbound HTTP/HTTPS access for repositories.
+Complete [Proxmox API enrollment](configure-proxmox-api.md), host bridges, OPNsense installation and the [management pilot](configure-opnsense-services.md). The owned firewall VM must be running with no pending hardware changes and its WAN connected. The host needs its management DNS/gateway and outbound HTTP/HTTPS access for repositories.
 
 This workflow requires an amd64 host, Debian 13 trixie, Proxmox VE 9, the installed `proxmox-ve` meta-package, Python `apt` and `debian.deb822`, and Ceph 19 Squid client packages. It supports the accepted standalone local/LVM storage layout; cluster membership, local/external Ceph storage, package holds and incomplete dpkg transactions require separate maintenance. At least 4 GiB free root space and 512 MiB free boot space are required.
 

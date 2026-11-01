@@ -32,7 +32,7 @@ Run from `/Repos/home`; Vault prompts locally. Preview or apply all inventory po
 .venv/bin/ansible-playbook playbooks/configure-switch-all-ports.yml
 ```
 
-Prefer explicit role selection during a staged migration. For server preparation, first preview and apply the VLAN workflow with MGMT/BMC/HOME/DEV/UNUSED in `switch_vlans`, then select only the three server roles:
+Prefer explicit role selection during a staged migration. For server preparation, first preview and apply the VLAN workflow with MGMT/BMC/HOME/DEV/UNUSED in `switch_vlans`, then select only the two server roles:
 
 ```bash
 .venv/bin/ansible-playbook playbooks/configure-switch-management.yml --check
@@ -49,11 +49,11 @@ The named recovery entry point selects only `recovery_mgmt` and `recovery_bmc`:
 .venv/bin/ansible-playbook playbooks/configure-switch-recovery-ports.yml --check
 ```
 
-`configure-switch-server-ports.yml` selects `server_mgmt`, `server_lan` and `pilot_wan`. `configure-switch-home-pilot-port.yml` selects only `home_pilot`. `configure-switch-idrac-port.yml` selects only `idrac`; `configure-switch-all-ports.yml` explicitly selects every inventory role. These entry points invoke the `cisco_switch` role with `task_action: ports`, retaining its backups, checks, read-back and save behavior. Interface numbers and VLANs still come from inventory. For custom role groups, use `configure-switch-ports.yml` with `cisco_switch_options: {task_action: ports}` and `switch_port_roles`. This selector is required and must be a nonempty list of unique, known role strings. Its role contract and initial scope assertion validate the selection before collecting a backup; missing scope never selects all ports implicitly.
+`configure-switch-server-ports.yml` selects `server_mgmt` and `server_lan`. `configure-switch-idrac-port.yml` selects only `idrac`; `configure-switch-all-ports.yml` explicitly selects every inventory role. These entry points invoke the `cisco_switch` role with `task_action: ports`, retaining its backups, checks, read-back and save behavior. Interface numbers and VLANs still come from inventory. For custom role groups, use `configure-switch-ports.yml` with `cisco_switch_options: {task_action: ports}` and `switch_port_roles`. This selector is required and must be a nonempty list of unique, known role strings. Its role contract and initial scope assertion validate the selection before collecting a backup; missing scope never selects all ports implicitly.
 
 ```bash
-.venv/bin/ansible-playbook playbooks/configure-switch-home-pilot-port.yml --check
-.venv/bin/ansible-playbook playbooks/configure-switch-home-pilot-port.yml
+.venv/bin/ansible-playbook playbooks/configure-switch-server-ports.yml --check
+.venv/bin/ansible-playbook playbooks/configure-switch-server-ports.yml
 ```
 
 ## Verification and failure handling

@@ -6,7 +6,7 @@
   vars:
     opnsense_vm_options:
       task_action: verify
-    opnsense_verify_wan_state: false
+    opnsense_verify_wan_state: true
   tags:
   - always
 - name: Run the validated action workflow

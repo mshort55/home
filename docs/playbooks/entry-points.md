@@ -14,16 +14,14 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [backup-switch.yml](../../playbooks/backup-switch.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `backup` |
 | [boot-idrac-iso.yml](../../playbooks/boot-idrac-iso.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | `boot` |
 | [configure-fedora-dev-host.yml](../../playbooks/configure-fedora-dev-host.yml) | `fedora_hosts` | [fedora_host](../../roles/fedora_host/tasks/main.yml) | `configure` |
-| [configure-fortigate-pilot-reservations.yml](../../playbooks/configure-fortigate-pilot-reservations.yml) | `fortigates` | [fortigate_pilot_dhcp](../../roles/fortigate_pilot_dhcp/tasks/main.yml) | `configure` |
 | [configure-idrac-network.yml](../../playbooks/configure-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | Required explicit `task_action` |
 | [configure-opnsense-api.yml](../../playbooks/configure-opnsense-api.yml) | `opnsense_hosts` | [opnsense_api](../../roles/opnsense_api/tasks/main.yml) | `enroll` |
 | [configure-opnsense-bmc.yml](../../playbooks/configure-opnsense-bmc.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `configure` |
 | [configure-opnsense-dev.yml](../../playbooks/configure-opnsense-dev.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `configure` |
-| [configure-opnsense-home.yml](../../playbooks/configure-opnsense-home.yml) | `proxmox_hosts` | [opnsense_pilot](../../roles/opnsense_pilot/tasks/main.yml) | `home` |
-| [configure-opnsense-management.yml](../../playbooks/configure-opnsense-management.yml) | `proxmox_hosts` | [opnsense_pilot](../../roles/opnsense_pilot/tasks/main.yml) | `management` |
-| [configure-opnsense-pilot.yml](../../playbooks/configure-opnsense-pilot.yml) | `proxmox_hosts` | [opnsense_pilot](../../roles/opnsense_pilot/tasks/main.yml) | Required explicit `task_action` |
+| [configure-opnsense-home.yml](../../playbooks/configure-opnsense-home.yml) | `proxmox_hosts` | [opnsense_services](../../roles/opnsense_services/tasks/main.yml) | `home` |
+| [configure-opnsense-management.yml](../../playbooks/configure-opnsense-management.yml) | `proxmox_hosts` | [opnsense_services](../../roles/opnsense_services/tasks/main.yml) | `management` |
+| [configure-opnsense-services.yml](../../playbooks/configure-opnsense-services.yml) | `proxmox_hosts` | [opnsense_services](../../roles/opnsense_services/tasks/main.yml) | Required explicit `task_action` |
 | [configure-opnsense-unifi.yml](../../playbooks/configure-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `configure` |
-| [configure-opnsense-wireguard-wifi.yml](../../playbooks/configure-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `configure` |
 | [configure-opnsense-wireguard.yml](../../playbooks/configure-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `configure` |
 | [configure-proxmox-api.yml](../../playbooks/configure-proxmox-api.yml) | `proxmox_hosts` | [proxmox_api](../../roles/proxmox_api/tasks/main.yml) | `enroll` |
 | [configure-proxmox-boot.yml](../../playbooks/configure-proxmox-boot.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | Required explicit `task_action` |
@@ -33,7 +31,6 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [configure-proxmox-repositories.yml](../../playbooks/configure-proxmox-repositories.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | `repositories` |
 | [configure-switch-all-ports.yml](../../playbooks/configure-switch-all-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-gateway.yml](../../playbooks/configure-switch-gateway.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `gateway` |
-| [configure-switch-home-pilot-port.yml](../../playbooks/configure-switch-home-pilot-port.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-idrac-port.yml](../../playbooks/configure-switch-idrac-port.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-management.yml](../../playbooks/configure-switch-management.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `management` |
 | [configure-switch-ports.yml](../../playbooks/configure-switch-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | Required explicit `task_action` |
@@ -48,7 +45,6 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [disable-opnsense-bmc.yml](../../playbooks/disable-opnsense-bmc.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `disable` |
 | [disable-opnsense-dev.yml](../../playbooks/disable-opnsense-dev.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `disable` |
 | [eject-idrac-iso.yml](../../playbooks/eject-idrac-iso.yml) | `idracs` | [idrac_iso](../../roles/idrac_iso/tasks/main.yml) | `eject` |
-| [inspect-opnsense-wireguard-wifi.yml](../../playbooks/inspect-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `inspect` |
 | [inspect-unifi-site.yml](../../playbooks/inspect-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `inspect` |
 | [install-opnsense.yml](../../playbooks/install-opnsense.yml) | `proxmox_hosts` | [opnsense_install](../../roles/opnsense_install/tasks/main.yml) | `install` |
 | [manage-idrac-iso-boot.yml](../../playbooks/manage-idrac-iso-boot.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | Required explicit `task_action` |
@@ -63,11 +59,8 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [prepare-ssh-trust.yml](../../playbooks/prepare-ssh-trust.yml) | `all` | [ssh_trust](../../roles/ssh_trust/tasks/main.yml) | `prepare` |
 | [prepare-unifi.yml](../../playbooks/prepare-unifi.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `prepare` |
 | [prepare-wireguard-client.yml](../../playbooks/prepare-wireguard-client.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
-| [prepare-wireguard-clients.yml](../../playbooks/prepare-wireguard-clients.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
-| [prepare-wireguard-clients.yml](../../playbooks/prepare-wireguard-clients.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `prepare` |
 | [preview-idrac-network.yml](../../playbooks/preview-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `preview` |
 | [reboot-proxmox-host.yml](../../playbooks/reboot-proxmox-host.yml) | `proxmox_hosts` | [proxmox_host](../../roles/proxmox_host/tasks/main.yml) | `reboot` |
-| [remove-opnsense-wireguard-wifi.yml](../../playbooks/remove-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `remove` |
 | [set-idrac-uefi.yml](../../playbooks/set-idrac-uefi.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | `uefi` |
 | [snapshot-idrac.yml](../../playbooks/snapshot-idrac.yml) | `idracs` | [idrac_snapshot](../../roles/idrac_snapshot/tasks/main.yml) | `snapshot` |
 | [start-fedora-dev-vm.yml](../../playbooks/start-fedora-dev-vm.yml) | `proxmox_hosts` | [fedora_dev](../../roles/fedora_dev/tasks/main.yml) | `start` |
@@ -80,7 +73,6 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [verify-fedora-dev-connectivity.yml](../../playbooks/verify-fedora-dev-connectivity.yml) | `fedora_hosts` | [fedora_host](../../roles/fedora_host/tasks/main.yml) | `connectivity` |
 | [verify-fedora-dev-host.yml](../../playbooks/verify-fedora-dev-host.yml) | `fedora_hosts` | [fedora_host](../../roles/fedora_host/tasks/main.yml) | `verify` |
 | [verify-fedora-dev-vm.yml](../../playbooks/verify-fedora-dev-vm.yml) | `proxmox_hosts` | [fedora_dev](../../roles/fedora_dev/tasks/main.yml) | `verify` |
-| [verify-fortigate-pilot-reservations.yml](../../playbooks/verify-fortigate-pilot-reservations.yml) | `fortigates` | [fortigate_pilot_dhcp](../../roles/fortigate_pilot_dhcp/tasks/main.yml) | `verify` |
 | [verify-idrac-bmc-route.yml](../../playbooks/verify-idrac-bmc-route.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `verify_current` |
 | [verify-idrac-iso-boot.yml](../../playbooks/verify-idrac-iso-boot.yml) | `idracs` | [idrac_boot](../../roles/idrac_boot/tasks/main.yml) | `verify` |
 | [verify-idrac-network.yml](../../playbooks/verify-idrac-network.yml) | `idracs` | [idrac_network](../../roles/idrac_network/tasks/main.yml) | `verify` |
@@ -90,8 +82,6 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [verify-opnsense-dev.yml](../../playbooks/verify-opnsense-dev.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `verify` |
 | [verify-opnsense-unifi.yml](../../playbooks/verify-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `verify` |
 | [verify-opnsense-vm.yml](../../playbooks/verify-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | `verify` |
-| [verify-opnsense-wireguard-wifi-absent.yml](../../playbooks/verify-opnsense-wireguard-wifi-absent.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `verify_absent` |
-| [verify-opnsense-wireguard-wifi.yml](../../playbooks/verify-opnsense-wireguard-wifi.yml) | `opnsense_hosts` | [opnsense_wireguard_wifi](../../roles/opnsense_wireguard_wifi/tasks/main.yml) | `verify` |
 | [verify-opnsense-wireguard.yml](../../playbooks/verify-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `verify` |
 | [verify-unifi-config-ready.yml](../../playbooks/verify-unifi-config-ready.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configuration_ready` |
 | [verify-unifi-host.yml](../../playbooks/verify-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `verify` |
@@ -106,7 +96,7 @@ Named entry points run directly, retaining `--limit` and supported `--check` pre
 ```bash
 ansible-playbook playbooks/configure-proxmox-repositories.yml --limit pve01 --check
 ansible-playbook playbooks/update-proxmox-host.yml --limit pve01 --check
-ansible-playbook playbooks/configure-switch-home-pilot-port.yml --check
+ansible-playbook playbooks/configure-switch-server-ports.yml --check
 ansible-playbook playbooks/verify-opnsense-vm.yml --limit pve01
 ```
 
@@ -114,12 +104,12 @@ Generic entry points require the role-scoped action dictionary. Use JSON or YAML
 
 ```bash
 ansible-playbook playbooks/configure-switch-ports.yml --check \
-  -e '{"cisco_switch_options":{"task_action":"ports"},"switch_port_roles":["server_mgmt","pilot_wan"]}'
+  -e '{"cisco_switch_options":{"task_action":"ports"},"switch_port_roles":["server_mgmt","server_lan"]}'
 ansible-playbook playbooks/configure-proxmox-host.yml --limit pve01 --check \
   -e '{"proxmox_host_options":{"task_action":"repositories"}}'
 ```
 
-The standard field is `task_action`. Its containing dictionary identifies the role, so selecting a pilot action cannot override the VM verification action or a separate backup role. Actions within one role share modular task files rather than recursively invoking that same role. Extra variables retain normal Ansible precedence; an explicit dictionary override must pass the selected contract.
+The standard field is `task_action`. Its containing dictionary identifies the role, so selecting a service action cannot override the VM verification action or a separate backup role. Actions within one role share modular task files rather than recursively invoking that same role. Extra variables retain normal Ansible precedence; an explicit dictionary override must pass the selected contract.
 
 The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboot`, `idrac_iso_operation`, `idrac_iso_boot_operation`, `idrac_network_operation`, `opnsense_verify_only` and `opnsense_home_requested`) no longer select operations. Use named entry points or the role-scoped `task_action` instead. `switch_port_roles` remains the required scope parameter for the switch `ports` action; `opnsense_verify_wan_state` remains an optional Boolean comparison setting, defaulting to true.
 
@@ -134,7 +124,6 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `fedora_host_options` | `configure`, `verify`, `connectivity` |
 | `fortigate_backup_options` | `backup` |
 | `fortigate_controller_options` | `prepare`, `verify` |
-| `fortigate_pilot_dhcp_options` | `configure`, `verify` |
 | `idrac_backup_options` | `export` |
 | `idrac_boot_options` | `boot`, `verify`, `uefi` |
 | `idrac_iso_options` | `mount`, `eject`, `status` |
@@ -144,10 +133,9 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `opnsense_install_options` | `install` |
 | `opnsense_lab_options` | `configure`, `verify`, `disable`, `verify_disabled` |
 | `opnsense_media_options` | `download`, `bootstrap` |
-| `opnsense_pilot_options` | `management`, `home` |
+| `opnsense_services_options` | `management`, `home` |
 | `opnsense_vm_options` | `describe`, `create`, `verify` |
 | `opnsense_wireguard_options` | `prepare`, `configure`, `verify` |
-| `opnsense_wireguard_wifi_options` | `inspect`, `configure`, `verify`, `remove`, `verify_absent`, `prepare` |
 | `proxmox_api_options` | `enroll` |
 | `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |
 | `proxmox_installer_options` | `prepare` |
@@ -160,7 +148,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 
 ## Inputs and execution environment
 
-Keep addresses, hardware and VLAN mappings, desired state and guest configuration in inventory. Named switch entries select recovery, server, HOME, iDRAC or all inventory roles. The management pilot action preserves a recorded HOME allocation; the HOME action enrolls or reconciles it.
+Keep addresses, hardware and VLAN mappings, desired state and guest configuration in inventory. Named switch entries select recovery, server, HOME, iDRAC or all inventory roles. The management service action preserves a recorded HOME allocation; the HOME action enrolls or reconciles it.
 
 ISO mounting, booting and verification retain the selected image inputs. Original boot records and accepted network task paths must be supplied explicitly:
 
@@ -176,11 +164,11 @@ ansible-playbook playbooks/verify-idrac-network.yml --limit idrac01 \
 
 Network status/verification are read-only operations and retain rejection of check mode. Preview submits a vendor validation job; it is not a read-only status operation. Network apply still requires Boolean `idrac_network_recovery_ready: true` after staging physical recovery. DHCP rollback retains `idrac_network_mode=dhcp` as an input, independent of action selection. No role sets recovery readiness or manual WAN/NIC-assignment confirmation automatically.
 
-With a local ISO source, media operations run from the native Mac. ISO status disables hostname edits and needs no sudo password; the trusted hostname must already resolve. Mount and eject retain `--ask-become-pass` when hostname preparation requires sudo. VM verification checks resources; guest service verification uses the pilot workflows. Package updates and required host reboot handling remain separate named entry points.
+With a local ISO source, media operations run from the native Mac. ISO status disables hostname edits and needs no sudo password; the trusted hostname must already resolve. Mount and eject retain `--ask-become-pass` when hostname preparation requires sudo. VM verification checks resources; guest service verification uses the service workflows. Package updates and required host reboot handling remain separate named entry points.
 
 ## Permanent lab and Fedora actions
 
-`configure-opnsense-{bmc,dev}.yml`, `verify-opnsense-{bmc,dev}.yml`, `disable-opnsense-{bmc,dev}.yml` and `verify-opnsense-{bmc,dev}-disabled.yml` invoke `opnsense_lab` with an explicit action and zone. `prepare-wireguard-clients.yml` refreshes both existing profiles from completed zone records; it performs no device writes. `verify-idrac-bmc-route.yml` reads the current static interface and gateway without requiring an old import task.
+`configure-opnsense-{bmc,dev}.yml`, `verify-opnsense-{bmc,dev}.yml`, `disable-opnsense-{bmc,dev}.yml` and `verify-opnsense-{bmc,dev}-disabled.yml` invoke `opnsense_lab` with an explicit action and zone. `prepare-wireguard-client.yml` refreshes the permanent HOME profile from completed zone records; it performs no device writes. `verify-idrac-bmc-route.yml` reads the current static interface and gateway without requiring an old import task.
 
 `prepare-fedora-dev.yml`, `create-fedora-dev-vm.yml`, `verify-fedora-dev-vm.yml`, `start-fedora-dev-vm.yml` and `stop-fedora-dev-vm.yml` invoke `fedora_dev`. `configure-fedora-dev-host.yml`, `verify-fedora-dev-host.yml` and `verify-fedora-dev-connectivity.yml` invoke `fedora_host` with `configure`, `verify` and `connectivity`. See [lab access](configure-opnsense-lab.md) and [Fedora provisioning](fedora-dev.md) for dependencies and usage.
 

@@ -22,7 +22,7 @@
       \ 'dns': 'verified', 'https': 'verified', 'private_device_probes': 'denied'}))\n"
     - '{{ {"address": ansible_host, "dns": unifi_allocation.dns, "fqdn": inventory_hostname ~ "." ~ unifi_allocation.domain,
       "denied": [[hostvars[unifi_proxmox_host].ansible_host,22], [hostvars[hostvars[unifi_proxmox_host].opnsense_guest].opnsense_lab.bmc.target,443],
-      [hostvars[hostvars[unifi_proxmox_host].opnsense_guest].opnsense_wireguard_wifi.wan_gateway,443], [ansible_host.rsplit(".",1)[0]
+      [hostvars[hostvars[unifi_proxmox_host].opnsense_guest].opnsense_home.address,443], [ansible_host.rsplit(".",1)[0]
       ~ ".31",8080], [ansible_host.rsplit(".",1)[0] ~ ".32",8080]]} | to_json }}'
     - '{{ lookup("ansible.builtin.file", unifi_seed_directory ~ "/gui-cert.pem") }}'
   check_mode: false

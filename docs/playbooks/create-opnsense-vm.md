@@ -2,7 +2,7 @@
 
 `playbooks/create-opnsense-vm.yml` stages the verified DVD ISO and creates VM 100 through `community.proxmox` over verified HTTPS. It allocates one 32 GiB system disk and one EFI variable disk on LVM-thin storage, attaches installation media and leaves the new VM stopped. It does not install the guest OS, start/stop a VM or change the switch/host network configuration.
 
-`create-opnsense-vm.yml` invokes the [opnsense_vm role](../../roles/opnsense_vm/tasks/main.yml) with `task_action: create`; `verify-opnsense-vm.yml` selects `verify`. Both use the optional Boolean `opnsense_verify_wan_state`, default true. The generic `manage-opnsense-vm.yml` requires `opnsense_vm_options.task_action` explicitly. Installation and pilot roles include VM verification with their own role-scoped parameters.
+`create-opnsense-vm.yml` invokes the [opnsense_vm role](../../roles/opnsense_vm/tasks/main.yml) with `task_action: create`; `verify-opnsense-vm.yml` selects `verify`. Both use the optional Boolean `opnsense_verify_wan_state`, default true. The generic `manage-opnsense-vm.yml` requires `opnsense_vm_options.task_action` explicitly. Installation and service roles include VM verification with their own role-scoped parameters.
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ opnsense_vm:
 
 Use unique locally administered MACs and retain them across repeat runs. Every guest NIC uses VirtIO and disables the Proxmox VM NIC firewall. Internal NICs have individual tags; the guest sees untagged Ethernet and does not create additional VLAN subinterfaces for these four connections.
 
-The VM uses Q35, OVMF UEFI without pre-enrolled Secure Boot keys, CPU type `host`, one socket, fixed RAM with ballooning disabled, VirtIO SCSI Single and `cache=none` with an I/O thread. Discard remains disabled. Boot uses the modern explicit order `scsi0;ide2`: an installed system disk takes priority over the DVD. Startup order is 1, with 30 seconds before the next VM starts and a 120-second shutdown timeout. Automatic host-boot startup is disabled during installation; [configure-proxmox-boot.yml](configure-proxmox-boot.md) enables it after installation and connected pilot verification. Change the inventory setting to true for that workflow; VM creation/verification then requires the enabled setting to match.
+The VM uses Q35, OVMF UEFI without pre-enrolled Secure Boot keys, CPU type `host`, one socket, fixed RAM with ballooning disabled, VirtIO SCSI Single and `cache=none` with an I/O thread. Discard remains disabled. Boot uses the modern explicit order `scsi0;ide2`: an installed system disk takes priority over the DVD. Startup order is 1, with 30 seconds before the next VM starts and a 120-second shutdown timeout. Automatic host-boot startup is disabled during installation; [configure-proxmox-boot.yml](configure-proxmox-boot.md) enables it after installation and connected WAN verification. Change the inventory setting to true for that workflow; VM creation/verification then requires the enabled setting to match.
 
 ## Preview and create
 
@@ -50,11 +50,11 @@ The first preview reads the host and local ISO, checks bridges/storage/ID availa
 
 An existing matching VM is verified rather than recreated. Its disks are never reformatted, resized or replaced by this playbook. An ejected/removed DVD is accepted and not reattached. A running VM is not stopped. The named bootstrap DVD produced by the installation workflow is also accepted, without reattaching it. With `opnsense_vm_options.task_action: verify`, an existing matching VM is required and all staging/creation/WAN mutations are skipped; the installation playbook uses this mode for its preflight. Conflicting hardware, an unrelated ownership marker, extra devices or pending VM configuration changes cause failure before writes. `scripts/validate-opnsense-vm.py` compares parsed properties rather than relying on their printed order.
 
-The [management pilot workflow](configure-opnsense-pilot.md) additionally uses `opnsense_verify_wan_state: false` during its read-only preflight. This permits a planned WAN link difference while still validating all other hardware. The creation and verification entry points explicitly supply `true`, requiring the desired WAN state to match during verification-only use. Interface-assignment confirmation applies to WAN writes, not to a read-only preflight.
+The [service workflow](configure-opnsense-services.md) requires the requested WAN state to match during its read-only preflight. WAN link maintenance remains an explicit VM operation.
 
 ## Verify an existing VM
 
-`verify-opnsense-vm.yml` invokes `opnsense_vm` with `task_action: verify` and the default `opnsense_verify_wan_state: true`. It requires an existing owned VM and verifies its hardware and desired WAN link state without staging media, allocating disks or changing the VM. This verifies VM resources; guest policy and service verification use the pilot workflow.
+`verify-opnsense-vm.yml` invokes `opnsense_vm` with `task_action: verify` and the default `opnsense_verify_wan_state: true`. It requires an existing owned VM and verifies its hardware and desired WAN link state without staging media, allocating disks or changing the VM. This verifies VM resources; guest policy and service verification use the service workflow.
 
 ```bash
 ansible-playbook playbooks/verify-opnsense-vm.yml --limit pve01
@@ -68,7 +68,7 @@ The WAN vNIC is disconnected during initial creation. Keep it disconnected until
 
 Guest network/services configuration is a separate bootstrap phase. Follow [OPNsense virtual installation guidance](https://docs.opnsense.org/manual/virtuals.html) for disabling hardware offloads after installation. Use the MGMT path for administration; no WAN management rule is needed.
 
-## Connect or disconnect the pilot WAN through the playbook
+## Connect or disconnect the WAN through the playbook
 
 Fresh creation requires `wan_connected: false`. After verifying guest interface assignments, change only `opnsense_vm.wan_connected` to `true` in private inventory. Preview and apply with an explicit console-assignment confirmation:
 

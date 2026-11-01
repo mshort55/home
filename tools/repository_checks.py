@@ -225,7 +225,7 @@ def ssh_policy_errors(root: Path = ROOT) -> list[str]:
             or variables.get("ansible_host_key_checking") is not True
         ):
             return ["Cisco inventory must use libssh with host-key verification"]
-        target = "{{ (playbook_dir ~ '/../files/ssh/cisco-legacy.conf') | realpath }}"
+        target = "{{ (inventory_dir ~ '/files/ssh/cisco-legacy.conf') | realpath }}"
         if variables.get("ansible_libssh_config_file") != target:
             return ["Cisco inventory must explicitly select the repository's legacy SSH policy"]
     except (OSError, ValueError, KeyError) as error:

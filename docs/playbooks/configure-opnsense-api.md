@@ -24,7 +24,7 @@ Controller artifacts are mode 0600 under the mode-0700 `.cache/community-api/<in
 
 For the original OPNsense 26.7 release, enrollment also persists and applies `kern.ipc.tls.enable=0` to avoid corrupted large HTTPS API responses, then restarts the web GUI. TLS and certificate verification remain enabled. This disables kernel TLS offload system-wide; the saved tunable persists across upgrades and can be removed through System → Settings → Tunables after upgrading to a release with the upstream fix. Enrollment does not add it on later releases. See the [26.7 TLS issue](https://github.com/opnsense/core/issues/10573) and [26.7.1 release notes](https://docs.opnsense.org/releases/CE_26.7.html).
 
-After enrollment, preview and run the [management pilot](configure-opnsense-pilot.md). Its VM operations also require [Proxmox API enrollment](configure-proxmox-api.md) on this controller:
+After enrollment, preview and run the [management pilot](configure-opnsense-services.md). Its VM operations also require [Proxmox API enrollment](configure-proxmox-api.md) on this controller:
 
 ```bash
 ansible-playbook playbooks/configure-opnsense-management.yml --limit pve01 --check

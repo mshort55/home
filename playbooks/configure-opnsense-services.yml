@@ -1,8 +1,8 @@
 ---
-- name: 'opnsense_pilot: explicit action'
+- name: 'opnsense_services: explicit action'
   hosts: proxmox_hosts
   gather_facts: false
   become: false
   serial: 1
   roles:
-  - role: opnsense_pilot
+  - role: opnsense_services

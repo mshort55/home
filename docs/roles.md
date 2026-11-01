@@ -32,7 +32,7 @@ Dynamic composition selects a different role independently:
 
 Ansible automatically validates `meta/argument_specs.yml`'s `main` contract at role entry. `tasks/main.yml` then validates the selected action's contract and dispatches with `ansible.builtin.include_tasks: "{{ <role_name>_options.task_action }}.yml"`. Contracts declare choices, required inputs, types and optional defaults. Detailed task assertions retain address, identity, exact hardware, VLAN, protected-file and recovery checks. Optional values are in `defaults/main.yml`; no action control is defaulted there. Derived script payloads and module authentication defaults remain scoped to the action's task block.
 
-Action files compose dependencies and include reusable `_*.yml` task modules. Same-role composition uses task includes rather than recursive role calls. For example, switch management/ports include the same backup implementation, and bootstrap media includes the download implementation. Independent services use `include_role`, such as iDRAC network apply calling `idrac_backup` and OPNsense install/pilot calling `opnsense_vm` verification. These dependencies execute only after the owning action contract passes.
+Action files compose dependencies and include reusable `_*.yml` task modules. Same-role composition uses task includes rather than recursive role calls. For example, switch management/ports include the same backup implementation, and bootstrap media includes the download implementation. Independent services use `include_role`, such as iDRAC network apply calling `idrac_backup` and OPNsense installation/services calling `opnsense_vm` verification. These dependencies execute only after the owning action contract passes.
 
 `ansible.builtin.meta: end_role` returns from completed status/preview paths without terminating unrelated roles or post-tasks on the host. Local-only media/installer and Redfish entry points explicitly set `ansible_connection: local` and the executing controller Python interpreter, so inventory SSH settings do not redirect controller tasks to Proxmox. Switch plays retain enable privilege; guest and host work retain their existing SSH identities, TLS/CA validation and scoped community modules.
 
@@ -47,7 +47,6 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [fedora_host](../roles/fedora_host/tasks/main.yml) | `configure`, `verify`, `connectivity` | [defaults](../roles/fedora_host/defaults/main.yml) | [schema](../roles/fedora_host/meta/argument_specs.yml) |
 | [fortigate_backup](../roles/fortigate_backup/tasks/main.yml) | `backup` | [defaults](../roles/fortigate_backup/defaults/main.yml) | [schema](../roles/fortigate_backup/meta/argument_specs.yml) |
 | [fortigate_controller](../roles/fortigate_controller/tasks/main.yml) | `prepare`, `verify` | [defaults](../roles/fortigate_controller/defaults/main.yml) | [schema](../roles/fortigate_controller/meta/argument_specs.yml) |
-| [fortigate_pilot_dhcp](../roles/fortigate_pilot_dhcp/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/fortigate_pilot_dhcp/defaults/main.yml) | [schema](../roles/fortigate_pilot_dhcp/meta/argument_specs.yml) |
 | [idrac_backup](../roles/idrac_backup/tasks/main.yml) | `export` | [defaults](../roles/idrac_backup/defaults/main.yml) | [schema](../roles/idrac_backup/meta/argument_specs.yml) |
 | [idrac_boot](../roles/idrac_boot/tasks/main.yml) | `boot`, `verify`, `uefi` | [defaults](../roles/idrac_boot/defaults/main.yml) | [schema](../roles/idrac_boot/meta/argument_specs.yml) |
 | [idrac_iso](../roles/idrac_iso/tasks/main.yml) | `mount`, `eject`, `status` | [defaults](../roles/idrac_iso/defaults/main.yml) | [schema](../roles/idrac_iso/meta/argument_specs.yml) |
@@ -57,10 +56,9 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [opnsense_install](../roles/opnsense_install/tasks/main.yml) | `install` | [defaults](../roles/opnsense_install/defaults/main.yml) | [schema](../roles/opnsense_install/meta/argument_specs.yml) |
 | [opnsense_lab](../roles/opnsense_lab/tasks/main.yml) | `configure`, `verify`, `disable`, `verify_disabled` | [defaults](../roles/opnsense_lab/defaults/main.yml) | [schema](../roles/opnsense_lab/meta/argument_specs.yml) |
 | [opnsense_media](../roles/opnsense_media/tasks/main.yml) | `download`, `bootstrap` | [defaults](../roles/opnsense_media/defaults/main.yml) | [schema](../roles/opnsense_media/meta/argument_specs.yml) |
-| [opnsense_pilot](../roles/opnsense_pilot/tasks/main.yml) | `management`, `home` | [defaults](../roles/opnsense_pilot/defaults/main.yml) | [schema](../roles/opnsense_pilot/meta/argument_specs.yml) |
+| [opnsense_services](../roles/opnsense_services/tasks/main.yml) | `management`, `home` | [defaults](../roles/opnsense_services/defaults/main.yml) | [schema](../roles/opnsense_services/meta/argument_specs.yml) |
 | [opnsense_vm](../roles/opnsense_vm/tasks/main.yml) | `describe`, `create`, `verify` | [defaults](../roles/opnsense_vm/defaults/main.yml) | [schema](../roles/opnsense_vm/meta/argument_specs.yml) |
 | [opnsense_wireguard](../roles/opnsense_wireguard/tasks/main.yml) | `prepare`, `configure`, `verify` | [defaults](../roles/opnsense_wireguard/defaults/main.yml) | [schema](../roles/opnsense_wireguard/meta/argument_specs.yml) |
-| [opnsense_wireguard_wifi](../roles/opnsense_wireguard_wifi/tasks/main.yml) | `inspect`, `configure`, `verify`, `remove`, `verify_absent`, `prepare` | [defaults](../roles/opnsense_wireguard_wifi/defaults/main.yml) | [schema](../roles/opnsense_wireguard_wifi/meta/argument_specs.yml) |
 | [proxmox_api](../roles/proxmox_api/tasks/main.yml) | `enroll` | [defaults](../roles/proxmox_api/defaults/main.yml) | [schema](../roles/proxmox_api/meta/argument_specs.yml) |
 | [proxmox_host](../roles/proxmox_host/tasks/main.yml) | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` | [defaults](../roles/proxmox_host/defaults/main.yml) | [schema](../roles/proxmox_host/meta/argument_specs.yml) |
 | [proxmox_installer](../roles/proxmox_installer/tasks/main.yml) | `prepare` | [defaults](../roles/proxmox_installer/defaults/main.yml) | [schema](../roles/proxmox_installer/meta/argument_specs.yml) |
@@ -77,7 +75,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 |---|---|---|
 | `community_api`, `load` | `pve_api` or `opn_api`, selected by required `community_api_var` | Trusted API modules in the calling role |
 | `opnsense_vm`, `describe` | `opnsense_expected`, `opnsense_create_networks`, `opnsense_wan_argument` | VM resource reconciliation and Proxmox startup checks |
-| `opnsense_vm`, `verify` | Desired VM outputs, `opnsense_manifest`, `opnsense_existing_vm` | Installation artifact/ownership checks and pilot hardware checks |
+| `opnsense_vm`, `verify` | Desired VM outputs, `opnsense_manifest`, `opnsense_existing_vm` | Installation artifact/ownership checks and VM hardware checks |
 | `idrac_backup`, `export` | `idrac_backup_directory` | Network apply intent and recovery records |
 
 `describe` only builds the desired VM description from inventory and the pinned release; it makes no API, SSH or device request. Other runtime registers retain their existing workflow prefixes. Credentials loaded into named output dictionaries remain suppressed by `no_log`, with their controller files protected as before.
@@ -215,7 +213,7 @@ roles/
       bootstrap.yml
       download.yml
       main.yml
-  opnsense_pilot/
+  opnsense_services/
     defaults/
       main.yml
     meta/
@@ -293,7 +291,7 @@ roles/
 
 The orchestration files and their selected groups/actions are listed in [entry points](playbooks/entry-points.md). Generic `configure-*`/`manage-*` entry points require an explicit role action dictionary. Named entries keep their existing commands. Legacy action flags no longer select workflows; use the role parameter dictionary or the corresponding named entry.
 
-The former `playbooks/tasks/` helpers are now task modules in `community_api`, `idrac_snapshot`, `idrac_iso`, `idrac_boot`, `opnsense_vm`, `opnsense_pilot` and `proxmox_host`. `playbooks/templates/iso-server.plist.j2` belongs to `roles/idrac_iso/templates/`; `playbooks/templates/proxmox-guest-bridges.j2` belongs to `roles/proxmox_host/templates/`. `README.md` indexes this architecture and the workflow usage documents.
+The former `playbooks/tasks/` helpers are now task modules in `community_api`, `idrac_snapshot`, `idrac_iso`, `idrac_boot`, `opnsense_vm`, `opnsense_services` and `proxmox_host`. `playbooks/templates/iso-server.plist.j2` belongs to `roles/idrac_iso/templates/`; `playbooks/templates/proxmox-guest-bridges.j2` belongs to `roles/proxmox_host/templates/`. `README.md` indexes this architecture and the workflow usage documents.
 
 ## Isolated controller roles
 

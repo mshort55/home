@@ -59,7 +59,7 @@ and update failures, and interrupted artifact completion. Coverage applies to
 all maintained Python in `scripts`, `plugins` and `tools`, including unexecuted
 modules and namespace directories. The whole-source branch-aware regression
 floor is 29.5%; the four focused planner/guard files retain their separate 85%
-aggregate floor and individual floors of 95%, 95%, 85% and 80%. The runner rejects
+aggregate floor and individual floors of 95%, 85% and 80%. The runner rejects
 any Git-visible production Python missing from the coverage report, so adding a
 new source directory requires adding it to coverage too. Many workflows still
 need behavior tests; the focused percentage is not a whole-repository claim.

@@ -1,9 +1,9 @@
 ---
 argument_specs:
   main:
-    short_description: Validate and dispatch opnsense_pilot actions.
+    short_description: Validate and dispatch opnsense_services actions.
     options:
-      opnsense_pilot_options:
+      opnsense_services_options:
         type: dict
         description: Role-scoped parameters. The task_action field is required; there is no default action.
         required: true
@@ -17,7 +17,7 @@ argument_specs:
             - home
       opnsense_guest:
         type: str
-        description: Inventory guest containing management and HOME pilot settings.
+        description: Inventory guest containing management and HOME settings.
       opnsense_vm:
         type: dict
         description: Owned VM hardware and desired WAN link state.
@@ -99,9 +99,9 @@ argument_specs:
         type: dict
         description: Installed bridge identities.
   management:
-    short_description: 'opnsense_pilot: management.'
+    short_description: 'opnsense_services: management.'
     options:
-      opnsense_pilot_options:
+      opnsense_services_options:
         description: Role-scoped parameters. The task_action field is required; there is no default action.
         options:
           task_action:
@@ -114,7 +114,7 @@ argument_specs:
         type: dict
       opnsense_guest:
         type: str
-        description: Inventory guest containing management and HOME pilot settings.
+        description: Inventory guest containing management and HOME settings.
         required: true
       opnsense_vm:
         type: dict
@@ -126,9 +126,9 @@ argument_specs:
         description: Installed bridge identities.
         required: true
   home:
-    short_description: 'opnsense_pilot: home.'
+    short_description: 'opnsense_services: home.'
     options:
-      opnsense_pilot_options:
+      opnsense_services_options:
         description: Role-scoped parameters. The task_action field is required; there is no default action.
         options:
           task_action:
@@ -141,7 +141,7 @@ argument_specs:
         type: dict
       opnsense_guest:
         type: str
-        description: Inventory guest containing management and HOME pilot settings.
+        description: Inventory guest containing management and HOME settings.
         required: true
       opnsense_vm:
         type: dict

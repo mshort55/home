@@ -1,0 +1,200 @@
+---
+- name: Configure management services and verify policy on the owned firewall
+  block:
+  - name: Load the enrolled guest API
+    vars:
+      community_api_host: "{{ opnsense_guest }}"
+      community_api_var: opn_api
+      community_api_options:
+        task_action: load
+    ansible.builtin.include_role:
+      name: community_api
+      public: false
+    tags:
+    - always
+  - name: Require the installed guest and explicitly selected service inputs
+    ansible.builtin.assert:
+      that:
+      - opnsense_guest in groups.get('opnsense_hosts', [])
+      - hostvars[opnsense_guest].opnsense_proxmox_host == inventory_hostname
+      - services_settings is mapping
+      - services_settings.admin_addresses is sequence
+      - services_settings.update_addresses is sequence
+      - services_settings.dns_servers | length == 2
+      - services_settings.ntp_servers | length > 0
+      - services_settings.dns_hosts is sequence
+      - opnsense_vm.wan_connected is sameas true
+      fail_msg: Define management service inputs on the guest and select a connected WAN in the Proxmox VM inventory.
+  - name: Build the installed MAC and role identities
+    ansible.builtin.set_fact:
+      services_networks: []
+  - name: Associate each VM NIC with its installed guest section
+    ansible.builtin.set_fact:
+      services_networks: "{{ services_networks + [item | combine({'section': sections[item.role]})] }}"
+    loop: "{{ opnsense_vm.networks }}"
+    vars:
+      sections:
+        WAN: wan
+        MGMT: lan
+        HOME: opt1
+        DEV: opt2
+        BMC: opt3
+  - name: Build the bounded guest configuration payload
+    ansible.builtin.set_fact:
+      services_payload: "{{ services_settings | combine({'management_address': hostvars[opnsense_guest].ansible_host, 'networks':\
+        \ services_networks}) }}"
+  - name: Select the explicitly requested HOME allocation
+    ansible.builtin.set_fact:
+      services_payload: "{{ services_payload | combine({'home_pilot': hostvars[opnsense_guest].opnsense_home}) }}"
+    when: (opnsense_services_options.task_action == 'home')
+  - name: Validate the installed identity and preview vendor model changes without saving
+    ansible.builtin.raw: "{{ services_prefix }} plan {{ services_payload | to_json | b64encode | quote }}"
+    delegate_to: "{{ opnsense_guest }}"
+    register: services_preview
+    changed_when: services_preview.rc == 0 and ansible_check_mode and (services_preview.stdout | trim | from_json).reload_required
+    check_mode: false
+  - name: Require DHCP API enrollment before previewing HOME writes
+    ansible.builtin.assert:
+      that:
+      - (services_preview.stdout | trim | from_json).dhcp_api_ready
+      fail_msg: Run configure-opnsense-api.yml for the guest to enroll the Kea DHCP privilege, then rerun this playbook.
+    when: (services_preview.stdout | trim | from_json).home_pilot is not none
+  - name: Report the scoped service preview
+    ansible.builtin.debug:
+      msg:
+        guest: "{{ opnsense_guest }}"
+        management: "{{ hostvars[opnsense_guest].ansible_host }}"
+        changes: "{{ (services_preview.stdout | trim | from_json).changes }}"
+        wan: Verify the already connected owned WAN vNIC
+        home: "{{ (services_preview.stdout | trim | from_json).home_pilot }}"
+        scope: "{{ 'MGMT services and isolated HOME DHCP/DNS/internet; DEV/BMC stay disabled' if (services_preview.stdout | trim\
+          \ | from_json).home_pilot is not none else 'MGMT services; existing owned DEV/BMC settings are preserved and no DHCP server is enabled'\
+          \ }}"
+  - name: Preview firewall and DNS with the community modules
+    ansible.builtin.include_tasks:
+      file: _policy.yml
+      apply:
+        check_mode: true
+    vars:
+      services_reload_required: false
+      services_policy_preview: true
+  - name: Select whether the API preview requires a configuration transaction
+    ansible.builtin.set_fact:
+      services_api_change: "{{ services_rule_changes.changed or services_bootstrap_change.changed | default(false) or services_dns_general_change.changed\
+        \ or services_dns_acl_changes.changed or services_dns_host_changes.changed or services_dhcp_general_change.changed | default(false)\
+        \ or services_dhcp_subnet_change.changed | default(false) }}"
+  - name: Finish the read-only preview before guest or VM writes
+    ansible.builtin.meta: end_role
+    when: ansible_check_mode
+  - name: Save validated service settings and a protected pre-change backup
+    ansible.builtin.raw: "{{ services_prefix }} apply {{ services_payload | to_json | b64encode | quote }} {{ 'api-change' if services_api_change\
+      \ else 'no-api-change' }}"
+    delegate_to: "{{ opnsense_guest }}"
+    register: services_apply
+    changed_when: services_apply.rc == 0 and (services_apply.stdout | trim | from_json).changed
+  - name: Select whether pending runtime configuration needs applying
+    ansible.builtin.set_fact:
+      services_reload_required: "{{ (services_apply.stdout | trim | from_json).reload_required }}"
+  - name: Read the private pre-change backup without displaying it
+    ansible.builtin.raw: /usr/bin/base64 {{ (services_apply.stdout | trim | from_json).backup | quote }}
+    delegate_to: "{{ opnsense_guest }}"
+    register: services_backup_bytes
+    changed_when: false
+    no_log: true
+    when: services_reload_required
+  - name: Create the protected controller backup parent
+    ansible.builtin.file:
+      path: "{{ inventory_dir }}/backups"
+      state: directory
+      mode: '0700'
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    when: services_reload_required
+  - name: Allocate a private controller backup directory
+    ansible.builtin.tempfile:
+      state: directory
+      path: "{{ inventory_dir }}/backups"
+      prefix: "{{ opnsense_guest }}-pilot-"
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    register: services_backup_directory
+    when: services_reload_required
+  - name: Export the exact pre-change configuration privately
+    ansible.builtin.copy:
+      dest: "{{ services_backup_directory.path }}/before.xml"
+      content: "{{ services_backup_bytes.stdout | b64decode }}"
+      mode: '0600'
+    delegate_to: localhost
+    vars:
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    diff: false
+    no_log: true
+    when: services_reload_required
+  - name: Apply firewall, DNS and selected DHCP through OXL
+    ansible.builtin.include_tasks: _policy.yml
+  - name: Apply native time and resolver settings
+    ansible.builtin.raw: "{{ item }}"
+    loop:
+    - /usr/local/sbin/pluginctl -s ntpd restart
+    - /usr/local/bin/php -r 'require_once("config.inc"); require_once("util.inc"); require_once("system.inc"); system_resolvconf_generate();'
+    delegate_to: "{{ opnsense_guest }}"
+    changed_when: true
+    when: services_reload_required
+  - name: Verify saved settings and loaded rules, DNS records and time service
+    ansible.builtin.raw: "{{ services_prefix }} verify {{ services_payload | to_json | b64encode | quote }}"
+    delegate_to: "{{ opnsense_guest }}"
+    register: services_runtime
+    changed_when: false
+    retries: 12
+    delay: 5
+    until: services_runtime is succeeded
+  - name: Record successfully applied management services
+    ansible.builtin.raw: "{{ services_prefix }} complete {{ services_payload | to_json | b64encode | quote }}"
+    delegate_to: "{{ opnsense_guest }}"
+    changed_when: services_reload_required
+  - name: Verify the WAN DHCP lease and optional expected gateway
+    ansible.builtin.raw: "{{ services_prefix }} network {{ services_payload | to_json | b64encode | quote }}"
+    delegate_to: "{{ opnsense_guest }}"
+    register: services_network
+    changed_when: false
+    retries: 36
+    delay: 5
+    until: services_network is succeeded
+  - name: Verify Proxmox DNS, NAT and outbound HTTPS through management
+    ansible.builtin.uri:
+      url: https://enterprise.proxmox.com/
+      validate_certs: true
+      use_proxy: false
+      status_code:
+      - 200
+      - 401
+      timeout: 30
+    register: services_https
+    retries: 6
+    delay: 5
+    until: services_https is succeeded
+  - name: Report pilot access and backup location without configuration secrets
+    ansible.builtin.debug:
+      msg:
+        management: "{{ hostvars[opnsense_guest].ansible_host }}"
+        wan_address: "{{ (services_network.stdout | trim | from_json).wan_address }}"
+        ntp_synchronized: "{{ (services_network.stdout | trim | from_json).ntp_synchronized }}"
+        backup: "{{ services_backup_directory.path if services_reload_required else 'Existing protected guest backup retained; no\
+          \ new configuration save' }}"
+        home: "{{ (services_network.stdout | trim | from_json).home_pilot }}"
+  vars:
+    services_settings: "{{ hostvars[opnsense_guest].opnsense_services }}"
+    services_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-services.php') | replace('// SERVICES_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-services-library.php')) | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
+      \ }}"
+    services_prefix: printf '%s' {{ services_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --
+  module_defaults:
+    group/community.proxmox.proxmox:
+      api_host: "{{ pve_api.api_host }}"
+      api_user: "{{ pve_api.api_user }}"
+      api_token_id: "{{ pve_api.api_token_id }}"
+      api_token_secret: "{{ pve_api.api_token_secret }}"
+      validate_certs: true
+      ca_path: "{{ inventory_dir }}/.cache/community-api/{{ inventory_hostname }}/ca.pem"
+      api_timeout: 30

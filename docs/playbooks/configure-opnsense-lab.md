@@ -15,7 +15,7 @@ ansible-playbook playbooks/configure-opnsense-dev.yml --limit opnsense01 --check
 ansible-playbook playbooks/configure-opnsense-dev.yml --limit opnsense01
 ansible-playbook playbooks/verify-opnsense-dev.yml --limit opnsense01
 
-ansible-playbook playbooks/prepare-wireguard-clients.yml --limit opnsense01
+ansible-playbook playbooks/prepare-wireguard-client.yml --limit opnsense01
 ```
 
 Re-import `.cache/wireguard/opnsense01/home-admin.conf` and `home-admin-wifi.conf` in the Mac app. Only one may be active. Client routes come from completed enabled zone records, separate from immutable key allocation. Server peer AllowedIPs remain the single laptop /32.
@@ -46,7 +46,7 @@ ansible-playbook playbooks/disable-opnsense-dev.yml --limit opnsense01
 ansible-playbook playbooks/verify-opnsense-dev-disabled.yml --limit opnsense01
 ansible-playbook playbooks/disable-opnsense-bmc.yml --limit opnsense01
 ansible-playbook playbooks/verify-opnsense-bmc-disabled.yml --limit opnsense01
-ansible-playbook playbooks/prepare-wireguard-clients.yml --limit opnsense01
+ansible-playbook playbooks/prepare-wireguard-client.yml --limit opnsense01
 ```
 
 Disable removes the gateway/listener, disables owned rules/ACLs and clears their connection states. It retains ownership for later configure and preserves guest disks and other zones. Re-import profiles after refreshing routes. Physical recovery remains available.

@@ -107,10 +107,10 @@
   - name: Preserve the validated firewall hardware in memory
     ansible.builtin.set_fact:
       boot_original_config: "{{ boot_vm_config }}"
-      boot_pilot_networks: []
+      boot_services_networks: []
   - name: Associate stable VM NICs with the installed firewall sections
     ansible.builtin.set_fact:
-      boot_pilot_networks: "{{ boot_pilot_networks + [item | combine({'section': sections[item.role]})] }}"
+      boot_services_networks: "{{ boot_services_networks + [item | combine({'section': sections[item.role]})] }}"
     loop: "{{ opnsense_vm.networks }}"
     vars:
       sections:
@@ -121,8 +121,8 @@
         BMC: opt3
   - name: Build the read-only management verification payload
     ansible.builtin.set_fact:
-      boot_pilot_payload: "{{ hostvars[opnsense_guest].opnsense_pilot | combine({'management_address': hostvars[opnsense_guest].ansible_host,\
-        \ 'networks': boot_pilot_networks}) }}"
+      boot_services_payload: "{{ hostvars[opnsense_guest].opnsense_services | combine({'management_address': hostvars[opnsense_guest].ansible_host,\
+        \ 'networks': boot_services_networks}) }}"
   - name: Verify management policy and connectivity before maintenance
     ansible.builtin.include_tasks: _verify_boot_network.yml
   - name: Allocate a protected hardware backup before changing automatic startup
@@ -278,9 +278,9 @@
     opnsense_owner_marker: Managed by create-opnsense-vm.yml; vmid={{ opnsense_vm.vmid }}
     boot_package_probe: "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-proxmox-packages.py') }}"
     boot_probe: "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-proxmox-boot.py') }}"
-    boot_pilot_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-pilot.php') | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
+    boot_services_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-services.php') | replace('// SERVICES_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-services-library.php')) | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
       \ }}"
-    boot_pilot_prefix: printf '%s' {{ boot_pilot_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --
+    boot_services_prefix: printf '%s' {{ boot_services_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --
   module_defaults:
     group/community.proxmox.proxmox:
       api_host: "{{ pve_api.api_host }}"

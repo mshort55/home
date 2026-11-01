@@ -38,8 +38,9 @@ Keep reusable desired-state configuration, provisioning, maintenance, backups an
 verification here. Temporary migration sequencing, lease holds, cutover overlays
 and recovery coordination live outside this repository. Final DHCP declarations
 use `all.vars.home_dhcp`; transition metadata must not be added to that contract.
-Older pilot workflows still contain shared permanent logic and need separation
-before retirement; they are not the pattern for new final-state automation.
+Private-WAN and cutover workflows live in the external transition workspace.
+Persisted device record names are compatibility identifiers, not instructions to
+replay a migration.
 
 ## Repository commands
 
@@ -143,13 +144,12 @@ Entry points orchestrate roles with explicit, role-scoped `task_action` paramete
 | Installed firewall automatic startup and controlled Proxmox maintenance reboot | [Configure Proxmox boot](docs/playbooks/configure-proxmox-boot.md) |
 | Proxmox guest LAN and WAN bridges with API verification | [Configure Proxmox bridges](docs/playbooks/configure-proxmox-bridges.md) |
 | Verified OPNsense DVD ISO preparation on the controller | [Prepare an OPNsense ISO](docs/playbooks/prepare-opnsense-iso.md) |
-| OPNsense VM creation and controlled pilot WAN attachment | [Create the OPNsense VM](docs/playbooks/create-opnsense-vm.md) |
+| OPNsense VM creation and controlled WAN link maintenance | [Create the OPNsense VM](docs/playbooks/create-opnsense-vm.md) |
 | Private OPNsense management bootstrap DVD preparation | [Prepare OPNsense bootstrap media](docs/playbooks/prepare-opnsense-bootstrap.md) |
 | OPNsense ZFS installation and pinned management SSH verification | [Install OPNsense](docs/playbooks/install-opnsense.md) |
-| OPNsense management DNS/NTP, restricted update access and private WAN pilot | [Configure OPNsense pilot](docs/playbooks/configure-opnsense-pilot.md) |
-| Isolated HOME VLAN with Kea DHCP, DNS and filtered internet access | [Configure OPNsense HOME pilot](docs/playbooks/configure-opnsense-home.md) |
+| OPNsense management DNS/NTP, firewall policy and runtime verification | [Configure OPNsense services](docs/playbooks/configure-opnsense-services.md) |
+| Owned HOME network with DHCP, DNS and filtered internet access | [Configure OPNsense HOME](docs/playbooks/configure-opnsense-home.md) |
 | HOME WireGuard administration, encrypted keys and Mac import | [Configure WireGuard](docs/playbooks/configure-opnsense-wireguard.md) |
-| Temporary WireGuard access from existing Wi-Fi, reserved DHCP leases and removal before ISP cutover | [Configure private-WAN Wi-Fi access](docs/playbooks/configure-opnsense-wireguard-wifi.md) |
 | Permanent DEV/BMC routing and authenticated administration from Wi-Fi or port 8 | [Configure lab access](docs/playbooks/configure-opnsense-lab.md) |
 | Verified headless Fedora Cloud Base VM, SSH baseline and explicit power operations | [Fedora development VM](docs/playbooks/fedora-dev.md) |
 | UniFi guest firewall management and legacy migration | [Declarative UniFi firewall](docs/playbooks/configure-unifi-firewall.md) |

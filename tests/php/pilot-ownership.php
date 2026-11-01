@@ -62,13 +62,39 @@ namespace {
     try {
         foreach (['ansible-unifi','ansible-wireguard','ansible-lab'] as $name) { mkdir($directory.'/'.$name,0700); }
         $library=file_get_contents($root.'/scripts/opnsense-lab-library.php');
-        $pilot=file_get_contents($root.'/scripts/configure-opnsense-pilot.php');
+        $pilot=file_get_contents($root.'/scripts/configure-opnsense-services.php');
         $pilot=explode("\ntry {\n    \$mode",$pilot)[0];
-        $pilot=str_replace(["<?php", "declare(strict_types=1);", "require_once('config.inc');", '// LAB_EXTENSION_LIBRARY'],['','','',$library],$pilot);
+        $pilot=str_replace(["<?php", "declare(strict_types=1);", "require_once('config.inc');", '// LAB_EXTENSION_LIBRARY', '// SERVICES_LIBRARY'],['','','',$library,file_get_contents($root.'/scripts/opnsense-services-library.php')],$pilot);
         // Root owns real artifacts; the invoking user owns these temporary fixtures.
         $pilot=str_replace(['\'/conf/','fileowner($path) === 0'],['\''.$directory.'/','fileowner($path) === '.posix_geteuid()],$pilot);
         eval($pilot);
         $seed=['seed_id'=>'synthetic-seed','address'=>'10.77.10.254']; $cases=0;
+        // The reusable helper must preserve omitted WAN policy, enforce explicit
+        // booleans and converge without disturbing unrelated interface fields.
+        $wan=new \SimpleXMLElement('<wan><if>vtnet0</if><blockpriv>1</blockpriv><blockbogons>1</blockbogons></wan>');
+        $changes=[];
+        configureWanPolicy($wan, [], $changes);
+        check(isset($wan->blockpriv, $wan->blockbogons) && $changes === [], 'Omitted WAN policy changed configuration'); $cases++;
+        configureWanPolicy($wan, ['wan_block_private'=>false,'wan_block_bogons'=>false], $changes);
+        check(!isset($wan->blockpriv) && !isset($wan->blockbogons) && (string)$wan->if === 'vtnet0', 'Explicit WAN policy failed'); $cases++;
+        $changes=[];
+        configureWanPolicy($wan, ['wan_block_private'=>false,'wan_block_bogons'=>false], $changes);
+        check($changes === [], 'WAN policy did not converge'); $cases++;
+        configureWanPolicy($wan, ['wan_block_private'=>true,'wan_block_bogons'=>true], $changes);
+        check((string)$wan->blockpriv === '1' && (string)$wan->blockbogons === '1', 'WAN blocking could not be enabled'); $cases++;
+        foreach (['false', 0, null] as $invalid) {
+            try {
+                configureWanPolicy($wan, ['wan_block_private'=>$invalid], $changes);
+                throw new \RuntimeException('Expected invalid WAN policy refusal');
+            } catch (\RuntimeException $error) {
+                check(str_contains($error->getMessage(), 'must be booleans'), 'Invalid WAN policy accepted');
+            }
+            $cases++;
+        }
+        $home=['address'=>'10.77.200.254','subnet'=>'10.77.200.0/24','pool_start'=>'10.77.200.100','pool_end'=>'10.77.200.199','lease_seconds'=>3600];
+        foreach (['', '192.0.2.1', '10.77.55.254'] as $gateway) {
+            check(homeSettings($home, '10.77.10.', $gateway) === $home, 'Optional/public/private WAN gateway rejected'); $cases++;
+        }
         \OPNsense\Core\Config::$xml=new \SimpleXMLElement('<opnsense><interfaces><lan><ipaddr>10.77.10.254</ipaddr></lan></interfaces><system><domain>lab.home.arpa</domain></system></opnsense>');
         $input=['vmid'=>110,'name'=>'unifi01','vlan'=>10,'address'=>'10.77.10.20/24','gateway'=>'10.77.10.254','recovery_address'=>'10.77.10.250','tunnel_address'=>'10.77.99.2','domain'=>'lab.home.arpa'];
         $path=$directory.'/ansible-unifi/state.json'; $backup=$directory.'/ansible-unifi/before.xml';

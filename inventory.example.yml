@@ -46,7 +46,6 @@ all:
             legacy_address: 10.77.55.1/24
           # Synthetic port assignments; replace these in your private inventory.
           switch_ports:
-            - {role: home_pilot, name: GigabitEthernet1/0/36, description: HOME-PILOT, access_vlan: 20, enabled: true}
             - {role: idrac, name: GigabitEthernet1/0/16, description: IDRAC, access_vlan: 1, enabled: true}
             - {role: fortinet, name: GigabitEthernet1/0/18, description: FORTINET-LAN, access_vlan: 1, enabled: true}
             - {role: ap1, name: GigabitEthernet1/0/20, description: AP1, access_vlan: 1, enabled: true}
@@ -56,12 +55,11 @@ all:
             - {role: recovery_bmc, name: GigabitEthernet1/0/28, description: RECOVERY-BMC, access_vlan: 40, enabled: true}
             - {role: server_mgmt, name: GigabitEthernet1/0/30, description: PVE-MGMT, access_vlan: 10, enabled: true}
             - {role: server_lan, name: GigabitEthernet1/0/32, description: PVE-LAN, mode: trunk, native_vlan: 999, allowed_vlans: [10, 20, 30, 40], allow_mode_change: true, enabled: true}
-            - {role: pilot_wan, name: GigabitEthernet1/0/34, description: PILOT-WAN, access_vlan: 1, enabled: true}
       vars:
         ansible_connection: ansible.netcommon.network_cli
         ansible_network_os: cisco.ios.ios
         ansible_network_cli_ssh_type: libssh
-        ansible_libssh_config_file: "{{ (playbook_dir ~ '/../files/ssh/cisco-legacy.conf') | realpath }}"
+        ansible_libssh_config_file: "{{ (inventory_dir ~ '/files/ssh/cisco-legacy.conf') | realpath }}"
         ansible_host_key_checking: true
         ansible_persistent_log_messages: false
         ansible_user: "{{ vault_devices[inventory_hostname].username }}"
@@ -70,14 +68,6 @@ all:
     fortigates:
       hosts:
         fortigate01:
-          fortigate_pilot_dhcp:
-            server_id: 1
-            interface: lan
-            subnet: 10.77.55.0/24
-            gateway: 10.77.55.254
-            reservations:
-              - {role: pilot_wan, id: 9001, address: 10.77.55.132, mac: '02:77:00:00:64:00'}
-              - {role: wifi_admin, id: 9002, address: 10.77.55.128, mac: '02:77:00:00:00:80'}
           # Must resolve to the device and match its verified TLS certificate.
           ansible_host: firewall.example.test
           fortigate_controller_endpoint:
@@ -171,7 +161,7 @@ all:
             disk_storage: local-lvm
             iso_storage: local
             onboot: false
-            # Set true after installation/pilot setup for configure-proxmox-boot.yml.
+            # Set true after installation and service setup for configure-proxmox-boot.yml.
             wan_connected: false
             networks:
               - {device: net0, role: WAN, bridge: vmbr2, mac: '02:77:00:00:64:00'}
@@ -216,7 +206,7 @@ all:
         opnsense01:
           opnsense_proxmox_host: pve01
           ansible_host: 10.77.10.254
-          # Management pilot; select wan_connected: true on pve01 when using it.
+          # Service configuration requires wan_connected: true on pve01.
           opnsense_lab:
             bmc: {address: 10.77.40.254, subnet: 10.77.40.0/24, target: 10.77.40.10, hostname: idrac01}
             dev: {address: 10.77.30.254, subnet: 10.77.30.0/24, target: 10.77.30.10, hostname: dev01}
@@ -233,21 +223,16 @@ all:
             proxmox_address: 10.77.10.10
             switch_host: switch01
             switch_address: 10.77.10.2
-          opnsense_wireguard_wifi:
-            wan_address: 10.77.55.132
-            wifi_address: 10.77.55.128
-            wan_gateway: 10.77.55.254
-            wan_mac: '02:77:00:00:64:00'
-          opnsense_home_pilot:
+          opnsense_home:
             address: 10.77.200.254
             subnet: 10.77.200.0/24
             pool_start: 10.77.200.100
             pool_end: 10.77.200.199
             lease_seconds: 3600
-          opnsense_pilot:
+          opnsense_services:
             admin_addresses: [10.77.10.250]
             update_addresses: [10.77.10.10]
-            wan_gateway: 10.77.55.254
+            # Optional: wan_gateway pins an expected DHCP gateway.
             # Documentation-only addresses: replace with your actual resolvers.
             dns_servers: [192.0.2.53, 198.51.100.53]
             ntp_servers:

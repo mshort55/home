@@ -26,7 +26,7 @@
       - unifi_vm_allocation.dns == unifi_vm_allocation.gateway
       - unifi_vm_allocation.bridge in (proxmox_network.guest_bridges | selectattr('vlan_aware', 'equalto', true) | map(attribute='name') | list)
       - unifi_vm_allocation.tunnel_address == hostvars[opnsense_guest].opnsense_wireguard.peer_address
-      - unifi_vm_allocation.recovery_address in hostvars[opnsense_guest].opnsense_pilot.admin_addresses
+      - unifi_vm_allocation.recovery_address in hostvars[opnsense_guest].opnsense_services.admin_addresses
 - name: Dispatch the explicit UniFi operation
   ansible.builtin.include_tasks: "{{ unifi_vm_options.task_action }}.yml"
   tags: [always]

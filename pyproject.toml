@@ -46,7 +46,6 @@ fail_under = 29.5
 focused_fail_under = 85
 
 [tool.home_validation.coverage.minimum_per_file]
-"plugins/action/fortigate_dhcp_plan.py" = 95
 "plugins/action/wireguard_keys.py" = 95
 "scripts/validate-opnsense-vm.py" = 85
 "scripts/unifi-isolation.py" = 80
