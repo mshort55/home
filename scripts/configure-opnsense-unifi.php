@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once('config.inc');
+// LAB_EXTENSION_LIBRARY
 
 function unifiRequire(bool $condition, string $message): void
 {
@@ -27,11 +28,6 @@ function unifiSame(array $actual, array $expected): bool
     foreach ($expected as $key=>$value) { if (($actual[$key] ?? '') !== $value) { return false; } }
     return true;
 }
-function unifiRule(string $name, int $sequence, string $interface, string $source, string $destination, string $port): array
-{
-    return ['enabled'=>'1','description'=>'Home automation: UNIFI '.$name,'sequence'=>(string)$sequence,'quick'=>'1','action'=>'pass','interface'=>$interface,'interfacenot'=>'0','direction'=>'in','ipprotocol'=>'inet','protocol'=>'TCP','source_not'=>'0','source_net'=>$source.'/32','source_port'=>'','destination_not'=>'0','destination_net'=>$destination,'destination_port'=>$port,'gateway'=>'','replyto'=>'','disablereplyto'=>'0','statetype'=>'keep','log'=>'0'];
-}
-
 try {
     unifiRequire(count($argv) === 3 && in_array($argv[1], ['plan','stage','verify','complete'], true), 'Use an explicit controller policy operation');
     $operation=$argv[1];
@@ -58,8 +54,8 @@ try {
         unifiProtect($previous['backup']);
         unifiRequire(dirname($previous['backup']) === $directory && is_file($previous['backup']), 'Missing original controller policy backup');
     }
-    $rules=[unifiRule('updates HTTP',131,'lan',$address,'any','80'),unifiRule('updates HTTPS',132,'lan',$address,'any','443'),unifiRule('tunnel SSH',800,'opt4',$input['tunnel_address'],$address.'/32','22'),unifiRule('tunnel HTTPS',810,'opt4',$input['tunnel_address'],$address.'/32','11443')];
-    $host=['enabled'=>'1','hostname'=>$input['name'],'domain'=>$input['domain'],'rr'=>'A','server'=>$address,'description'=>'Home automation: UNIFI DNS host'];
+    $policy=labUnifiPolicy($input);
+    $rules=$policy['filter rules']; $host=$policy['DNS host records'][0];
     $filter=new \OPNsense\Firewall\Filter(); $unbound=new \OPNsense\Unbound\Unbound();
     $objects=[]; $changes=[]; $runtime=true;
     $loaded=shell_exec('/sbin/pfctl -sr 2>/dev/null') ?? '';

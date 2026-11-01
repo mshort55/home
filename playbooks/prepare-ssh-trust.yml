@@ -1,0 +1,11 @@
+---
+- name: 'ssh_trust: prepare'
+  hosts: all
+  gather_facts: false
+  become: false
+  roles:
+  - role: ssh_trust
+    ssh_trust_options:
+      task_action: prepare
+    when: ssh_host_public_key is defined
+    tags: [always]

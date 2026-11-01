@@ -69,6 +69,10 @@ def test_operator_overrides_cannot_redirect_validation(runner, tmp_path, monkeyp
     monkeypatch.setenv("PYTEST_ADDOPTS", "--no-cov")
     monkeypatch.setenv("COVERAGE_RCFILE", "/private/disabled-coverage")
     monkeypatch.setenv("RUFF_OUTPUT_FORMAT", "json")
+    monkeypatch.setattr(runner, "ROOT", tmp_path)
+    (tmp_path / "ansible.cfg").write_text(
+        "[defaults]\nvault_password_file = /private/password-helper\nvault_identity_list = lab@/private/identity-helper\n"
+    )
     env = runner.validation_environment(tmp_path)
     assert "ANSIBLE_INVENTORY" not in env and "ANSIBLE_VAULT_PASSWORD_FILE" not in env
     assert "ANSIBLE_CALLBACK_PLUGINS" not in env and "GITLEAKS_CONFIG" not in env
@@ -80,6 +84,8 @@ def test_operator_overrides_cannot_redirect_validation(runner, tmp_path, monkeyp
     config.read(env["ANSIBLE_CONFIG"])
     assert config["defaults"]["inventory"].endswith("/inventory.example.yml")
     assert config.getboolean("defaults", "ask_vault_pass") is False
+    assert not config.has_option("defaults", "vault_password_file")
+    assert not config.has_option("defaults", "vault_identity_list")
     assert Path(env["HOME_VALIDATION_VAULT"]).read_text() == "vault_devices: {}\n"
 
 

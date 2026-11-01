@@ -9,6 +9,20 @@
       argument_spec_name: "{{ idrac_network_options.task_action }}"
   tags:
   - always
+- name: Prepare the explicitly reviewed current iDRAC controller endpoint
+  ansible.builtin.assert:
+    that: idrac_controller_endpoint.hostname == hostvars[inventory_hostname].ansible_host
+    fail_msg: The reviewed current endpoint must use the inventory certificate hostname.
+  when: idrac_controller_endpoint is defined
+- name: Restore controller hostname resolution before iDRAC requests
+  ansible.builtin.include_role:
+    name: controller_hostname
+    public: false
+  vars:
+    controller_hostname_options:
+      task_action: prepare
+    controller_hostname_endpoint: "{{ idrac_controller_endpoint }}"
+  when: idrac_controller_endpoint is defined
 - name: Dispatch the explicit idrac_network action
   ansible.builtin.include_tasks:
     file: "{{ idrac_network_options.task_action }}.yml"

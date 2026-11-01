@@ -1,0 +1,8 @@
+---
+- name: Validate the selected ssh_trust action contract
+  ansible.builtin.validate_argument_spec:
+    argument_spec: "{{ (lookup('ansible.builtin.file', role_path ~ '/meta/argument_specs.yml') | from_yaml).argument_specs[ssh_trust_options.task_action].options }}"
+  tags: [always]
+- name: Dispatch the explicit SSH trust operation
+  ansible.builtin.include_tasks: "{{ ssh_trust_options.task_action }}.yml"
+  tags: [always]

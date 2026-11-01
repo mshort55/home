@@ -1,0 +1,4 @@
+---
+ssh_trust_cache_file: "{{ hostvars[inventory_hostname].inventory_dir }}/.cache/ssh/known_hosts"
+ssh_trust_controller_file: "{{ lookup('ansible.builtin.env', 'HOME') }}/.ssh/known_hosts"
+ssh_trust_names: "{{ [hostvars[inventory_hostname].ansible_host | default(inventory_hostname)] }}"

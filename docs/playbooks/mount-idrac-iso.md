@@ -102,3 +102,5 @@ ANSIBLE_ASK_VAULT_PASS=False .venv-macos/bin/ansible-playbook \
 ```
 
 References: [Dell iDRAC8 virtual media API](https://www.dell.com/support/manuals/en-us/poweredge-c6320p/idrac8_redfishapiguide_2.70.70.70/virtualmedia?guid=guid-d9e76cf6-627d-4cb9-a3de-3f2b88b74cfb&lang=en-us), [Dell insert/eject request examples](https://github.com/dell/iDRAC-Redfish-Scripting/blob/master/Redfish%20Python/InsertEjectVirtualMediaREDFISH.py), [Proxmox installer debug boot](https://github.com/proxmox/pve-installer/blob/master/unconfigured.sh), [Apple caffeinate manual](https://github.com/apple-oss-distributions/PowerManagement/blob/main/caffeinate/caffeinate.8).
+
+With an explicit `idrac_controller_endpoint`, the shared [controller preparation](../controller-hostnames.md) restores missing resolution even during check mode when `idrac_iso_manage_hosts` is true. It uses the reviewed current endpoint and refuses conflicts. The legacy behavior above applies to inventories without that endpoint. ISO status retains its explicit no-edit setting.

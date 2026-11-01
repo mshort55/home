@@ -1,0 +1,4 @@
+---
+- name: Dispatch the explicit controller hostname operation
+  ansible.builtin.include_tasks: "{{ controller_hostname_options.task_action }}.yml"
+  tags: [always]

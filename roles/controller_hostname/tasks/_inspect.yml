@@ -1,0 +1,18 @@
+---
+- name: Inspect controller hosts entries and actual certificate hostname resolution
+  ansible.builtin.command:
+    argv:
+    - "{{ ansible_playbook_python }}"
+    - "{{ (role_path ~ '/../../scripts/controller-hostname.py') | realpath }}"
+    - "{{ controller_hostname_inspect_action }}"
+    - "{{ controller_hostname_endpoint.hostname }}"
+    - "{{ controller_hostname_endpoint.address }}"
+    - "{{ controller_hostname_hosts_file }}"
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_connection: ansible.builtin.local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  check_mode: false
+  changed_when: false
+  register: controller_hostname_inspection

@@ -40,6 +40,16 @@ Keep real device addresses and connection settings in `inventory.private.yml`, m
 
 Keep SSH host-key checking and TLS certificate validation enabled. Verify and establish trust before connecting. Scope legacy compatibility exceptions to the affected device/group; each workflow documents its requirements. Do not disable verification to bypass a mismatch.
 
+For physical SSH devices, store the console-verified public host key in private inventory as
+`ssh_host_public_key`. SSH-facing roles automatically rebuild `.cache/ssh/known_hosts` and install
+those entries in the controller's `~/.ssh/known_hosts`, including during check mode. This restores
+trust in fresh containers or after deleting the trust cache without scanning or contacting devices.
+See [SSH trust preparation](docs/playbooks/prepare-ssh-trust.md) for enrollment and recovery.
+
+FortiGate workflows also restore missing controller hostname resolution automatically. iDRAC workflows
+use the explicit current `idrac_controller_endpoint` for the same recovery. See
+[controller hostname preparation](docs/controller-hostnames.md) for sudo requirements and migration handling.
+
 Private inventories, credentials, generated configuration and backup artifacts remain local and Git-ignored. Keep real device details out of public examples and workflow documentation; use synthetic values instead. Use mode 0700 for private artifact directories and 0600 for files. Suppress secret-bearing task output and diffs; keep persistent connection logging disabled.
 
 ## Repository layout

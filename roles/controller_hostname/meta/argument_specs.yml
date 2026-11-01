@@ -1,0 +1,32 @@
+---
+argument_specs:
+  main:
+    short_description: Prepare or verify local certificate hostname resolution.
+    options:
+      controller_hostname_options:
+        type: dict
+        required: true
+        description: Explicit local hostname operation.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices: [prepare, verify]
+            description: Prepare missing resolution or verify existing resolution.
+      controller_hostname_endpoint:
+        type: dict
+        required: true
+        description: Independently reviewed certificate hostname and current IPv4 address.
+        options:
+          hostname:
+            type: str
+            required: true
+            description: Certificate hostname used by the device connection.
+          address:
+            type: str
+            required: true
+            description: Current address, never a planned migration destination.
+      controller_hostname_hosts_file:
+        type: path
+        description: Controller hosts file.
+        default: /etc/hosts

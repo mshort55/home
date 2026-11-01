@@ -46,6 +46,8 @@ def validation_environment(directory: Path) -> dict[str, str]:
     fixture.write_text("vault_devices: {}\n")
     config = configparser.ConfigParser()
     config.read(ROOT / "ansible.cfg")
+    for option in ("vault_password_file", "vault_identity_list"):
+        config.remove_option("defaults", option)
     config["defaults"].update(
         {
             "ask_vault_pass": "False",
@@ -174,6 +176,7 @@ def main() -> int:
             elif check == "php":
                 for path in sorted((ROOT / "scripts").glob("*.php")):
                     command([binary("php"), "-l", str(path)], env)
+                command([binary("php"), str(ROOT / "tests/php/pilot-ownership.php")], env)
                 import ast
 
                 tree = ast.parse((ROOT / "scripts/prepare-opnsense-bootstrap.py").read_text())

@@ -42,6 +42,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 |---|---|---|---|
 | [cisco_switch](../roles/cisco_switch/tasks/main.yml) | `backup`, `management`, `ports`, `gateway` | [defaults](../roles/cisco_switch/defaults/main.yml) | [schema](../roles/cisco_switch/meta/argument_specs.yml) |
 | [community_api](../roles/community_api/tasks/main.yml) | `load`, `prepare` | [defaults](../roles/community_api/defaults/main.yml) | [schema](../roles/community_api/meta/argument_specs.yml) |
+| [controller_hostname](../roles/controller_hostname/tasks/main.yml) | `prepare`, `verify` | [defaults](../roles/controller_hostname/defaults/main.yml) | [schema](../roles/controller_hostname/meta/argument_specs.yml) |
 | [fedora_dev](../roles/fedora_dev/tasks/main.yml) | `prepare`, `create`, `verify`, `start`, `stop` | [defaults](../roles/fedora_dev/defaults/main.yml) | [schema](../roles/fedora_dev/meta/argument_specs.yml) |
 | [fedora_host](../roles/fedora_host/tasks/main.yml) | `configure`, `verify`, `connectivity` | [defaults](../roles/fedora_host/defaults/main.yml) | [schema](../roles/fedora_host/meta/argument_specs.yml) |
 | [fortigate_backup](../roles/fortigate_backup/tasks/main.yml) | `backup` | [defaults](../roles/fortigate_backup/defaults/main.yml) | [schema](../roles/fortigate_backup/meta/argument_specs.yml) |
@@ -63,6 +64,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [proxmox_api](../roles/proxmox_api/tasks/main.yml) | `enroll` | [defaults](../roles/proxmox_api/defaults/main.yml) | [schema](../roles/proxmox_api/meta/argument_specs.yml) |
 | [proxmox_host](../roles/proxmox_host/tasks/main.yml) | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` | [defaults](../roles/proxmox_host/defaults/main.yml) | [schema](../roles/proxmox_host/meta/argument_specs.yml) |
 | [proxmox_installer](../roles/proxmox_installer/tasks/main.yml) | `prepare` | [defaults](../roles/proxmox_installer/defaults/main.yml) | [schema](../roles/proxmox_installer/meta/argument_specs.yml) |
+| [ssh_trust](../roles/ssh_trust/tasks/main.yml) | `prepare` | [defaults](../roles/ssh_trust/defaults/main.yml) | [schema](../roles/ssh_trust/meta/argument_specs.yml) |
 | [unifi_host](../roles/unifi_host/tasks/main.yml) | `configure`, `verify`, `restore_ready`, `configuration_ready` | [defaults](../roles/unifi_host/defaults/main.yml) | [schema](../roles/unifi_host/meta/argument_specs.yml) |
 | [unifi_network](../roles/unifi_network/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/unifi_network/defaults/main.yml) | [schema](../roles/unifi_network/meta/argument_specs.yml) |
 | [unifi_site](../roles/unifi_site/tasks/main.yml) | `inspect`, `configure`, `verify` | [defaults](../roles/unifi_site/defaults/main.yml) | [schema](../roles/unifi_site/meta/argument_specs.yml) |

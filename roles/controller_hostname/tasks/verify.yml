@@ -1,0 +1,5 @@
+---
+- name: Verify the controller resolves only the reviewed device address
+  ansible.builtin.include_tasks: _inspect.yml
+  vars:
+    controller_hostname_inspect_action: verify

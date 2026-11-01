@@ -42,11 +42,20 @@ and formatting, YAML lint, Ansible lint, shell syntax/ShellCheck, PHP syntax
 Git-visible source, isolated unit tests with branch coverage, and installed
 Python/collection version checks.
 
+The PHP check also runs `tests/php/pilot-ownership.php` against the actual pilot
+collection guard with synthetic vendor models and temporary protected artifacts.
+It verifies exact UniFi rule/DNS retention, ownership and drift refusals, and
+preservation of existing UUID-owned workflows without device or network access.
+
 Ansible validation uses a temporary controller configuration, the public example
 inventory, and a synthetic `vault_file` override. It clears inherited Ansible
 environment overrides. Ansible lint syntax-checks every entry point; a separate
 syntax-only harness imports every role task file in its owning role context.
 These commands never invoke a playbook apply or verification run against devices.
+
+The temporary config also removes any operational `vault_password_file` and
+`vault_identity_list` settings; syntax validation neither invokes private Vault
+helpers nor needs a Vault unlock password.
 
 Unit tests block sockets, DNS resolution and external processes by default.
 Fixtures contain synthetic inputs and ephemeral keys. Tests cover DHCP merge

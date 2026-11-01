@@ -13,4 +13,4 @@
   ansible.builtin.include_tasks: '{{ unifi_network_options.task_action }}.yml'
   vars:
     unifi_network_payload: '{{ hostvars[unifi_proxmox_host].unifi_vm_allocation }}'
-    unifi_network_prefix: "printf '%s' {{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-unifi.php') | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
+    unifi_network_prefix: "printf '%s' {{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-unifi.php') | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"

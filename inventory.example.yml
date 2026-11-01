@@ -4,6 +4,8 @@ all:
       hosts:
         switch01:
           ansible_host: 10.77.55.1
+          # Add ssh_host_public_key from the independently verified device console.
+          # Set ssh_trust_names to both management addresses during an address migration.
           # Staged VLAN inputs; apply management before selecting new port roles.
           switch_vlans:
             - {vlan_id: 10, name: MGMT, state: active}
@@ -72,6 +74,10 @@ all:
       hosts:
         idrac01:
           ansible_host: bmc.example.test
+          # Current endpoint for controller resolution; separate from a planned network change.
+          idrac_controller_endpoint:
+            hostname: bmc.example.test
+            address: 10.77.40.10
           idrac_expected_mac: '02:00:00:00:00:01'
           idrac_network:
             address: 10.77.40.10
@@ -88,6 +94,8 @@ all:
     proxmox_hosts:
       hosts:
         pve01:
+          # Add ssh_host_public_key: "ssh-ed25519 <verified public host key>".
+          # SSH workflows rebuild .cache/ssh/known_hosts and controller trust automatically.
           ansible_host: 10.77.10.10
           proxmox_idrac_host: idrac01
           unifi_vm_allocation:

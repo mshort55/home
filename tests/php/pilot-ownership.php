@@ -1,0 +1,127 @@
+<?php
+declare(strict_types=1);
+
+// Exercise the actual PHP collection guard with synthetic vendor models and
+// protected fixtures. No device, network, or external process is involved.
+namespace OPNsense\Base\FieldTypes {
+    class Node {
+        public function __construct(public array $values) {}
+        public function getNodeContent(): array { return $this->values; }
+        public function setNodes(array $values): void { $this->values=$values; }
+    }
+    class ArrayField {
+        public array $nodes=[];
+        public int $deletions=0;
+        public function __construct(array $values) {
+            foreach ($values as $uuid=>$value) { $this->nodes[$uuid]=new Node($value); }
+        }
+        public function iterateItems(): array { return $this->nodes; }
+        public function del(string $uuid): void { unset($this->nodes[$uuid]); $this->deletions++; }
+        public function add(string $uuid): Node { return $this->nodes[$uuid]=new Node([]); }
+    }
+}
+namespace OPNsense\Core {
+    class Config {
+        public static \SimpleXMLElement $xml;
+        public static function getInstance(): self { return new self(); }
+        public function object(): \SimpleXMLElement { return self::$xml; }
+    }
+}
+namespace {
+    function check(bool $condition, string $message): void {
+        if (!$condition) { throw new \RuntimeException($message); }
+    }
+    function fixture(string $path, array $value): void {
+        file_put_contents($path,json_encode($value,JSON_THROW_ON_ERROR)); chmod($path,0600);
+    }
+    function exercise(array $entries, string $label='filter rules', ?string $failure=null): void {
+        global $cases;
+        $container=new \OPNsense\Base\FieldTypes\ArrayField($entries);
+        $desired=[]; $changes=[];
+        try {
+            collection($container,$desired,$label,$changes);
+            check($failure === null,'Expected refusal: '.$failure);
+            $actual=[];
+            foreach ($container->iterateItems() as $uuid=>$node) { $actual[$uuid]=$node->getNodeContent(); }
+            ksort($actual); ksort($entries);
+            check($actual === $entries,'Owned UUIDs or vendor fields changed');
+            check($desired === [] && $changes === [],'Retention changed pilot policy');
+        } catch (\RuntimeException $error) {
+            if ($failure === null || !str_contains($error->getMessage(),$failure)) { throw $error; }
+            check($container->deletions === 0,'Refusal mutated the candidate collection');
+        }
+        $cases++;
+    }
+    $root=dirname(__DIR__,2);
+    $directory=tempnam(sys_get_temp_dir(),'pilot-ownership-');
+    check($directory !== false,'Cannot allocate test directory'); unlink($directory); mkdir($directory,0700);
+    try {
+        foreach (['ansible-unifi','ansible-wireguard','ansible-lab'] as $name) { mkdir($directory.'/'.$name,0700); }
+        $library=file_get_contents($root.'/scripts/opnsense-lab-library.php');
+        $pilot=file_get_contents($root.'/scripts/configure-opnsense-pilot.php');
+        $pilot=explode("\ntry {\n    \$mode",$pilot)[0];
+        $pilot=str_replace(["<?php", "declare(strict_types=1);", "require_once('config.inc');", '// LAB_EXTENSION_LIBRARY'],['','','',$library],$pilot);
+        // Root owns real artifacts; the invoking user owns these temporary fixtures.
+        $pilot=str_replace(['\'/conf/','fileowner($path) === 0'],['\''.$directory.'/','fileowner($path) === '.posix_geteuid()],$pilot);
+        eval($pilot);
+        $seed=['seed_id'=>'synthetic-seed','address'=>'10.77.10.254']; $cases=0;
+        \OPNsense\Core\Config::$xml=new \SimpleXMLElement('<opnsense><interfaces><lan><ipaddr>10.77.10.254</ipaddr></lan></interfaces><system><domain>lab.home.arpa</domain></system></opnsense>');
+        $input=['vmid'=>110,'name'=>'unifi01','vlan'=>10,'address'=>'10.77.10.20/24','gateway'=>'10.77.10.254','recovery_address'=>'10.77.10.250','tunnel_address'=>'10.77.99.2','domain'=>'lab.home.arpa'];
+        $path=$directory.'/ansible-unifi/state.json'; $backup=$directory.'/ansible-unifi/before.xml';
+        file_put_contents($backup,'synthetic backup'); chmod($backup,0600);
+        $record=['version'=>1,'phase'=>'complete','seed_id'=>$seed['seed_id'],'input'=>$input,'backup'=>$backup];
+        $wg=['version'=>1,'phase'=>'complete','seed_id'=>$seed['seed_id'],'input'=>['settings'=>['peer_address'=>$input['tunnel_address']]],'objects'=>[]];
+        fixture($directory.'/ansible-wireguard/state.json',$wg);
+        $policy=labUnifiPolicy($input); $rules=[];
+        foreach ($policy['filter rules'] as $index=>$values) { $rules['synthetic-uuid-'.$index]=$values+['vendor_default'=>'preserved']; }
+        $hosts=['synthetic-host-uuid'=>$policy['DNS host records'][0]+['vendor_default'=>'preserved']];
+        exercise($rules,'filter rules','Unmanaged filter rules');
+        fixture($path,$record);
+        exercise($rules); exercise($hosts,'DNS host records');
+        exercise([],'DNS access lists'); exercise([],'DHCP subnets');
+        foreach (array_keys($policy['filter rules'][0]) as $field) {
+            $drift=$rules; $drift['synthetic-uuid-0'][$field]='drift';
+            exercise($drift,'filter rules',$field === 'description' ? 'Missing or conflicting owned UniFi' : 'Owned UniFi policy drift');
+        }
+        foreach (array_keys($policy['DNS host records'][0]) as $field) {
+            $drift=$hosts; $drift['synthetic-host-uuid'][$field]='drift';
+            exercise($drift,'DNS host records',$field === 'hostname' ? 'Missing or conflicting owned UniFi' : 'Owned UniFi policy drift');
+        }
+        $missing=$rules; unset($missing['synthetic-uuid-0']);
+        exercise($missing,'filter rules','Missing or conflicting owned UniFi');
+        exercise($rules+['duplicate'=>$rules['synthetic-uuid-0']],'filter rules','Duplicate filter rules identity');
+        $extra=$rules; $extra['spoof']=$rules['synthetic-uuid-0']; $extra['spoof']['description']='Home automation: UNIFI arbitrary allow';
+        exercise($extra,'filter rules','arbitrary allow (UUID spoof)');
+        foreach (['phase'=>'pending','seed_id'=>'other-seed','version'=>2] as $field=>$value) {
+            fixture($path,array_replace($record,[$field=>$value]));
+            exercise($rules,'filter rules','Complete or reconcile');
+        }
+        foreach (['vmid'=>111,'name'=>'other','vlan'=>20,'address'=>'10.77.10.21/24','gateway'=>'10.77.10.253','recovery_address'=>'10.77.10.251','domain'=>'other.home.arpa','tunnel_address'=>'10.77.99.3'] as $field=>$value) {
+            $drift=$record; $drift['input'][$field]=$value; fixture($path,$drift);
+            exercise($rules,'filter rules','conflicts');
+        }
+        fixture($path,array_replace($record,['backup'=>$directory.'/missing.xml']));
+        exercise($rules,'filter rules','Missing original UniFi policy backup');
+        fixture($path,$record); chmod($path,0644); clearstatcache();
+        exercise($rules,'filter rules','Unprotected lab artifact'); chmod($path,0600); clearstatcache();
+        rename($path,$path.'.real'); symlink($path.'.real',$path);
+        exercise($rules,'filter rules','Symlink lab artifact'); unlink($path); rename($path.'.real',$path);
+        chmod($backup,0644); clearstatcache(); exercise($rules,'filter rules','Unprotected lab artifact'); chmod($backup,0600); clearstatcache();
+        // Existing UUID-owned workflows continue to retain their exact entries.
+        $combined=$rules;
+        foreach (['wireguard','dev','bmc'] as $name) {
+            $values=['description'=>'Synthetic '.$name,'enabled'=>'1']; $uuid='synthetic-'.$name;
+            $combined[$uuid]=$values;
+            $other=$wg; $other['objects']=['filter rules'=>[['uuid'=>$uuid,'values'=>$values]]];
+            fixture($name === 'wireguard' ? $directory.'/ansible-wireguard/state.json' : $directory.'/ansible-lab/'.$name.'.json',$other);
+        }
+        exercise($combined);
+        echo 'Pilot ownership regression checks passed: '.$cases."\n";
+    } finally {
+        foreach (glob($directory.'/*') as $child) {
+            foreach (glob($child.'/*') as $file) { unlink($file); }
+            rmdir($child);
+        }
+        rmdir($directory);
+    }
+}

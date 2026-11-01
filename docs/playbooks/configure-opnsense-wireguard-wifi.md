@@ -30,15 +30,16 @@ Configure/verify entries load the existing Vault file (`secrets/vault.yml`, or `
 
 ## Reserve the current leases
 
-Prepare the certificate hostname on each Ansible controller before its first Fortinet request:
+Reservation and backup workflows automatically prepare the certificate hostname from
+`fortigate_controller_endpoint` before authentication. This also runs inside the delegated Wi-Fi
+verification and configuration paths, so fresh containers need no separate preparation command.
+Missing resolution is restored with a dedicated `/etc/hosts` entry even during `--check`; matching
+DNS or an existing dedicated mapping needs no change. Conflicting DNS, duplicate, shared-alias and
+conflicting hosts entries are refused. Pass `--ask-become-pass` to the invoking playbook if the
+controller requires a sudo password. Passwordless sudo controllers need no extra flag.
 
-```bash
-ansible-playbook playbooks/prepare-fortigate-controller.yml --limit fortigate01 --ask-become-pass
-```
-
-Run this inside the container when using container Ansible, and separately in native Terminal when using native Ansible. It manages only the dedicated `/etc/hosts` entry declared by `fortigate_controller_endpoint` in inventory. The become password is that controller's local sudo password, not the Vault/device password. Passwordless sudo controllers can omit `--ask-become-pass`. Check mode previews the mapping without changing it; a normal run is needed before the reservation preview. Matching repeats make no changes. Duplicate, shared-alias or conflicting entries are refused.
-
-The URL retains the device's certificate hostname. An IP without a matching certificate subject alternative name cannot replace it while preserving verification. Reservation and backup workflows check local resolution before authenticating, and continue to validate TLS using the existing trust file. Container recreation may discard the mapping; rerun preparation on the recreated controller. The file task permits Ansible's non-atomic fallback for container bind-mounted hosts files.
+The explicit `prepare-fortigate-controller.yml` entry point remains available. HTTPS continues using
+the certificate hostname and existing CA trust. See [controller hostname preparation](../controller-hostnames.md).
 
 `fortigate_pilot_dhcp` uses `fortinet.fortios` over certificate-verified HTTPAPI. Its explicit actions are `configure` and `verify`; its [contract](../../roles/fortigate_pilot_dhcp/meta/argument_specs.yml) declares the existing server, interface, subnet and exactly two reservations (`pilot_wan`, `wifi_admin`). `fortigate_pilot_vdom` defaults to `root`.
 

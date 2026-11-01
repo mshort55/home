@@ -17,6 +17,37 @@ function labSame(array $actual, array $expected): bool
     }
     return true;
 }
+function labUnifiRule(string $name, int $sequence, string $interface, string $source, string $destination, string $port): array
+{
+    return ['enabled'=>'1','description'=>'Home automation: UNIFI '.$name,'sequence'=>(string)$sequence,'quick'=>'1','action'=>'pass','interface'=>$interface,'interfacenot'=>'0','direction'=>'in','ipprotocol'=>'inet','protocol'=>'TCP','source_not'=>'0','source_net'=>$source.'/32','source_port'=>'','destination_not'=>'0','destination_net'=>$destination,'destination_port'=>$port,'gateway'=>'','replyto'=>'','disablereplyto'=>'0','statetype'=>'keep','log'=>'0'];
+}
+function labUnifiPolicy(array $input): array
+{
+    $address=explode('/', $input['address'])[0];
+    return [
+        'filter rules'=>[labUnifiRule('updates HTTP',131,'lan',$address,'any','80'),labUnifiRule('updates HTTPS',132,'lan',$address,'any','443'),labUnifiRule('tunnel SSH',800,'opt4',$input['tunnel_address'],$address.'/32','22'),labUnifiRule('tunnel HTTPS',810,'opt4',$input['tunnel_address'],$address.'/32','11443')],
+        'DNS host records'=>[['enabled'=>'1','hostname'=>$input['name'],'domain'=>$input['domain'],'rr'=>'A','server'=>$address,'description'=>'Home automation: UNIFI DNS host']],
+    ];
+}
+function labCompletedUnifiPolicy(SimpleXMLElement $xml, array $seed): array
+{
+    $directory='/conf/ansible-unifi'; $path=$directory.'/state.json';
+    labPrivate($directory,true); labPrivate($path);
+    if (!is_file($path)) { return []; }
+    $record=json_decode(file_get_contents($path),true,512,JSON_THROW_ON_ERROR);
+    labEnsure(($record['version'] ?? null) === 1 && ($record['seed_id'] ?? null) === $seed['seed_id'] && ($record['phase'] ?? null) === 'complete', 'Complete or reconcile the owned UniFi network workflow first');
+    $backup=$record['backup'] ?? '';
+    labEnsure(is_string($backup) && dirname($backup) === $directory && is_file($backup), 'Missing original UniFi policy backup');
+    labPrivate($backup);
+    $input=$record['input'];
+    $prefix=substr($seed['address'],0,strrpos($seed['address'],'.')+1);
+    labEnsure(str_starts_with($prefix,'10.') && $input['vmid'] === 110 && $input['name'] === 'unifi01' && $input['vlan'] === 10 && $input['address'] === $prefix.'20/24' && $input['recovery_address'] === $prefix.'250' && $input['gateway'] === $seed['address'] && (string)$xml->interfaces->lan->ipaddr === $input['gateway'], 'Recorded UniFi allocation conflicts');
+    labEnsure(preg_match('/^[a-z0-9.-]+$/', $input['domain']) === 1 && $input['domain'] === (string)$xml->system->domain, 'Recorded UniFi DNS identity conflicts');
+    labPrivate('/conf/ansible-wireguard',true); labPrivate('/conf/ansible-wireguard/state.json');
+    $wg=json_decode(file_get_contents('/conf/ansible-wireguard/state.json'),true,512,JSON_THROW_ON_ERROR);
+    labEnsure(($wg['version'] ?? null) === 1 && $wg['seed_id'] === $seed['seed_id'] && $wg['phase'] === 'complete' && filter_var($input['tunnel_address'],FILTER_VALIDATE_IP,FILTER_FLAG_IPV4) !== false && $wg['input']['settings']['peer_address'] === $input['tunnel_address'], 'Recorded UniFi WireGuard identity conflicts');
+    return labUnifiPolicy($input);
+}
 function labRecords(SimpleXMLElement $xml, array $seed, ?string $ownZone = null): array
 {
     labPrivate('/conf/ansible-lab', true);

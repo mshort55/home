@@ -1,0 +1,27 @@
+---
+- name: Prepare the local prerequisite even for read-only device checks
+  throttle: 1
+  block:
+  - name: Inspect resolution and reject conflicting identities before preparation
+    ansible.builtin.include_tasks: _inspect.yml
+    vars:
+      controller_hostname_inspect_action: prepare
+  - name: Install only the missing dedicated controller hostname mapping
+    ansible.builtin.lineinfile:
+      path: "{{ controller_hostname_hosts_file }}"
+      line: "{{ controller_hostname_endpoint.address }} {{ controller_hostname_endpoint.hostname }}"
+      state: present
+      backup: false
+      # Container runtimes bind-mount /etc/hosts, preventing atomic rename.
+      unsafe_writes: true
+    delegate_to: localhost
+    become: true
+    become_method: ansible.builtin.sudo
+    become_user: root
+    vars:
+      ansible_connection: ansible.builtin.local
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    check_mode: false
+    when: (controller_hostname_inspection.stdout | from_json).needs_change
+  - name: Verify actual resolution before any authenticated request
+    ansible.builtin.include_tasks: verify.yml

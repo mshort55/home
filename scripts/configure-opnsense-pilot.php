@@ -125,7 +125,20 @@ function collection(\OPNsense\Base\FieldTypes\ArrayField $container, array &$des
         }
       }
     }
-    requireCondition(count($existing) === 0, 'Unmanaged ' . $label . ' entry requires separate review');
+    // UniFi v1 records own an allocation, not UUIDs. Reconstruct the same bounded
+    // policy as its configure/verify adapter, then retain each unique exact match.
+    global $seed;
+    $unifiPolicy = labCompletedUnifiPolicy(\OPNsense\Core\Config::getInstance()->object(), $seed);
+    foreach ($unifiPolicy[$label] ?? [] as $values) {
+        $identity = $values[$field];
+        requireCondition(isset($existing[$identity]), 'Missing or conflicting owned UniFi ' . $label);
+        requireCondition(labSame($existing[$identity]['values'], $values), 'Owned UniFi policy drift; run its controller network workflow');
+        $retained[$existing[$identity]['uuid']] = $existing[$identity]['values'];
+        unset($existing[$identity]);
+    }
+    $unmanaged = [];
+    foreach ($existing as $identity => $object) { $unmanaged[] = $identity . ' (UUID ' . $object['uuid'] . ')'; }
+    requireCondition(count($existing) === 0, 'Unmanaged ' . $label . ' entry requires separate review: ' . implode(', ', $unmanaged));
     $desired = $remapped;
     // Build the candidate in memory for vendor validation; OXL performs the saves.
     foreach ($container->iterateItems() as $key => $node) {

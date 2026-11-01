@@ -59,6 +59,7 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [prepare-opnsense-bootstrap.yml](../../playbooks/prepare-opnsense-bootstrap.yml) | `proxmox_hosts` | [opnsense_media](../../roles/opnsense_media/tasks/main.yml) | `bootstrap` |
 | [prepare-opnsense-iso.yml](../../playbooks/prepare-opnsense-iso.yml) | `proxmox_hosts` | [opnsense_media](../../roles/opnsense_media/tasks/main.yml) | `download` |
 | [prepare-proxmox-iso.yml](../../playbooks/prepare-proxmox-iso.yml) | `proxmox_hosts` | [proxmox_installer](../../roles/proxmox_installer/tasks/main.yml) | `prepare` |
+| [prepare-ssh-trust.yml](../../playbooks/prepare-ssh-trust.yml) | `all` | [ssh_trust](../../roles/ssh_trust/tasks/main.yml) | `prepare` |
 | [prepare-unifi.yml](../../playbooks/prepare-unifi.yml) | `proxmox_hosts` | [unifi_vm](../../roles/unifi_vm/tasks/main.yml) | `prepare` |
 | [prepare-wireguard-client.yml](../../playbooks/prepare-wireguard-client.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
 | [prepare-wireguard-clients.yml](../../playbooks/prepare-wireguard-clients.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `prepare` |
@@ -127,6 +128,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 |---|---|
 | `cisco_switch_options` | `backup`, `management`, `ports`, `gateway` |
 | `community_api_options` | `load`, `prepare` |
+| `controller_hostname_options` | `prepare`, `verify` |
 | `fedora_dev_options` | `prepare`, `create`, `verify`, `start`, `stop` |
 | `fedora_host_options` | `configure`, `verify`, `connectivity` |
 | `fortigate_backup_options` | `backup` |
@@ -148,6 +150,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `proxmox_api_options` | `enroll` |
 | `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |
 | `proxmox_installer_options` | `prepare` |
+| `ssh_trust_options` | `prepare` |
 | `unifi_host_options` | `configure`, `verify`, `restore_ready`, `configuration_ready` |
 | `unifi_network_options` | `configure`, `verify` |
 | `unifi_site_options` | `inspect`, `configure`, `verify` |

@@ -1,0 +1,37 @@
+---
+argument_specs:
+  main:
+    short_description: Rebuild controller SSH trust from independently verified inventory keys.
+    options:
+      ssh_trust_options: &ssh_trust_options
+        type: dict
+        required: true
+        description: Explicit SSH trust operation.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices: [prepare]
+            description: Rebuild and install verified controller host-key entries.
+      ssh_host_public_key: &ssh_host_public_key
+        type: str
+        required: true
+        description: Independently verified public host key, including its SSH key type.
+      ssh_trust_cache_file: &ssh_trust_cache_file
+        type: path
+        description: Generated, Git-ignored known_hosts artifact on this controller.
+      ssh_trust_controller_file: &ssh_trust_controller_file
+        type: path
+        description: Controller known_hosts file read by OpenSSH and libssh.
+      ssh_trust_names: &ssh_trust_names
+        type: list
+        elements: str
+        description: Verified names or addresses sharing this key; defaults to ansible_host.
+  prepare:
+    short_description: Prepare controller trust without connecting to a device.
+    options:
+      ssh_trust_options: *ssh_trust_options
+      ssh_host_public_key: *ssh_host_public_key
+      ssh_trust_cache_file: *ssh_trust_cache_file
+      ssh_trust_controller_file: *ssh_trust_controller_file
+      ssh_trust_names: *ssh_trust_names

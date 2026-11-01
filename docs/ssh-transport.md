@@ -48,6 +48,10 @@ the obsolete Paramiko package after installing the replacement.
 
 ## Scoped compatibility
 
+Console-verified physical-device keys can be enrolled in private inventory and restored automatically
+through [SSH trust preparation](playbooks/prepare-ssh-trust.md). The shared role installs the generated
+cache entries into `~/.ssh/known_hosts`, which this libssh transport also reads.
+
 `files/ssh/cisco-legacy.conf` is selected explicitly through
 `ansible_libssh_config_file` only in the Cisco group. Its `Host *` applies only
 to sessions selecting that file. It adds `ssh-rsa`,

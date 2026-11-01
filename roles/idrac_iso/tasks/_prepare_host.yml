@@ -21,7 +21,7 @@
   ansible.builtin.slurp:
     src: /etc/hosts
   register: iso_hosts_file
-  when: idrac_iso_manage_hosts
+  when: idrac_iso_manage_hosts and idrac_controller_endpoint is not defined
   no_log: true
 - name: Select existing entries for the certificate hostname
   ansible.builtin.set_fact:
@@ -29,7 +29,7 @@
       {{ (iso_hosts_file.content | b64decode).splitlines() |
          select('search', '^\s*[^#\s]+\s+([^#]*\s)?' ~
                 (ansible_host | regex_escape) ~ '(\s|$)') | list }}
-  when: idrac_iso_manage_hosts
+  when: idrac_iso_manage_hosts and idrac_controller_endpoint is not defined
   no_log: true
 - name: Refuse duplicate or shared-alias entries before editing hosts
   ansible.builtin.assert:
@@ -38,7 +38,7 @@
     - iso_matching_hosts_lines | length == 0 or iso_matching_hosts_lines[0].split('#')[0].split() | length == 2
     fail_msg: The native hosts file has duplicate or shared-alias entries for iDRAC. Reconcile those entries before applying
       a dedicated mapping.
-  when: idrac_iso_manage_hosts
+  when: idrac_iso_manage_hosts and idrac_controller_endpoint is not defined
 - name: Set only the native iDRAC certificate hostname mapping
   ansible.builtin.lineinfile:
     path: /etc/hosts
@@ -49,4 +49,5 @@
   become: true
   when:
   - idrac_iso_manage_hosts
+  - idrac_controller_endpoint is not defined
   - iso_matching_hosts_lines | length == 0 or iso_matching_hosts_lines[0].split('#')[0].split()[0] != idrac_network.address

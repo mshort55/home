@@ -9,13 +9,13 @@
       - not (ansible_persistent_log_messages | default(false) | bool)
       - fortigate_pilot_vdom == 'root'
       - fortigate_controller_endpoint.hostname == ansible_host
-- name: Verify controller resolution before opening the Fortinet session
+- name: Prepare controller resolution before opening the Fortinet session
   ansible.builtin.include_role:
     name: fortigate_controller
     public: false
   vars:
     fortigate_controller_options:
-      task_action: verify
+      task_action: prepare
 - name: Read the complete existing DHCP server without writes
   fortinet.fortios.fortios_configuration_fact:
     vdom: "{{ fortigate_pilot_vdom }}"

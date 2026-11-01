@@ -10,7 +10,7 @@ Use the `idracs` group in [inventory.example.yml](../../inventory.example.yml). 
 
 Use the default TLS cipher selection. If older firmware requires an explicit compatibility cipher list, set `idrac_tls_ciphers` only for that device and review the override after firmware upgrades. Requests bypass proxies and do not follow redirects.
 
-The inventory hostname must resolve inside the environment running Ansible and match the device certificate. A manually added `/etc/hosts` entry in a container can be lost when the runtime regenerates that file. If a run reports `Name or service not known`, restore the independently verified address mapping in that environment; use persistent DNS or the container runtime's host-mapping configuration for durability. Do not substitute an IP address that fails certificate hostname validation or disable TLS verification.
+The inventory hostname must resolve inside the environment running Ansible and match the device certificate. Enroll `idrac_controller_endpoint` with the reviewed current hostname/address to restore missing resolution automatically in new containers. See [controller hostname preparation](../controller-hostnames.md). Conflicting mappings are refused; certificate verification remains enabled.
 
 Use the [native Vault editor](../credentials.md) to add the existing administrator credentials while preserving other device entries:
 

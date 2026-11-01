@@ -1,0 +1,56 @@
+---
+# These are controller artifacts required even by remote read-only checks.
+# Serialize shared-file updates across hosts in the same play.
+- name: Prepare local SSH trust before any remote connection
+  delegate_to: localhost
+  become: false
+  check_mode: false
+  throttle: 1
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    ssh_trust_port: "{{ hostvars[inventory_hostname].ansible_port | default(hostvars[inventory_hostname].ansible_ssh_port | default(22)) }}"
+  block:
+  - name: Require a single public key and explicit host names
+    ansible.builtin.assert:
+      that:
+      - ssh_host_public_key is match('^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/=]+( [^\r\n]*)?$')
+      - "'\n' not in ssh_host_public_key and '\r' not in ssh_host_public_key"
+      - ssh_trust_names | length > 0
+      - inventory_hostname is match('^[A-Za-z0-9_.-]+$')
+      - ssh_trust_port | int > 0
+      - ssh_trust_port | int <= 65535
+      fail_msg: Supply the independently verified SSH public host key in ssh_host_public_key.
+  - name: Require literal host names or addresses without known_hosts patterns
+    ansible.builtin.assert:
+      that:
+      - item is match('^[A-Za-z0-9_:][A-Za-z0-9_.:-]*$')
+    loop: "{{ ssh_trust_names }}"
+  - name: Validate the public key structure before changing trust
+    ansible.builtin.command:
+      argv: [ssh-keygen, -lf, /dev/stdin]
+      stdin: "{{ ssh_host_public_key }}"
+    changed_when: false
+  - name: Create private controller trust directories
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: directory
+      mode: '0700'
+    loop: "{{ [ssh_trust_cache_file | dirname, ssh_trust_controller_file | dirname] | unique }}"
+  - name: Create or protect the controller trust files without truncating them
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: touch
+      mode: '0600'
+      access_time: preserve
+      modification_time: preserve
+    loop: "{{ [ssh_trust_cache_file, ssh_trust_controller_file] | unique }}"
+  - name: Rebuild cached entries and install the verified inventory identity
+    ansible.builtin.known_hosts:
+      path: "{{ item.0 }}"
+      name: "{{ ssh_trust_entry_name }}"
+      key: "{{ ssh_trust_entry_name }} {{ ssh_host_public_key }}"
+      state: present
+    vars:
+      ssh_trust_entry_name: "{{ item.1 if ssh_trust_port | int == 22 else '[' ~ item.1 ~ ']:' ~ (ssh_trust_port | string) }}"
+    loop: "{{ [ssh_trust_cache_file, ssh_trust_controller_file] | unique | product(ssh_trust_names) | list }}"
