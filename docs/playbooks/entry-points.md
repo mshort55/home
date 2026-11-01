@@ -39,6 +39,7 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [configure-switch-ports.yml](../../playbooks/configure-switch-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | Required explicit `task_action` |
 | [configure-switch-recovery-ports.yml](../../playbooks/configure-switch-recovery-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-server-ports.yml](../../playbooks/configure-switch-server-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
+| [configure-unifi-firewall.yml](../../playbooks/configure-unifi-firewall.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `firewall` |
 | [configure-unifi-host.yml](../../playbooks/configure-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configure` |
 | [configure-unifi-site.yml](../../playbooks/configure-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `configure` |
 | [create-fedora-dev-vm.yml](../../playbooks/create-fedora-dev-vm.yml) | `proxmox_hosts` | [fedora_dev](../../roles/fedora_dev/tasks/main.yml) | `create` |
@@ -151,7 +152,8 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |
 | `proxmox_installer_options` | `prepare` |
 | `ssh_trust_options` | `prepare` |
-| `unifi_host_options` | `configure`, `verify`, `restore_ready`, `configuration_ready` |
+| `unifi_firewall_options` | `configure`, `verify` |
+| `unifi_host_options` | `configure`, `firewall`, `verify`, `restore_ready`, `configuration_ready` |
 | `unifi_network_options` | `configure`, `verify` |
 | `unifi_site_options` | `inspect`, `configure`, `verify` |
 | `unifi_vm_options` | `prepare`, `create`, `verify`, `start`, `stop` |

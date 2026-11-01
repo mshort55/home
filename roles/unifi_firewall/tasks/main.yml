@@ -1,0 +1,18 @@
+---
+- name: Render the desired native firewall policy on the controller
+  ansible.builtin.command:
+    argv: ['{{ ansible_playbook_python }}', '{{ (role_path ~ "/../../scripts/unifi-isolation.py") | realpath }}']
+    stdin: '{{ unifi_firewall_settings | to_json }}'
+  delegate_to: localhost
+  become: false
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+  check_mode: false
+  changed_when: false
+  register: unifi_firewall_rendered
+- name: Select the inventory-derived firewall document
+  ansible.builtin.set_fact:
+    unifi_firewall_policy: '{{ unifi_firewall_rendered.stdout | from_json }}'
+- name: Dispatch the explicit firewall operation
+  ansible.builtin.include_tasks: '{{ unifi_firewall_options.task_action }}.yml'

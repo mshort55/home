@@ -22,7 +22,8 @@ Three roles have required action dictionaries with no default action:
 |---|---|---|
 | `unifi_vm` | `prepare`, `create`, `verify`, `start`, `stop` | Controller artifacts, cloud-init identity and guarded Proxmox lifecycle |
 | `unifi_network` | `configure`, `verify` | Four named OPNsense rules and one DNS host record |
-| `unifi_host` | `configure`, `verify`, `configuration_ready`, `restore_ready` | Guest baseline, first installation, TLS/isolation readiness and optional recovery gate |
+| `unifi_host` | `configure`, `firewall`, `verify`, `configuration_ready`, `restore_ready` | Guest baseline, first installation, TLS/isolation readiness and optional recovery gate |
+| `unifi_firewall` | `configure`, `verify` | Native guest policy, startup guards and independent policy verification |
 | `unifi_site` | `inspect`, `configure`, `verify` | Official local API, HOME VLAN 20 and disabled household WLAN staging |
 
 Each named playbook supplies its action. Schemas in `meta/argument_specs.yml` validate inputs before dispatch. The creation guard refuses unowned IDs, extra NICs/disks, pending hardware changes, changed seed identities and automatic recreation of a removed completed VM. An existing completed stopped guest stays stopped during `create`; use `start-unifi-vm.yml` explicitly.
@@ -40,9 +41,11 @@ OPNsense permits only the authenticated laptop `/32` to controller TCP 22/11443 
 | Controller ↔ APs and other private devices | Blocked, including same-VLAN AP traffic |
 | Discovery, STUN, inform, IPv6 and forwarded container traffic | Blocked |
 
-The vendor uses rootless Podman with pasta networking; its host sockets pass through the output policy. A separate drop policy covers forwarding. Loopback remains available for the application's internal services. Both vendor service units require the isolation unit and verify its loaded rules before startup. The distribution's global-flush `nftables.service` is masked; the owned service applies only its own table atomically. Repeating an unchanged apply leaves it unchanged and preserves unrelated tables. Do not enable another firewall manager or change container networking during the rehearsal.
+The vendor uses rootless Podman with pasta networking; its host sockets pass through the output policy. A separate drop policy covers forwarding. Loopback remains available for the application's internal services. Both vendor service units require the isolation unit and validate and atomically reapply the saved native policy before startup. Ansible independently verifies the saved policy, loaded rules and effective startup commands. The distribution's global-flush `nftables.service` is masked; the owned service applies only its own table atomically. Repeating an unchanged apply leaves it unchanged and preserves unrelated tables. Do not enable another firewall manager or change container networking during the rehearsal.
 
 OPNsense cannot isolate two endpoints on the same MGMT VLAN by itself. The guest firewall is therefore a required configuration prerequisite. Keep UI remote management disabled and use a local console account. Do not adopt devices or enable automatic application/device updates. Public HTTP/HTTPS egress is for provisioning; this policy is not an Internet destination allowlist.
+
+Existing guests using the Python bootstrap helper must first run the [declarative firewall migration](configure-unifi-firewall.md). No new inventory values are required; existing seed bytes remain immutable.
 
 ## Protected preparation
 

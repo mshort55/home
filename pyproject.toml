@@ -50,3 +50,4 @@ focused_fail_under = 85
 "plugins/action/wireguard_keys.py" = 95
 "scripts/validate-opnsense-vm.py" = 85
 "scripts/unifi-isolation.py" = 80
+"scripts/inspect-unifi-firewall.py" = 80

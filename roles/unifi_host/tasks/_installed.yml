@@ -17,10 +17,6 @@
           raise SystemExit('Controller service is not active/enabled')
       user = read('systemctl', 'show', 'uosserver', '--property=User', '--value')
       if not user or user == 'root': raise SystemExit('Vendor service must retain rootless container operation')
-      for service in ['uosserver', 'uosserver-updater']:
-          guard = read('systemctl', 'cat', service)
-          if 'Requires=home-unifi-isolation.service' not in guard or 'ExecStartPre=+/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py verify /etc/home-automation/unifi-isolation.json' not in guard:
-              raise SystemExit('Vendor startup isolation guard is missing')
       config = dict(line.split('=', 1) for line in pathlib.Path('/var/lib/uosserver/server.conf').read_text().splitlines() if '=' in line and not line.lstrip().startswith('#'))
       if any(config.get(key) != value for key, value in {'NETWORK_MODE': 'pasta', 'WEB_PORT': '11443', 'APP_VERSION': '5.1.42'}.items()):
           raise SystemExit('Explicit pasta networking, reviewed UI port or pinned application version differs')

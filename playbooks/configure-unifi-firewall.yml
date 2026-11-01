@@ -1,0 +1,9 @@
+---
+- name: Configure declarative UniFi guest isolation without reinstalling the controller
+  hosts: unifi_hosts
+  gather_facts: false
+  become: true
+  roles:
+  - role: unifi_host
+    unifi_host_options:
+      task_action: firewall

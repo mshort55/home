@@ -1,0 +1,10 @@
+---
+- name: Verify guest identity and administration before changing the firewall
+  ansible.builtin.include_tasks: _baseline_host.yml
+- name: Maintain declarative isolation without vendor installation operations
+  ansible.builtin.include_role:
+    name: unifi_firewall
+    public: false
+  vars:
+    unifi_firewall_options: {task_action: configure}
+    unifi_firewall_settings: '{{ unifi_isolation_settings }}'

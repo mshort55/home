@@ -1,0 +1,5 @@
+---
+- name: Verify saved and live policy plus effective startup dependencies without writes
+  ansible.builtin.include_tasks: _inspect.yml
+  vars:
+    unifi_firewall_inspection_mode: verify

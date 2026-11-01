@@ -1,6 +1,3 @@
-import json
-import subprocess
-
 import pytest
 
 
@@ -102,97 +99,23 @@ def test_policy_acceptance(isolation, settings, chain, traffic, expected):
     assert verdict(isolation, settings, chain, **traffic) == expected
 
 
-def test_plan_and_verify_never_write(isolation, settings, monkeypatch):
-    monkeypatch.setattr(isolation, "current", lambda: [])
-    assert isolation.apply(settings, "plan") == {"changed": True, "isolated": False}
-    with pytest.raises(ValueError, match="restore is blocked"):
-        isolation.apply(settings, "verify")
-    monkeypatch.setattr(isolation, "current", lambda: isolation.rules(settings))
-    assert isolation.apply(settings, "verify") == {"changed": False, "isolated": True}
-    assert isolation.apply(settings, "apply")["changed"] is False
+def test_bounded_transaction(isolation, settings):
+    commands = isolation.document(settings)["nftables"]
+    table = {"table": {"family": "inet", "name": "home_unifi"}}
+    assert commands[:2] == [{"add": table}, {"delete": table}]
+    assert commands[2:] == [{"add": item} for item in isolation.rules(settings)]
 
 
-@pytest.mark.parametrize("existing", [False, True])
-def test_apply_checks_then_replaces_only_owned_table(isolation, settings, monkeypatch, existing):
-    expected = isolation.rules(settings)
-    observations = iter([[{"table": {"family": "inet", "name": isolation.TABLE}}] if existing else [], expected])
-    monkeypatch.setattr(isolation, "current", lambda: next(observations))
-    calls = []
-    monkeypatch.setattr(isolation, "run", lambda *args, **kwargs: calls.append((args, kwargs)))
-    assert isolation.apply(settings, "apply") == {"changed": True, "isolated": True}
-    assert "--check" in calls[0][0] and "--check" not in calls[1][0]
-    commands = json.loads(calls[1][1]["content"])["nftables"]
-    if existing:
-        assert commands[0] == {"delete": {"table": {"family": "inet", "name": "home_unifi"}}}
-    assert all("flush" not in item for item in commands)
-    assert calls[0][1]["content"] == calls[1][1]["content"]
+@pytest.mark.parametrize(
+    "key,value", [("gateway", "8.8.8.8"), ("gateway", "::1"), ("gateway", "bad"), ("tunnel_address", "10.77.10.254")]
+)
+def test_invalid_inputs(isolation, settings, key, value):
+    settings[key] = value
+    with pytest.raises(ValueError):
+        isolation.document(settings)
 
 
-def test_failed_check_does_not_apply(isolation, settings, monkeypatch):
-    monkeypatch.setattr(isolation, "current", lambda: [])
-    calls = []
-
-    def reject(*args, **kwargs):
-        calls.append(args)
-        raise subprocess.CalledProcessError(1, args)
-
-    monkeypatch.setattr(isolation, "run", reject)
-    with pytest.raises(subprocess.CalledProcessError):
-        isolation.apply(settings, "apply")
-    assert len(calls) == 1 and "--check" in calls[0]
-
-
-def test_failed_readback_does_not_claim_isolated(isolation, settings, monkeypatch):
-    monkeypatch.setattr(isolation, "current", lambda: [])
-    monkeypatch.setattr(isolation, "run", lambda *args, **kwargs: None)
-    with pytest.raises(ValueError, match="does not match"):
-        isolation.apply(settings, "apply")
-
-
-def test_normalization_preserves_rule_order(isolation):
-    objects = [
-        {"metainfo": {}},
-        {"rule": {"chain": "output", "handle": 123, "expr": [{"drop": None}]}},
-        {"table": {"name": "home_unifi", "handle": 1}},
-        {"rule": {"chain": "output", "expr": [{"accept": None}]}},
-    ]
-    normalized = isolation.normalized(objects)
-    assert normalized == [
-        {"table": {"name": "home_unifi"}},
-        {"rule": {"chain": "output", "expr": [{"drop": None}]}},
-        {"rule": {"chain": "output", "expr": [{"accept": None}]}},
-    ]
-
-
-def test_current_reads_only_owned_table(isolation, monkeypatch):
-    from types import SimpleNamespace
-
-    calls = []
-
-    def read(*args, **kwargs):
-        calls.append(args)
-        return SimpleNamespace(stdout=json.dumps({"nftables": [{"table": {"family": "inet", "name": "unrelated"}}]}))
-
-    monkeypatch.setattr(isolation, "run", read)
-    assert isolation.current() == []
-    assert len(calls) == 1
-
-
-def test_main_checks_identity_before_any_firewall_call(isolation, settings, tmp_path, monkeypatch):
-    path = tmp_path / "isolation.json"
-    path.write_text(json.dumps(settings))
-    path.chmod(0o600)
-    monkeypatch.setattr(isolation.os, "geteuid", lambda: 0)
-    monkeypatch.setattr(isolation.socket, "gethostname", lambda: "wrong-host")
-    monkeypatch.setattr(isolation.sys, "argv", ["guard", "apply", str(path)])
-    # This test does not rely on the workstation UID.
-    from types import SimpleNamespace
-
-    original_stat = isolation.Path.stat
-    monkeypatch.setattr(
-        isolation.Path,
-        "stat",
-        lambda self, **kwargs: SimpleNamespace(st_uid=0, st_mode=original_stat(self, **kwargs).st_mode),
-    )
-    with pytest.raises(ValueError, match="identity"):
-        isolation.main()
+def test_unknown_settings_rejected(isolation, settings):
+    settings["extra"] = True
+    with pytest.raises(ValueError):
+        isolation.document(settings)

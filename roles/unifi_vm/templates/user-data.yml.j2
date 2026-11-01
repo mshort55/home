@@ -31,13 +31,13 @@ bootcmd:
       socket.sethostname({{ unifi_vm_allocation.name | to_json }}.encode())
       # Prevent the distribution's global-flush unit from replacing the owned table.
       subprocess.run(['systemctl', 'mask', 'nftables.service'], check=True)
-      pathlib.Path('/usr/local/lib/home-automation').mkdir(parents=True, exist_ok=True)
       pathlib.Path('/etc/home-automation').mkdir(mode=0o700, parents=True, exist_ok=True)
-      for filename, encoded, mode in [('/usr/local/lib/home-automation/unifi-isolation.py', {{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/unifi-isolation.py', rstrip=false) | b64encode | to_json }}, 0o600), ('/etc/home-automation/unifi-isolation.json', {{ lookup('ansible.builtin.template', 'isolation.json.j2') | b64encode | to_json }}, 0o600)]:
+      for filename, encoded, mode in [('/etc/home-automation/unifi-policy.nft.json', {{ unifi_bootstrap_policy.stdout | b64encode | to_json }}, 0o600), ('/etc/home-automation/unifi-isolation.json', {{ lookup('ansible.builtin.template', 'isolation.json.j2') | b64encode | to_json }}, 0o600)]:
           path = pathlib.Path(filename)
           path.write_bytes(base64.b64decode(encoded))
           os.chmod(path, mode)
-      subprocess.run(['/usr/bin/python3', '/usr/local/lib/home-automation/unifi-isolation.py', 'apply', '/etc/home-automation/unifi-isolation.json'], check=True)
+      subprocess.run(['/usr/sbin/nft', '--check', '-j', '-f', '/etc/home-automation/unifi-policy.nft.json'], check=True)
+      subprocess.run(['/usr/sbin/nft', '-j', '-f', '/etc/home-automation/unifi-policy.nft.json'], check=True)
 package_update: true
 packages: [python3, openssh-server, nftables, qemu-guest-agent, ca-certificates, podman, slirp4netns, passt, systemd-timesyncd]
 write_files:
@@ -60,23 +60,15 @@ write_files:
   - path: /etc/systemd/system/home-unifi-isolation.service
     permissions: '0644'
     encoding: b64
-    content: {{ lookup('ansible.builtin.template', 'isolation.service.j2') | b64encode | to_json }}
+    content: {{ lookup('ansible.builtin.template', role_path ~ '/../unifi_firewall/templates/isolation.service.j2') | b64encode | to_json }}
   - path: /etc/systemd/system/uosserver.service.d/10-home-isolation.conf
     permissions: '0644'
-    content: |
-      [Unit]
-      Requires=home-unifi-isolation.service
-      After=home-unifi-isolation.service
-      [Service]
-      ExecStartPre=+/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py verify /etc/home-automation/unifi-isolation.json
+    encoding: b64
+    content: {{ lookup('ansible.builtin.template', role_path ~ '/../unifi_firewall/templates/guard.conf.j2') | b64encode | to_json }}
   - path: /etc/systemd/system/uosserver-updater.service.d/10-home-isolation.conf
     permissions: '0644'
-    content: |
-      [Unit]
-      Requires=home-unifi-isolation.service
-      After=home-unifi-isolation.service
-      [Service]
-      ExecStartPre=+/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py verify /etc/home-automation/unifi-isolation.json
+    encoding: b64
+    content: {{ lookup('ansible.builtin.template', role_path ~ '/../unifi_firewall/templates/guard.conf.j2') | b64encode | to_json }}
 runcmd:
   - [sysctl, --system]
   - [systemctl, daemon-reload]
@@ -84,4 +76,4 @@ runcmd:
   - [systemctl, enable, --now, qemu-guest-agent]
   - [systemctl, restart, ssh]
   - [systemctl, restart, systemd-timesyncd]
-  - [sh, -c, '/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py verify /etc/home-automation/unifi-isolation.json && touch /var/lib/cloud/home-automation-ready']
+  - [sh, -c, '/usr/sbin/nft --check -j -f /etc/home-automation/unifi-policy.nft.json && /usr/sbin/nft -j -f /etc/home-automation/unifi-policy.nft.json && touch /var/lib/cloud/home-automation-ready']

@@ -65,7 +65,8 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [proxmox_host](../roles/proxmox_host/tasks/main.yml) | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` | [defaults](../roles/proxmox_host/defaults/main.yml) | [schema](../roles/proxmox_host/meta/argument_specs.yml) |
 | [proxmox_installer](../roles/proxmox_installer/tasks/main.yml) | `prepare` | [defaults](../roles/proxmox_installer/defaults/main.yml) | [schema](../roles/proxmox_installer/meta/argument_specs.yml) |
 | [ssh_trust](../roles/ssh_trust/tasks/main.yml) | `prepare` | [defaults](../roles/ssh_trust/defaults/main.yml) | [schema](../roles/ssh_trust/meta/argument_specs.yml) |
-| [unifi_host](../roles/unifi_host/tasks/main.yml) | `configure`, `verify`, `restore_ready`, `configuration_ready` | [defaults](../roles/unifi_host/defaults/main.yml) | [schema](../roles/unifi_host/meta/argument_specs.yml) |
+| [unifi_firewall](../roles/unifi_firewall/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/unifi_firewall/defaults/main.yml) | [schema](../roles/unifi_firewall/meta/argument_specs.yml) |
+| [unifi_host](../roles/unifi_host/tasks/main.yml) | `configure`, `firewall`, `verify`, `restore_ready`, `configuration_ready` | [defaults](../roles/unifi_host/defaults/main.yml) | [schema](../roles/unifi_host/meta/argument_specs.yml) |
 | [unifi_network](../roles/unifi_network/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/unifi_network/defaults/main.yml) | [schema](../roles/unifi_network/meta/argument_specs.yml) |
 | [unifi_site](../roles/unifi_site/tasks/main.yml) | `inspect`, `configure`, `verify` | [defaults](../roles/unifi_site/defaults/main.yml) | [schema](../roles/unifi_site/meta/argument_specs.yml) |
 | [unifi_vm](../roles/unifi_vm/tasks/main.yml) | `prepare`, `create`, `verify`, `start`, `stop` | [defaults](../roles/unifi_vm/defaults/main.yml) | [schema](../roles/unifi_vm/meta/argument_specs.yml) |
@@ -304,7 +305,7 @@ roles/
     defaults/main.yml
     meta/argument_specs.yml
     tasks/{main,prepare,create,verify,start,stop,_read,_guest}.yml
-    templates/{user-data.yml,isolation.json,isolation.service}.j2
+    templates/{user-data.yml,isolation.json}.j2
   unifi_network/
     defaults/main.yml
     meta/argument_specs.yml
@@ -319,7 +320,7 @@ roles/
     tasks/{main,inspect,configure,verify,_run}.yml
 ```
 
-Shared helpers live in `scripts/`: `prepare-unifi-artifacts.py`, `prepare-unifi-tls.py`, `inspect-unifi-vm.py`, `configure-unifi-vm-startup.py`, `unifi-isolation.py`, `configure-unifi-site.py` and `configure-opnsense-unifi.php`. Ubuntu's pinned public signing key lives in `files/ubuntu-cloud-image-signing-key.asc`. Generated host keys, GUI private keys, seeds, backup copies and manifests stay in protected, Git-ignored controller directories. The existing Proxmox startup/reboot preflight invokes the controller ownership guard before accepting VM 110; it does not grant maintenance permission to arbitrary additional guests.
+Shared helpers live in `scripts/`: `prepare-unifi-artifacts.py`, `prepare-unifi-tls.py`, `inspect-unifi-vm.py`, `configure-unifi-vm-startup.py`, `unifi-isolation.py` (controller-side policy rendering), `inspect-unifi-firewall.py` (independent read-only inspection), `configure-unifi-site.py` and `configure-opnsense-unifi.php`. Ubuntu's pinned public signing key lives in `files/ubuntu-cloud-image-signing-key.asc`. Generated host keys, GUI private keys, seeds, backup copies and manifests stay in protected, Git-ignored controller directories. The existing Proxmox startup/reboot preflight invokes the controller ownership guard before accepting VM 110; it does not grant maintenance permission to arbitrary additional guests.
 
 ## Validation and execution
 
@@ -328,3 +329,5 @@ Syntax checking orchestration files does not execute dynamic action bodies. For 
 Run from the repository root so `ansible.cfg`, pinned collections, role paths and private inventory apply. A minimal custom play can invoke a role through `roles:` or `ansible.builtin.include_role` and supply the corresponding parameter dictionary, required inventory data and execution context. Vault-backed entry points load credentials through `vars_files`, using `vault_file` when supplied by inventory or extra variables and otherwise resolving `secrets/vault.yml` from the repository containing the entry point. This path must resolve before role execution: private role defaults are unavailable at play scope. Roles retain the same optional path default for their own scope. No role grants implicit physical recovery readiness or WAN-assignment confirmation.
 
 References: [Ansible roles and argument validation](https://docs.ansible.com/projects/ansible-core/devel/playbook_guide/playbooks_reuse_roles.html), [include_role and variable visibility](https://docs.ansible.com/projects/ansible-core/2.19/collections/ansible/builtin/include_role_module.html).
+
+`unifi_firewall` manages the native guest policy and startup units, and independently checks saved policy, live kernel rules and effective systemd guards. It consumes existing allocation values. See [firewall configuration and legacy migration](playbooks/configure-unifi-firewall.md).

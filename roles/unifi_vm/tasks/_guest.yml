@@ -20,7 +20,7 @@
     ansible_python_interpreter: '{{ ansible_playbook_python }}'
 - name: Verify cloud-init readiness using the pinned guest SSH identity
   ansible.builtin.command:
-    argv: [/bin/sh, -c, 'test -f /var/lib/cloud/home-automation-ready && /usr/bin/cloud-init status --format json && /usr/bin/systemctl is-active home-unifi-isolation ssh qemu-guest-agent && /usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py verify /etc/home-automation/unifi-isolation.json && /usr/bin/ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key']
+    argv: [/bin/sh, -c, 'test -f /var/lib/cloud/home-automation-ready && /usr/bin/cloud-init status --format json && /usr/bin/systemctl is-active home-unifi-isolation ssh qemu-guest-agent && /usr/bin/ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key']
   delegate_to: '{{ unifi_vm_allocation.guest_host }}'
   become: true
   vars:
@@ -36,3 +36,16 @@
   ansible.builtin.assert:
     that:
       - (lookup('ansible.builtin.file', unifi_seed_directory ~ '/ssh_host_ed25519_key.pub').split()[:2] | join(' ')) in unifi_guest_check.stdout
+- name: Independently verify guest firewall policy and persistence
+  ansible.builtin.include_role:
+    name: unifi_firewall
+    public: false
+    apply:
+      delegate_to: '{{ unifi_vm_allocation.guest_host }}'
+      become: true
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+        ansible_ssh_use_tty: false
+  vars:
+    unifi_firewall_options: {task_action: verify}
+    unifi_firewall_settings: '{{ {"hostname": unifi_vm_allocation.name, "gateway": unifi_vm_allocation.gateway, "tunnel_address": unifi_vm_allocation.tunnel_address, "recovery_address": unifi_vm_allocation.recovery_address} }}'

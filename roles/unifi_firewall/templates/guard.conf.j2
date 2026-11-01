@@ -1,0 +1,6 @@
+[Unit]
+Requires=home-unifi-isolation.service
+After=home-unifi-isolation.service
+[Service]
+ExecStartPre=+/usr/sbin/nft --check -j -f /etc/home-automation/unifi-policy.nft.json
+ExecStartPre=+/usr/sbin/nft -j -f /etc/home-automation/unifi-policy.nft.json

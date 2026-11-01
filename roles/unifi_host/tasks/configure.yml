@@ -1,6 +1,6 @@
 ---
-- name: Verify the first-boot guard and guest baseline before installation
-  ansible.builtin.include_tasks: _baseline.yml
+- name: Maintain guest isolation before any vendor installation operation
+  ansible.builtin.include_tasks: firewall.yml
 - name: Ensure the vendor dependencies and DNS verification tool are installed
   ansible.builtin.apt:
     name: [podman, slirp4netns, passt, ca-certificates, nftables, python3, bind9-dnsutils]
@@ -53,24 +53,6 @@
     owner: root
     group: root
     mode: '0700'
-- name: Require isolation for both vendor service units before either starts
-  ansible.builtin.copy:
-    dest: '/etc/systemd/system/{{ item }}.service.d/10-home-isolation.conf'
-    content: |
-      [Unit]
-      Requires=home-unifi-isolation.service
-      After=home-unifi-isolation.service
-      [Service]
-      ExecStartPre=+/usr/bin/python3 /usr/local/lib/home-automation/unifi-isolation.py verify /etc/home-automation/unifi-isolation.json
-    owner: root
-    group: root
-    mode: '0644'
-  loop: [uosserver, uosserver-updater]
-  register: unifi_service_guard
-- name: Reload unit dependencies when changed
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: unifi_service_guard.changed
 - name: Stage the exact installer only before its first execution
   ansible.builtin.copy:
     src: '{{ unifi_artifact_directory }}/uosserver-5.1.42-x64'
@@ -135,6 +117,13 @@
     host: 127.0.0.1
     port: 11443
     timeout: 300
+- name: Independently verify firewall guards after vendor installation
+  ansible.builtin.include_role:
+    name: unifi_firewall
+    public: false
+  vars:
+    unifi_firewall_options: {task_action: verify}
+    unifi_firewall_settings: '{{ unifi_isolation_settings }}'
 - name: Verify the installed guarded controller before completion
   ansible.builtin.include_tasks: _installed.yml
 - name: Complete the first-install record after verification

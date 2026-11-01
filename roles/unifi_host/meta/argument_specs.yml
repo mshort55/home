@@ -13,6 +13,7 @@ argument_specs:
             required: true
             choices:
             - configure
+            - firewall
             - verify
             - restore_ready
             - configuration_ready

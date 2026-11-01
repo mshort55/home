@@ -1,0 +1,2 @@
+---
+# Policy inputs come from the owning VM allocation; no duplicated inventory values.

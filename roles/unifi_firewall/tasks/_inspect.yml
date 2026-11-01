@@ -1,0 +1,8 @@
+---
+- name: Independently inspect firewall state using controller-supplied verification code
+  ansible.builtin.command:
+    argv: [/usr/bin/python3, -c, '{{ lookup("ansible.builtin.file", role_path ~ "/../../scripts/inspect-unifi-firewall.py") }}']
+    stdin: '{{ {"mode": unifi_firewall_inspection_mode, "settings": unifi_firewall_settings, "policy": unifi_firewall_policy} | to_json }}'
+  check_mode: false
+  changed_when: false
+  register: unifi_firewall_inspection

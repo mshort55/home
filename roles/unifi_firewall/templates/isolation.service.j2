@@ -1,0 +1,17 @@
+[Unit]
+Description=Load the inventory-managed UniFi firewall
+DefaultDependencies=no
+After=local-fs.target
+Wants=network-pre.target
+Before=network-pre.target uosserver.service uosserver-updater.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/sbin/nft --check -j -f /etc/home-automation/unifi-policy.nft.json
+ExecStart=/usr/sbin/nft -j -f /etc/home-automation/unifi-policy.nft.json
+ExecReload=/usr/sbin/nft -j -f /etc/home-automation/unifi-policy.nft.json
+
+[Install]
+WantedBy=multi-user.target

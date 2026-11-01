@@ -1,14 +1,10 @@
-"""Own one nftables table isolating the UniFi restore rehearsal, including containers."""
+"""Render the inventory-owned UniFi firewall as a native nftables JSON transaction."""
 
 from __future__ import annotations
 
 import ipaddress
 import json
-import os
-import socket
-import subprocess
 import sys
-from pathlib import Path
 from typing import Any
 
 TABLE = "home_unifi"
@@ -28,10 +24,6 @@ NON_PUBLIC = [
     "224.0.0.0/4",
     "240.0.0.0/4",
 ]
-
-
-def run(*arguments: str, content: str | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(arguments, input=content, check=True, capture_output=True, text=True, timeout=15)  # noqa: S603 -- Reviewed administrative argv; no shell.
 
 
 def match(left: dict[str, Any], right: object, operator: str = "==") -> dict[str, Any]:
@@ -129,53 +121,25 @@ def normalized(objects: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
-def current() -> list[dict[str, Any]]:
-    tables = json.loads(run("/usr/sbin/nft", "-j", "list", "tables").stdout)["nftables"]
-    if not any(
-        item.get("table", {}).get("family") == "inet" and item.get("table", {}).get("name") == TABLE for item in tables
-    ):
-        return []
-    return normalized(json.loads(run("/usr/sbin/nft", "-j", "list", "table", "inet", TABLE).stdout)["nftables"])
-
-
-def apply(settings: dict[str, Any], operation: str) -> dict[str, Any]:
-    expected = rules(settings)
-    observed = current()
-    changed = observed != expected
-    if operation == "verify" and changed:
-        raise ValueError("Saved or loaded UniFi isolation policy differs; restore is blocked")
-    if changed and operation == "apply":
-        commands = [{"delete": {"table": {"family": "inet", "name": TABLE}}}] if observed else []
-        commands += [{"add": item} for item in expected]
-        encoded = json.dumps({"nftables": commands})
-        run("/usr/sbin/nft", "--check", "-j", "-f", "-", content=encoded)
-        run("/usr/sbin/nft", "-j", "-f", "-", content=encoded)
-        if current() != expected:
-            raise ValueError("Loaded UniFi firewall does not match the bounded policy")
-    return {"changed": changed, "isolated": not changed or operation == "apply"}
-
-
-def main() -> None:
-    operation, filename = sys.argv[1:]
-    if operation not in ["plan", "apply", "verify"] or os.geteuid() != 0:
-        raise ValueError("Use an explicit isolation action as root")
-    path = Path(filename)
-    info = path.stat()
-    if path.is_symlink() or not path.is_file() or info.st_uid != 0 or info.st_mode & 0o777 != 0o600:
-        raise ValueError("Unprotected UniFi isolation inputs")
-    settings: dict[str, Any] = json.loads(path.read_text())
-    if (
-        set(settings) != {"hostname", "gateway", "tunnel_address", "recovery_address"}
-        or socket.gethostname().split(".")[0] != settings["hostname"]
-    ):
-        raise ValueError("Unexpected UniFi guest identity")
+def document(settings: dict[str, Any]) -> dict[str, Any]:
+    if set(settings) != {"hostname", "gateway", "tunnel_address", "recovery_address"}:
+        raise ValueError("Expected the inventory isolation settings")
+    if not isinstance(settings["hostname"], str) or not settings["hostname"]:
+        raise ValueError("Expected the guest hostname")
     for field in ["gateway", "tunnel_address", "recovery_address"]:
         address = ipaddress.IPv4Address(settings[field])
         if not address.is_private or str(address) != settings[field]:
             raise ValueError("Use canonical private administration addresses")
     if len({settings[key] for key in ["gateway", "tunnel_address", "recovery_address"]}) != 3:
         raise ValueError("Duplicate administration address")
-    print(json.dumps(apply(settings, operation)))
+    # add is idempotent for an existing table. The whole document is one nft
+    # transaction, including initial creation, replacement and every rule.
+    table = {"table": {"family": "inet", "name": TABLE}}
+    return {"nftables": [{"add": table}, {"delete": table}, *({"add": item} for item in rules(settings))]}
+
+
+def main() -> None:
+    print(json.dumps(document(json.load(sys.stdin)), sort_keys=True))
 
 
 if __name__ == "__main__":

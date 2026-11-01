@@ -79,6 +79,16 @@
       - '{{ unifi_seed_directory }}/ssh_host_ed25519_key'
       creates: '{{ unifi_seed_directory }}/ssh_host_ed25519_key'
     no_log: true
+  - name: Render the native firewall policy for a new immutable bootstrap
+    ansible.builtin.command:
+      argv:
+      - '{{ ansible_playbook_python }}'
+      - '{{ role_path }}/../../scripts/unifi-isolation.py'
+      stdin: '{{ lookup("ansible.builtin.template", "isolation.json.j2") }}'
+    check_mode: false
+    changed_when: false
+    register: unifi_bootstrap_policy
+    when: not unifi_seed_files.results[3].stat.exists
   - name: Render the private cloud-init bootstrap with approved public keys
     ansible.builtin.template:
       src: user-data.yml.j2
@@ -87,7 +97,7 @@
       follow: false
     no_log: true
     diff: false
-    when: not ansible_check_mode or unifi_seed_files.results[1].stat.exists
+    when: not unifi_seed_files.results[3].stat.exists and (not ansible_check_mode or unifi_seed_files.results[1].stat.exists)
   - name: Pin the seeded guest public host key before its first network connection
     ansible.builtin.copy:
       content: '{{ hostvars[unifi_vm_allocation.guest_host].ansible_host }} {{ lookup(''ansible.builtin.file'', unifi_seed_directory

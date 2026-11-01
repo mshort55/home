@@ -1,0 +1,19 @@
+---
+argument_specs:
+  main:
+    short_description: Maintain declarative UniFi isolation and independently verify its effective policy.
+    options:
+      unifi_firewall_options:
+        type: dict
+        required: true
+        description: Explicit firewall operation.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices: [configure, verify]
+            description: Configure saved and loaded policy or independently verify persistence.
+      unifi_firewall_settings:
+        type: dict
+        required: true
+        description: Existing hostname, gateway, tunnel and recovery addresses from the VM allocation.
