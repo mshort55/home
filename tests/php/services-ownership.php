@@ -49,7 +49,7 @@ namespace {
             foreach ($container->iterateItems() as $uuid=>$node) { $actual[$uuid]=$node->getNodeContent(); }
             ksort($actual); ksort($entries);
             check($actual === $entries,'Owned UUIDs or vendor fields changed');
-            check($desired === [] && $changes === [],'Retention changed pilot policy');
+            check($desired === [] && $changes === [],'Retention changed service policy');
         } catch (\RuntimeException $error) {
             if ($failure === null || !str_contains($error->getMessage(),$failure)) { throw $error; }
             check($container->deletions === 0,'Refusal mutated the candidate collection');
@@ -57,17 +57,17 @@ namespace {
         $cases++;
     }
     $root=dirname(__DIR__,2);
-    $directory=tempnam(sys_get_temp_dir(),'pilot-ownership-');
+    $directory=tempnam(sys_get_temp_dir(),'services-ownership-');
     check($directory !== false,'Cannot allocate test directory'); unlink($directory); mkdir($directory,0700);
     try {
         foreach (['ansible-unifi','ansible-wireguard','ansible-lab'] as $name) { mkdir($directory.'/'.$name,0700); }
         $library=file_get_contents($root.'/scripts/opnsense-lab-library.php');
-        $pilot=file_get_contents($root.'/scripts/configure-opnsense-services.php');
-        $pilot=explode("\ntry {\n    \$mode",$pilot)[0];
-        $pilot=str_replace(["<?php", "declare(strict_types=1);", "require_once('config.inc');", '// LAB_EXTENSION_LIBRARY', '// SERVICES_LIBRARY', '// DHCP_LIBRARY'],['','','',$library,file_get_contents($root.'/scripts/opnsense-services-library.php'),file_get_contents($root.'/scripts/opnsense-dhcp-library.php')],$pilot);
+        $services=file_get_contents($root.'/scripts/configure-opnsense-services.php');
+        $services=explode("\ntry {\n    \$mode",$services)[0];
+        $services=str_replace(["<?php", "declare(strict_types=1);", "require_once('config.inc');", '// LAB_EXTENSION_LIBRARY', '// SERVICES_LIBRARY', '// DHCP_LIBRARY'],['','','',$library,file_get_contents($root.'/scripts/opnsense-services-library.php'),file_get_contents($root.'/scripts/opnsense-dhcp-library.php')],$services);
         // Root owns real artifacts; the invoking user owns these temporary fixtures.
-        $pilot=str_replace(['\'/conf/','fileowner($path) === 0'],['\''.$directory.'/','fileowner($path) === '.posix_geteuid()],$pilot);
-        eval($pilot);
+        $services=str_replace(['\'/conf/','fileowner($path) === 0'],['\''.$directory.'/','fileowner($path) === '.posix_geteuid()],$services);
+        eval($services);
         $seed=['seed_id'=>'synthetic-seed','address'=>'10.77.10.254']; $cases=0;
         // The reusable helper must preserve omitted WAN policy, enforce explicit
         // booleans and converge without disturbing unrelated interface fields.
@@ -94,6 +94,13 @@ namespace {
         $home=['address'=>'10.77.200.254','subnet'=>'10.77.200.0/24','pool_start'=>'10.77.200.100','pool_end'=>'10.77.200.199','lease_seconds'=>3600];
         foreach (['', '192.0.2.1', '10.77.55.254'] as $gateway) {
             check(homeSettings($home, '10.77.10.', $gateway) === $home, 'Optional/public/private WAN gateway rejected'); $cases++;
+        }
+        $finalHome=['address'=>'10.77.55.254','subnet'=>'10.77.55.0/24','dhcp_backend'=>'dnsmasq'];
+        check(homeSettings($finalHome, '10.77.10.', '') === $finalHome, 'Final HOME without legacy pool fields rejected'); $cases++;
+        foreach (['dhcp_backend'=>'kea','subnet'=>'10.77.88.0/24','address'=>'10.77.55.255'] as $key=>$value) {
+            $bad=$finalHome; $bad[$key]=$value; $refused=false;
+            try { homeSettings($bad,'10.77.10.',''); } catch (\RuntimeException $error) { $refused=true; }
+            check($refused, 'Invalid final HOME accepted'); $cases++;
         }
         \OPNsense\Core\Config::$xml=new \SimpleXMLElement('<opnsense><interfaces><lan><ipaddr>10.77.10.254</ipaddr></lan></interfaces><system><domain>lab.home.arpa</domain></system></opnsense>');
         $input=['vmid'=>110,'name'=>'unifi01','vlan'=>10,'address'=>'10.77.10.20/24','gateway'=>'10.77.10.254','recovery_address'=>'10.77.10.250','tunnel_address'=>'10.77.99.2','domain'=>'lab.home.arpa'];
@@ -146,7 +153,7 @@ namespace {
             fixture($name === 'wireguard' ? $directory.'/ansible-wireguard/state.json' : $directory.'/ansible-lab/'.$name.'.json',$other);
         }
         exercise($combined);
-        echo 'Pilot ownership regression checks passed: '.$cases."\n";
+        echo 'Service ownership regression checks passed: '.$cases."\n";
     } finally {
         foreach (glob($directory.'/*') as $child) {
             foreach (glob($child.'/*') as $file) { unlink($file); }

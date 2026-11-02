@@ -12,13 +12,16 @@ function homeSettings(array $home, string $managementPrefix, string $wanGateway)
 {
     $keys = array_keys($home);
     sort($keys);
-    requireCondition($keys === ['address', 'lease_seconds', 'pool_end', 'pool_start', 'subnet'], 'Unexpected HOME settings');
+    $dnsmasq = ($home['dhcp_backend'] ?? '') === 'dnsmasq';
+    requireCondition($keys === ($dnsmasq ? ['address', 'dhcp_backend', 'subnet'] : ['address', 'lease_seconds', 'pool_end', 'pool_start', 'subnet']), 'Unexpected HOME settings');
     $address = ipv4($home['address']);
     $prefix = substr($address, 0, strrpos($address, '.') + 1);
     $wanPrefix = $wanGateway === '' ? '' : substr($wanGateway, 0, strrpos($wanGateway, '.') + 1);
     requireCondition(str_starts_with($address, '10.') && $prefix !== $managementPrefix && $prefix !== $wanPrefix,
         'HOME must use a private /24 distinct from MGMT and the expected WAN');
     requireCondition($home['subnet'] === $prefix . '0/24', 'HOME subnet must match its /24 gateway');
+    requireCondition(!in_array($address, [$prefix . '0', $prefix . '255'], true), 'Invalid HOME gateway');
+    if ($dnsmasq) { return ['address'=>$address, 'subnet'=>$home['subnet'], 'dhcp_backend'=>'dnsmasq']; }
     foreach ([$address, $home['pool_start'], $home['pool_end']] as $host) {
         requireCondition(str_starts_with(ipv4($host), $prefix) && !in_array($host, [$prefix . '0', $prefix . '255'], true), 'Invalid HOME host address');
     }
@@ -34,6 +37,7 @@ function homeRuntime(array $home, string $device): bool
         dhcpRuntime(dhcpRecord()['input'], $device);
         return homeNatRuntime($home, $device);
     }
+    if (($home['dhcp_backend'] ?? '') === 'dnsmasq') { return false; }
     $info = shell_exec('/sbin/ifconfig ' . escapeshellarg($device)) ?? '';
     $dns = is_file('/var/unbound/unbound.conf') ? file_get_contents('/var/unbound/unbound.conf') : '';
     if (!str_contains($info, 'inet ' . $home['address'] . ' netmask 0xffffff00') ||
@@ -280,7 +284,11 @@ try {
     $models = [$filter, $unbound];
     $dhcpSubnet = null;
     $dhcpReady = false;
-    if ($home !== null && !$ownedDnsmasq) {
+    $separateDhcp = ($home['dhcp_backend'] ?? '') === 'dnsmasq';
+    if ($separateDhcp) {
+        requireCondition((string)(new \OPNsense\Kea\KeaDhcpv4())->general->enabled !== '1', 'Disable competing Kea before selecting Dnsmasq');
+    }
+    if ($home !== null && !$ownedDnsmasq && !$separateDhcp) {
         if (isset($xml->dhcpd)) {
             foreach ($xml->dhcpd->children() as $dhcp) {
                 requireCondition(!isset($dhcp->enable), 'Legacy DHCP server must remain disabled');
@@ -320,7 +328,7 @@ try {
         $user = $auth->getUserByName('home-ansible');
         $dhcpReady = $user !== null && in_array('page-dhcp-kea-v4', explode(',', (string)$user->priv), true);
     }
-    if ($ownedDnsmasq) { $dhcpReady = true; }
+    if ($ownedDnsmasq || $separateDhcp) { $dhcpReady = true; }
     foreach ($models as $model) {
         $errors = $model->performValidation(true);
         if (count($errors) > 0) {

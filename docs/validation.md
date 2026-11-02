@@ -36,7 +36,7 @@ and formatting, YAML lint, Ansible lint, shell syntax/ShellCheck, PHP syntax
 Git-visible source, isolated unit tests with branch coverage, and installed
 Python/collection version checks.
 
-The PHP check also runs `tests/php/pilot-ownership.php` against the actual pilot
+The PHP check also runs `tests/php/services-ownership.php` against the actual service
 collection guard with synthetic vendor models and temporary protected artifacts.
 It verifies exact UniFi rule/DNS retention, ownership and drift refusals, and
 preservation of existing UUID-owned workflows without device or network access.

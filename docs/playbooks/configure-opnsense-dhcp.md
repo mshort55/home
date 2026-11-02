@@ -2,6 +2,8 @@
 
 `opnsense_dhcp` manages DHCP-only Dnsmasq on the enrolled OPNsense HOME interface. Unbound continues serving DNS on port 53; Dnsmasq uses `port=0`. No DHCPv6 or router advertisements are configured. See the [OPNsense Dnsmasq documentation](https://docs.opnsense.org/manual/dnsmasq.html).
 
+`opnsense_home` declares the HOME address/subnet with `dhcp_backend: dnsmasq`; the service role does not need legacy Kea pool fields for this backend. Existing allocation ownership still prevents implicit network reassignment.
+
 `home_dhcp` declares gateway, subnet, primary and standby pools, and reservations. The approved primary pool is `.20–115` plus `.117–134` (114 addresses); standby is `.135–248` (114). The printer owns `.116`. Only primary ranges are activated by this role.
 
 `opnsense_dhcp` requires `interface: opt1`, `domain`, and `lease_seconds` (600–86400). Optional `ranges` restricts the active pool to a nonempty subset of the approved primary allocation. Omit it for normal full-pool operation. Router, DNS and NTP options point to the HOME gateway; domain and search options use the declared domain. DHCP hostnames do not automatically create Unbound records; manage DNS records separately.
