@@ -1,0 +1,43 @@
+argument_specs:
+  main:
+    short_description: Configure or verify the owned DHCP-only HOME service.
+    options:
+      opnsense_dhcp_options:
+        type: dict
+        required: true
+        description: Explicit role action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices:
+            - configure
+            - verify
+            description: Select configuration or read-only verification.
+      home_dhcp:
+        type: dict
+        required: true
+        description: Permanent primary/standby allocation and reservations.
+      opnsense_dhcp:
+        type: dict
+        required: true
+        description: Permanent HOME DHCP service settings.
+        options:
+          interface:
+            type: str
+            required: true
+            choices:
+            - opt1
+            description: Owned HOME interface.
+          domain:
+            type: str
+            required: true
+            description: DHCP domain and search suffix.
+          lease_seconds:
+            type: int
+            required: true
+            description: Lease lifetime from 600 to 86400 seconds.
+          ranges:
+            type: list
+            elements: dict
+            description: Optional desired subset of approved primary ranges; defaults to the full primary allocation.

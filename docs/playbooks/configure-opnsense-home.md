@@ -10,4 +10,4 @@ The `configure-opnsense-home.yml` entry point selects the `home` action of [opns
 
 Only the operator runs apply. The `opnsense_home` inventory dictionary currently requires `address`, `subnet`, `pool_start`, `pool_end` and `lease_seconds`. Existing allocation ownership checks intentionally refuse an unapproved network reassignment. Check mode is a read-only preview; it does not issue a DHCP lease or test a client renewal.
 
-This entry point still manages the existing single-range Kea configuration. Dnsmasq support for the permanent `home_dhcp` allocation is a separate pending implementation. Do not use this entry point to perform the household migration.
+This entry point preserves the existing single-range Kea configuration until conversion. After conversion it recognizes the completed owned Dnsmasq service. The [dedicated DHCP role](configure-opnsense-dhcp.md) manages the permanent `home_dhcp` allocation. Do not use this entry point to perform the household migration.

@@ -1,0 +1,152 @@
+{
+  "version": 1,
+  "subnet": "192.0.2.0/24",
+  "gateway": "192.0.2.254",
+  "model": {
+    "enable": "1",
+    "interface": "opt1",
+    "port": "0",
+    "strictbind": "1",
+    "no_resolv": "1",
+    "no_hosts": "1",
+    "regdhcp": "0",
+    "regdhcpstatic": "0",
+    "dhcpfirst": "0",
+    "regdhcpdomain": "",
+    "dhcp": {
+      "no_interface": "",
+      "fqdn": "1",
+      "domain": "home.test",
+      "local": "1",
+      "lease_max": "115",
+      "authoritative": "1",
+      "default_fw_rules": "1",
+      "reply_delay": "0",
+      "enable_ra": "0",
+      "host_ping": "1",
+      "nosync": "1",
+      "log_dhcp": "0",
+      "log_quiet": "0"
+    },
+    "hosts": {
+      "1f9b7bfb-a4a4-5604-aa43-b39535b490bf": {
+        "host": "printer",
+        "domain": "home.test",
+        "ip": "192.0.2.116",
+        "hwaddr": "02:00:00:00:00:01",
+        "client_id": "*",
+        "lease_time": "3600",
+        "descr": "Home automation: DHCP printer"
+      }
+    },
+    "dhcp_ranges": {
+      "36b2b5cb-93b2-5d71-b3ea-95ee3c3a0981": {
+        "interface": "opt1",
+        "start_addr": "192.0.2.20",
+        "end_addr": "192.0.2.115",
+        "subnet_mask": "255.255.255.0",
+        "lease_time": "3600",
+        "domain_type": "range",
+        "domain": "home.test",
+        "nosync": "1",
+        "description": "Home automation: HOME DHCP range 1"
+      },
+      "57a01821-1d75-519d-9d2c-82e878e034af": {
+        "interface": "opt1",
+        "start_addr": "192.0.2.117",
+        "end_addr": "192.0.2.134",
+        "subnet_mask": "255.255.255.0",
+        "lease_time": "3600",
+        "domain_type": "range",
+        "domain": "home.test",
+        "nosync": "1",
+        "description": "Home automation: HOME DHCP range 2"
+      }
+    },
+    "dhcp_options": {
+      "940d2e5c-4e6b-52a8-91da-897c9c5aee89": {
+        "type": "set",
+        "option": "3",
+        "interface": "opt1",
+        "value": "192.0.2.254",
+        "force": "0",
+        "description": "Home automation: HOME DHCP option 3"
+      },
+      "06d0058a-7301-510e-8bfe-06479d1e9524": {
+        "type": "set",
+        "option": "6",
+        "interface": "opt1",
+        "value": "192.0.2.254",
+        "force": "0",
+        "description": "Home automation: HOME DHCP option 6"
+      },
+      "d100cad7-0072-5f4b-bad0-e60b20dfb1ca": {
+        "type": "set",
+        "option": "15",
+        "interface": "opt1",
+        "value": "home.test",
+        "force": "0",
+        "description": "Home automation: HOME DHCP option 15"
+      },
+      "2bad22ee-36ef-5ede-ab47-1884e3d24bb7": {
+        "type": "set",
+        "option": "42",
+        "interface": "opt1",
+        "value": "192.0.2.254",
+        "force": "0",
+        "description": "Home automation: HOME DHCP option 42"
+      },
+      "189b0ecd-9227-537d-80c0-ad7b205df334": {
+        "type": "set",
+        "option": "119",
+        "interface": "opt1",
+        "value": "home.test",
+        "force": "0",
+        "description": "Home automation: HOME DHCP option 119"
+      }
+    },
+    "domainoverrides": {},
+    "dhcp_tags": {},
+    "dhcp_boot": {}
+  },
+  "allocation": {
+    "status": "valid",
+    "device_changes_performed": false,
+    "subnet": "192.0.2.0/24",
+    "gateway": "192.0.2.254",
+    "primary": {
+      "ranges": [
+        {
+          "start": "192.0.2.20",
+          "end": "192.0.2.115"
+        },
+        {
+          "start": "192.0.2.117",
+          "end": "192.0.2.134"
+        }
+      ],
+      "capacity": 114
+    },
+    "standby": {
+      "ranges": [
+        {
+          "start": "192.0.2.135",
+          "end": "192.0.2.248"
+        }
+      ],
+      "capacity": 114
+    },
+    "reservations": [
+      {
+        "name": "printer",
+        "mac": "02:00:00:00:00:01",
+        "address": "192.0.2.116"
+      }
+    ]
+  },
+  "settings": {
+    "interface": "opt1",
+    "domain": "home.test",
+    "lease_seconds": 3600
+  }
+}

@@ -186,7 +186,7 @@
         home: "{{ (services_network.stdout | trim | from_json).home_pilot }}"
   vars:
     services_settings: "{{ hostvars[opnsense_guest].opnsense_services }}"
-    services_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-services.php') | replace('// SERVICES_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-services-library.php')) | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
+    services_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-services.php') | replace('// DHCP_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-dhcp-library.php')) | replace('// SERVICES_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-services-library.php')) | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
       \ }}"
     services_prefix: printf '%s' {{ services_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --
   module_defaults:

@@ -278,7 +278,7 @@
     opnsense_owner_marker: Managed by create-opnsense-vm.yml; vmid={{ opnsense_vm.vmid }}
     boot_package_probe: "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-proxmox-packages.py') }}"
     boot_probe: "{{ lookup('ansible.builtin.file', role_path ~ '/../../scripts/inspect-proxmox-boot.py') }}"
-    boot_services_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-services.php') | replace('// SERVICES_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-services-library.php')) | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
+    boot_services_code: "{{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-services.php') | replace('// DHCP_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-dhcp-library.php')) | replace('// SERVICES_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-services-library.php')) | replace('// LAB_EXTENSION_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-lab-library.php'))) | b64encode\
       \ }}"
     boot_services_prefix: printf '%s' {{ boot_services_code | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --
   module_defaults:

@@ -109,7 +109,7 @@
       - "{{ policy.home_pilot.address }}"
       reload: false
     register: services_dhcp_subnet_change
-    when: policy.home_pilot is not none
+    when: policy.dhcp_subnet is not none
   - name: Enable Kea DHCP only on HOME
     oxlorg.opnsense.dhcp_general:
       enabled: true
@@ -120,7 +120,7 @@
       lifetime: "{{ policy.home_pilot.lease_seconds }}"
       reload: false
     register: services_dhcp_general_change
-    when: policy.home_pilot is not none
+    when: policy.dhcp_subnet is not none
   - name: Apply only the saved HOME interface before loading its services
     ansible.builtin.raw: /usr/local/sbin/configctl interface reconfigure opt1
     delegate_to: "{{ opnsense_guest }}"
@@ -129,7 +129,7 @@
   - name: Load selected services after all saved changes or an interrupted apply
     oxlorg.opnsense.reload:
       target: "{{ item }}"
-    loop: "{{ ['rule', 'unbound', 'kea'] if policy.home_pilot is not none else ['rule', 'unbound'] }}"
+    loop: "{{ ['rule', 'unbound', 'kea'] if policy.dhcp_subnet is not none else ['rule', 'unbound'] }}"
     when: not ansible_check_mode and not services_policy_preview | default(false) and (services_reload_required or services_rule_changes.changed
       or services_bootstrap_change.changed | default(false) or services_dns_general_change.changed or services_dns_acl_changes.changed
       or services_dns_host_changes.changed or services_dhcp_general_change.changed | default(false) or services_dhcp_subnet_change.changed

@@ -124,6 +124,7 @@ Entry points orchestrate roles with explicit, role-scoped `task_action` paramete
 
 | Workflow | Documentation |
 |---|---|
+| Permanent DHCP-only Dnsmasq service | [Configure HOME DHCP](docs/playbooks/configure-opnsense-dhcp.md) |
 | Permanent HOME DHCP allocation validation | [Validate HOME DHCP](docs/playbooks/validate-home-dhcp.md) |
 | Named operation entry points and their inputs | [Playbook entry points](docs/playbooks/entry-points.md) |
 | Shared credential management | [Ansible Vault CLI](docs/credentials.md) |

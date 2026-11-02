@@ -53,6 +53,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [idrac_network](../roles/idrac_network/tasks/main.yml) | `preview`, `apply`, `status`, `verify`, `verify_current` | [defaults](../roles/idrac_network/defaults/main.yml) | [schema](../roles/idrac_network/meta/argument_specs.yml) |
 | [idrac_snapshot](../roles/idrac_snapshot/tasks/main.yml) | `snapshot` | [defaults](../roles/idrac_snapshot/defaults/main.yml) | [schema](../roles/idrac_snapshot/meta/argument_specs.yml) |
 | [opnsense_api](../roles/opnsense_api/tasks/main.yml) | `enroll` | [defaults](../roles/opnsense_api/defaults/main.yml) | [schema](../roles/opnsense_api/meta/argument_specs.yml) |
+| [opnsense_dhcp](../roles/opnsense_dhcp/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/opnsense_dhcp/defaults/main.yml) | [schema](../roles/opnsense_dhcp/meta/argument_specs.yml) |
 | [opnsense_install](../roles/opnsense_install/tasks/main.yml) | `install` | [defaults](../roles/opnsense_install/defaults/main.yml) | [schema](../roles/opnsense_install/meta/argument_specs.yml) |
 | [opnsense_lab](../roles/opnsense_lab/tasks/main.yml) | `configure`, `verify`, `disable`, `verify_disabled` | [defaults](../roles/opnsense_lab/defaults/main.yml) | [schema](../roles/opnsense_lab/meta/argument_specs.yml) |
 | [opnsense_media](../roles/opnsense_media/tasks/main.yml) | `download`, `bootstrap` | [defaults](../roles/opnsense_media/defaults/main.yml) | [schema](../roles/opnsense_media/meta/argument_specs.yml) |

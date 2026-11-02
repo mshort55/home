@@ -179,6 +179,7 @@ def main() -> int:
                 for path in sorted((ROOT / "scripts").glob("*.php")):
                     command([binary("php"), "-l", str(path)], env)
                 command([binary("php"), str(ROOT / "tests/php/pilot-ownership.php")], env)
+                command([binary("php"), str(ROOT / "tests/php/dhcp-ownership.php")], env)
                 import ast
 
                 tree = ast.parse((ROOT / "scripts/prepare-opnsense-bootstrap.py").read_text())

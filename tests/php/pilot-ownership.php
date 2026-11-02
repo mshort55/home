@@ -64,7 +64,7 @@ namespace {
         $library=file_get_contents($root.'/scripts/opnsense-lab-library.php');
         $pilot=file_get_contents($root.'/scripts/configure-opnsense-services.php');
         $pilot=explode("\ntry {\n    \$mode",$pilot)[0];
-        $pilot=str_replace(["<?php", "declare(strict_types=1);", "require_once('config.inc');", '// LAB_EXTENSION_LIBRARY', '// SERVICES_LIBRARY'],['','','',$library,file_get_contents($root.'/scripts/opnsense-services-library.php')],$pilot);
+        $pilot=str_replace(["<?php", "declare(strict_types=1);", "require_once('config.inc');", '// LAB_EXTENSION_LIBRARY', '// SERVICES_LIBRARY', '// DHCP_LIBRARY'],['','','',$library,file_get_contents($root.'/scripts/opnsense-services-library.php'),file_get_contents($root.'/scripts/opnsense-dhcp-library.php')],$pilot);
         // Root owns real artifacts; the invoking user owns these temporary fixtures.
         $pilot=str_replace(['\'/conf/','fileowner($path) === 0'],['\''.$directory.'/','fileowner($path) === '.posix_geteuid()],$pilot);
         eval($pilot);

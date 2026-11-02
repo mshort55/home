@@ -143,6 +143,7 @@ def test_ssh_facing_roles_prepare_trust_before_their_operations():
         "unifi_vm",
         "opnsense_install",
         "opnsense_services",
+        "opnsense_dhcp",
         "opnsense_api",
         "opnsense_lab",
         "opnsense_wireguard",

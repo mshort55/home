@@ -14,4 +14,4 @@ Only the operator runs the apply command. Check mode validates ownership and pre
 
 Existing `/conf/ansible-pilot` records, `home_pilot` payload fields and rule identity salts are retained for compatibility with enrolled devices. Renaming them would lose ownership continuity. Temporary Fortinet reservations, private-WAN Wi-Fi access and WAN attachment sequencing are maintained outside this repository.
 
-The current DHCP implementation is Kea with one contiguous pool. The approved Dnsmasq implementation and split pools are not implemented yet. `home_dhcp` declares the permanent pool allocation but this role does not consume that contract yet.
+Before conversion this role preserves the enrolled single-pool Kea configuration. After conversion it recognizes and verifies the completed owned Dnsmasq service without re-enabling Kea. The [dedicated DHCP role](configure-opnsense-dhcp.md) consumes `home_dhcp` and manages permanent split pools.

@@ -18,6 +18,7 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [configure-opnsense-api.yml](../../playbooks/configure-opnsense-api.yml) | `opnsense_hosts` | [opnsense_api](../../roles/opnsense_api/tasks/main.yml) | `enroll` |
 | [configure-opnsense-bmc.yml](../../playbooks/configure-opnsense-bmc.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `configure` |
 | [configure-opnsense-dev.yml](../../playbooks/configure-opnsense-dev.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `configure` |
+| [configure-opnsense-dhcp.yml](../../playbooks/configure-opnsense-dhcp.yml) | `opnsense_hosts` | [opnsense_dhcp](../../roles/opnsense_dhcp/tasks/main.yml) | `configure` |
 | [configure-opnsense-home.yml](../../playbooks/configure-opnsense-home.yml) | `proxmox_hosts` | [opnsense_services](../../roles/opnsense_services/tasks/main.yml) | `home` |
 | [configure-opnsense-management.yml](../../playbooks/configure-opnsense-management.yml) | `proxmox_hosts` | [opnsense_services](../../roles/opnsense_services/tasks/main.yml) | `management` |
 | [configure-opnsense-services.yml](../../playbooks/configure-opnsense-services.yml) | `proxmox_hosts` | [opnsense_services](../../roles/opnsense_services/tasks/main.yml) | Required explicit `task_action` |
@@ -80,6 +81,7 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [verify-opnsense-bmc.yml](../../playbooks/verify-opnsense-bmc.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `verify` |
 | [verify-opnsense-dev-disabled.yml](../../playbooks/verify-opnsense-dev-disabled.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `verify_disabled` |
 | [verify-opnsense-dev.yml](../../playbooks/verify-opnsense-dev.yml) | `opnsense_hosts` | [opnsense_lab](../../roles/opnsense_lab/tasks/main.yml) | `verify` |
+| [verify-opnsense-dhcp.yml](../../playbooks/verify-opnsense-dhcp.yml) | `opnsense_hosts` | [opnsense_dhcp](../../roles/opnsense_dhcp/tasks/main.yml) | `verify` |
 | [verify-opnsense-unifi.yml](../../playbooks/verify-opnsense-unifi.yml) | `opnsense_hosts` | [unifi_network](../../roles/unifi_network/tasks/main.yml) | `verify` |
 | [verify-opnsense-vm.yml](../../playbooks/verify-opnsense-vm.yml) | `proxmox_hosts` | [opnsense_vm](../../roles/opnsense_vm/tasks/main.yml) | `verify` |
 | [verify-opnsense-wireguard.yml](../../playbooks/verify-opnsense-wireguard.yml) | `opnsense_hosts` | [opnsense_wireguard](../../roles/opnsense_wireguard/tasks/main.yml) | `verify` |
@@ -130,6 +132,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `idrac_network_options` | `preview`, `apply`, `status`, `verify`, `verify_current` |
 | `idrac_snapshot_options` | `snapshot` |
 | `opnsense_api_options` | `enroll` |
+| `opnsense_dhcp_options` | `configure`, `verify` |
 | `opnsense_install_options` | `install` |
 | `opnsense_lab_options` | `configure`, `verify`, `disable`, `verify_disabled` |
 | `opnsense_media_options` | `download`, `bootstrap` |

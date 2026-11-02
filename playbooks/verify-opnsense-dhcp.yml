@@ -1,0 +1,9 @@
+- name: 'opnsense_dhcp: verify'
+  hosts: opnsense_hosts
+  gather_facts: false
+  become: false
+  serial: 1
+  roles:
+  - role: opnsense_dhcp
+    opnsense_dhcp_options:
+      task_action: verify

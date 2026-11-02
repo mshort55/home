@@ -1,0 +1,23 @@
+---
+- name: Require the installed firewall inventory group
+  ansible.builtin.assert:
+    that:
+    - inventory_hostname in groups.get('opnsense_hosts', [])
+- name: Validate and render the permanent DHCP declaration on the controller
+  ansible.builtin.command:
+    argv:
+    - "{{ ansible_playbook_python }}"
+    - "{{ role_path }}/../../scripts/plan-opnsense-dhcp.py"
+    stdin: "{{ {'home_dhcp': home_dhcp, 'settings': opnsense_dhcp} | to_json }}"
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+  register: dhcp_plan
+  changed_when: false
+  check_mode: false
+- name: Select the validated DHCP payload and controller-supplied helper
+  ansible.builtin.set_fact:
+    dhcp_payload: "{{ dhcp_plan.stdout | from_json }}"
+    dhcp_prefix: "printf '%s' {{ (lookup('ansible.builtin.file', role_path ~ '/../../scripts/configure-opnsense-dhcp.php') | replace('// DHCP_LIBRARY', lookup('ansible.builtin.file', role_path ~ '/../../scripts/opnsense-dhcp-library.php'))) | b64encode | quote }} | /usr/bin/base64 -d | /usr/local/bin/php --"
+- name: Dispatch the explicitly selected DHCP action
+  ansible.builtin.include_tasks: "{{ opnsense_dhcp_options.task_action }}.yml"

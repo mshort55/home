@@ -6,6 +6,7 @@ require_once('config.inc');
 // LAB_EXTENSION_LIBRARY
 
 // SERVICES_LIBRARY
+// DHCP_LIBRARY
 
 function homeSettings(array $home, string $managementPrefix, string $wanGateway): array
 {
@@ -29,6 +30,10 @@ function homeSettings(array $home, string $managementPrefix, string $wanGateway)
 
 function homeRuntime(array $home, string $device): bool
 {
+    if (dhcpOwnedHome($home)) {
+        dhcpRuntime(dhcpRecord()['input'], $device);
+        return homeNatRuntime($home, $device);
+    }
     $info = shell_exec('/sbin/ifconfig ' . escapeshellarg($device)) ?? '';
     $dns = is_file('/var/unbound/unbound.conf') ? file_get_contents('/var/unbound/unbound.conf') : '';
     if (!str_contains($info, 'inet ' . $home['address'] . ' netmask 0xffffff00') ||
@@ -48,6 +53,11 @@ function homeRuntime(array $home, string $device): bool
         ($options['ntp-servers'] ?? '') !== $home['address']) {
         return false;
     }
+    return homeNatRuntime($home, $device);
+}
+
+function homeNatRuntime(array $home, string $device): bool
+{
     $nat = shell_exec('/sbin/pfctl -sn') ?? '';
     // OPNsense emits dynamic interface networks in automatic outbound NAT.
     $source = '(?:' . preg_quote($home['subnet'], '/') . '|\(' . preg_quote($device, '/') . ':network\))';
@@ -139,7 +149,8 @@ try {
     requireCondition(!isset($xml->system->ipv6allow), 'IPv6 forwarding must stay disabled');
     requireCondition(isset($xml->system->ssh->enabled) && !isset($xml->system->ssh->passwordauth) && (string)$xml->system->ssh->interfaces === 'lan', 'Preserve key-only management SSH');
     requireCondition(!isset($xml->filter->rule) && !isset($xml->nat->rule) && !isset($xml->nat->onetoone), 'Legacy firewall or port-forward entries require separate review');
-    requireCondition(!isset($xml->dnsmasq->enable) || (string)$xml->dnsmasq->enable !== '1', 'DHCP/Dnsmasq must stay disabled');
+    $ownedDnsmasq = $home !== null && dhcpOwnedHome($home);
+    requireCondition($ownedDnsmasq || !isset($xml->dnsmasq->enable) || (string)$xml->dnsmasq->enable !== '1', 'Enabled Dnsmasq requires a completed owned DHCP configuration');
 
     $digest = hash('sha256', json_encode($input, JSON_THROW_ON_ERROR));
     $changes = [];
@@ -269,7 +280,7 @@ try {
     $models = [$filter, $unbound];
     $dhcpSubnet = null;
     $dhcpReady = false;
-    if ($home !== null) {
+    if ($home !== null && !$ownedDnsmasq) {
         if (isset($xml->dhcpd)) {
             foreach ($xml->dhcpd->children() as $dhcp) {
                 requireCondition(!isset($dhcp->enable), 'Legacy DHCP server must remain disabled');
@@ -309,6 +320,7 @@ try {
         $user = $auth->getUserByName('home-ansible');
         $dhcpReady = $user !== null && in_array('page-dhcp-kea-v4', explode(',', (string)$user->priv), true);
     }
+    if ($ownedDnsmasq) { $dhcpReady = true; }
     foreach ($models as $model) {
         $errors = $model->performValidation(true);
         if (count($errors) > 0) {

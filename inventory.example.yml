@@ -223,6 +223,10 @@ all:
             proxmox_address: 10.77.10.10
             switch_host: switch01
             switch_address: 10.77.10.2
+          opnsense_dhcp:
+            interface: opt1
+            domain: lab.home.arpa
+            lease_seconds: 3600
           opnsense_home:
             address: 10.77.200.254
             subnet: 10.77.200.0/24
