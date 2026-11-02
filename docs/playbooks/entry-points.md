@@ -132,7 +132,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `idrac_network_options` | `preview`, `apply`, `status`, `verify`, `verify_current` |
 | `idrac_snapshot_options` | `snapshot` |
 | `opnsense_api_options` | `enroll` |
-| `opnsense_dhcp_options` | `configure`, `verify` |
+| `opnsense_dhcp_options` | `plan`, `configure`, `verify` |
 | `opnsense_install_options` | `install` |
 | `opnsense_lab_options` | `configure`, `verify`, `disable`, `verify_disabled` |
 | `opnsense_media_options` | `download`, `bootstrap` |

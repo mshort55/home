@@ -154,7 +154,7 @@ try {
     requireCondition(isset($xml->system->ssh->enabled) && !isset($xml->system->ssh->passwordauth) && (string)$xml->system->ssh->interfaces === 'lan', 'Preserve key-only management SSH');
     requireCondition(!isset($xml->filter->rule) && !isset($xml->nat->rule) && !isset($xml->nat->onetoone), 'Legacy firewall or port-forward entries require separate review');
     $ownedDnsmasq = $home !== null && dhcpOwnedHome($home);
-    requireCondition($ownedDnsmasq || !isset($xml->dnsmasq->enable) || (string)$xml->dnsmasq->enable !== '1', 'Enabled Dnsmasq requires a completed owned DHCP configuration');
+    requireCondition($ownedDnsmasq || (string)(new \OPNsense\Dnsmasq\Dnsmasq())->enable !== '1', 'Enabled Dnsmasq requires a completed owned DHCP configuration');
 
     $digest = hash('sha256', json_encode($input, JSON_THROW_ON_ERROR));
     $changes = [];
@@ -295,7 +295,7 @@ try {
             }
         }
         $dnsmasq = new \OPNsense\Dnsmasq\Dnsmasq();
-        requireCondition((string)$dnsmasq->general->enabled !== '1', 'Dnsmasq must remain disabled');
+        requireCondition((string)$dnsmasq->enable !== '1', 'Dnsmasq must remain disabled');
         foreach ([new \OPNsense\Kea\KeaDhcpv6(), new \OPNsense\Kea\KeaDdns(), new \OPNsense\Kea\KeaCtrlAgent()] as $other) {
             requireCondition((string)$other->general->enabled !== '1', 'Unrelated Kea services must remain disabled');
         }

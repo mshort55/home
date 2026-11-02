@@ -16,6 +16,8 @@ Run from the repository:
 ./just playbook playbooks/configure-opnsense-dhcp.yml --limit opnsense01 --check
 ```
 
+The role also exposes `opnsense_dhcp_options.task_action: plan` for callers that need an explicitly read-only plan during a normal Ansible invocation. Nested task check mode does not set the global `ansible_check_mode` variable; use this action instead of treating nested check mode as an orchestration gate.
+
 This reads the firewall and validates its native model without saving or restarting anything. A predicted `changed=1` is a proposed change. Review `apply_ready` and every blocker. Activation requires the intended HOME address, a nonoverlapping WAN, Unbound serving HOME, and competing DHCP services disabled and stopped. Foreign Dnsmasq configuration, custom snippets and ownership drift are refused.
 
 **During migration, use the external transition workflow.** It restricts initial leases and enforces the legacy lease hold. This permanent role deliberately contains no migration clock or old-router orchestration. Do not run the full-pool apply before that hold is satisfied.

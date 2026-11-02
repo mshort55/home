@@ -1,6 +1,6 @@
 argument_specs:
   main:
-    short_description: Configure or verify the owned DHCP-only HOME service.
+    short_description: Plan, configure or verify the owned DHCP-only HOME service.
     options:
       opnsense_dhcp_options:
         type: dict
@@ -11,9 +11,10 @@ argument_specs:
             type: str
             required: true
             choices:
+            - plan
             - configure
             - verify
-            description: Select configuration or read-only verification.
+            description: Select read-only planning, configuration or read-only verification.
       home_dhcp:
         type: dict
         required: true

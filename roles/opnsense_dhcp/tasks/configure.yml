@@ -1,12 +1,6 @@
 ---
-- name: Preview the native vendor model and read-only activation prerequisites
-  ansible.builtin.raw: "{{ dhcp_prefix }} plan {{ dhcp_payload | to_json | b64encode | quote }}"
-  register: dhcp_preview
-  changed_when: dhcp_preview.rc == 0 and ansible_check_mode and (dhcp_preview.stdout | trim | from_json).reload_required
-  check_mode: false
-- name: Report the DHCP preview and any activation blockers
-  ansible.builtin.debug:
-    msg: "{{ dhcp_preview.stdout | trim | from_json }}"
+- name: Read the native DHCP plan before configuring
+  ansible.builtin.include_tasks: plan.yml
 - name: Finish check mode before saving configuration or restarting services
   ansible.builtin.meta: end_role
   when: ansible_check_mode
