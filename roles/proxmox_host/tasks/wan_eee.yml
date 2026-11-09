@@ -1,0 +1,128 @@
+---
+- name: Require a single declared firewall WAN
+  ansible.builtin.assert:
+    that:
+    - ansible_user == 'root'
+    - opnsense_vm.networks | selectattr('role', 'equalto', 'WAN') | list | length == 1
+
+- name: Find the physical bridge carrying the declared WAN
+  ansible.builtin.set_fact:
+    proxmox_wan_eee_bridges: >-
+      {{ proxmox_network.guest_bridges | selectattr('name', 'equalto',
+         (opnsense_vm.networks | selectattr('role', 'equalto', 'WAN') | first).bridge) | list }}
+
+- name: Require a dedicated untagged WAN bridge
+  ansible.builtin.assert:
+    that:
+    - proxmox_wan_eee_bridges | length == 1
+    - not proxmox_wan_eee_bridges[0].vlan_aware
+    - proxmox_wan_eee_bridges[0].name != proxmox_network.management.bridge
+    - proxmox_wan_eee_bridges[0].port != proxmox_network.management.port
+    - proxmox_wan_eee_bridges[0].port is match('^eno[0-9]+$')
+    - proxmox_network.guest_bridges | selectattr('port', 'equalto', proxmox_wan_eee_bridges[0].port) | list | length == 1
+    - opnsense_vm.networks | selectattr('bridge', 'equalto', proxmox_wan_eee_bridges[0].name) | list | length == 1
+    - (opnsense_vm.networks | selectattr('role', 'equalto', 'WAN') | first).tag is not defined
+    fail_msg: EEE changes require the declared dedicated physical WAN port, separate from management and LAN.
+
+- name: Retain the WAN identity and requested EEE state
+  ansible.builtin.set_fact:
+    proxmox_wan_eee_port: "{{ proxmox_wan_eee_bridges[0].port }}"
+    proxmox_wan_eee_state: "{{ 'enabled' if proxmox_host_wan_eee_enabled else 'disabled' }}"
+
+- name: Confirm the installed Proxmox host
+  ansible.builtin.command: /usr/bin/pveversion
+  changed_when: false
+  check_mode: false
+
+- name: Read the physical WAN identity and bridge membership
+  ansible.builtin.command:
+    argv: [/usr/sbin/ip, -j, link, show, "{{ proxmox_wan_eee_port }}"]
+  register: proxmox_wan_eee_link
+  changed_when: false
+  check_mode: false
+
+- name: Inspect the physical device backing the WAN port
+  ansible.builtin.stat:
+    path: "/sys/class/net/{{ proxmox_wan_eee_port }}/device"
+  register: proxmox_wan_eee_device
+
+- name: Read interface hook support configuration
+  ansible.builtin.slurp:
+    src: /etc/network/ifupdown2/ifupdown2.conf
+  register: proxmox_wan_eee_ifupdown
+
+- name: Verify installed WAN identity and persistent hook support
+  ansible.builtin.assert:
+    that:
+    - proxmox_wan_eee_device.stat.exists
+    - link.address | lower == proxmox_wan_eee_bridges[0].mac | lower
+    - link.master | default('') == proxmox_wan_eee_bridges[0].name
+    - proxmox_wan_eee_ifupdown.content | b64decode is search('(?m)^\s*addon_scripts_support\s*=\s*1\s*$')
+    fail_msg: WAN hardware or bridge differs from inventory, or ifupdown2 interface hooks are disabled.
+  vars:
+    link: "{{ proxmox_wan_eee_link.stdout | from_json | first }}"
+
+- name: Read current WAN EEE state
+  ansible.builtin.command:
+    argv: [/usr/sbin/ethtool, --show-eee, "{{ proxmox_wan_eee_port }}"]
+  environment:
+    LC_ALL: C
+  register: proxmox_wan_eee_before
+  changed_when: false
+  check_mode: false
+
+- name: Require supported and recognizable EEE state
+  ansible.builtin.assert:
+    that:
+    - "proxmox_wan_eee_before.stdout is search('EEE status: (enabled|disabled)')"
+    fail_msg: The WAN driver must support reading and configuring EEE.
+
+- name: Persist WAN EEE state when the physical interface comes up
+  ansible.builtin.template:
+    src: wan-eee.j2
+    dest: /etc/network/if-up.d/proxmox-wan-eee
+    owner: root
+    group: root
+    mode: '0755'
+    backup: true
+    validate: /bin/sh -n %s
+
+- name: Preview a required runtime EEE change
+  ansible.builtin.debug:
+    msg: "Would set {{ proxmox_wan_eee_port }} EEE to {{ proxmox_wan_eee_state }}; the WAN link may briefly renegotiate."
+  changed_when: true
+  when:
+  - ansible_check_mode
+  - "('EEE status: ' ~ proxmox_wan_eee_state) not in proxmox_wan_eee_before.stdout"
+
+- name: Apply the WAN EEE setting only when runtime differs
+  ansible.builtin.command:
+    argv: [/usr/sbin/ethtool, --set-eee, "{{ proxmox_wan_eee_port }}", eee, "{{ 'on' if proxmox_host_wan_eee_enabled else 'off' }}"]
+  changed_when: true
+  when:
+  - not ansible_check_mode
+  - "('EEE status: ' ~ proxmox_wan_eee_state) not in proxmox_wan_eee_before.stdout"
+
+- name: Read back WAN EEE state
+  ansible.builtin.command:
+    argv: [/usr/sbin/ethtool, --show-eee, "{{ proxmox_wan_eee_port }}"]
+  environment:
+    LC_ALL: C
+  register: proxmox_wan_eee_after
+  changed_when: false
+  check_mode: false
+
+- name: Require the requested runtime EEE state
+  ansible.builtin.assert:
+    that:
+    - "('EEE status: ' ~ proxmox_wan_eee_state) in proxmox_wan_eee_after.stdout"
+  when: not ansible_check_mode
+
+- name: Report WAN EEE state
+  ansible.builtin.debug:
+    msg:
+      interface: "{{ proxmox_wan_eee_port }}"
+      requested_state: "{{ proxmox_wan_eee_state }}"
+      current: "{{ proxmox_wan_eee_after.stdout_lines }}"
+      persistence: /etc/network/if-up.d/proxmox-wan-eee
+      preview: "{{ ansible_check_mode }}"

@@ -40,7 +40,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 
 | Role | Public actions | Optional defaults | Argument contracts |
 |---|---|---|---|
-| [cisco_switch](../roles/cisco_switch/tasks/main.yml) | `backup`, `management`, `ports`, `gateway` | [defaults](../roles/cisco_switch/defaults/main.yml) | [schema](../roles/cisco_switch/meta/argument_specs.yml) |
+| [cisco_switch](../roles/cisco_switch/tasks/main.yml) | `backup`, `management`, `ports`, `gateway`, `time` | [defaults](../roles/cisco_switch/defaults/main.yml) | [schema](../roles/cisco_switch/meta/argument_specs.yml) |
 | [community_api](../roles/community_api/tasks/main.yml) | `load`, `prepare` | [defaults](../roles/community_api/defaults/main.yml) | [schema](../roles/community_api/meta/argument_specs.yml) |
 | [controller_hostname](../roles/controller_hostname/tasks/main.yml) | `prepare`, `verify` | [defaults](../roles/controller_hostname/defaults/main.yml) | [schema](../roles/controller_hostname/meta/argument_specs.yml) |
 | [fedora_dev](../roles/fedora_dev/tasks/main.yml) | `prepare`, `create`, `verify`, `start`, `stop` | [defaults](../roles/fedora_dev/defaults/main.yml) | [schema](../roles/fedora_dev/meta/argument_specs.yml) |
@@ -61,7 +61,7 @@ Action files compose dependencies and include reusable `_*.yml` task modules. Sa
 | [opnsense_vm](../roles/opnsense_vm/tasks/main.yml) | `describe`, `create`, `verify` | [defaults](../roles/opnsense_vm/defaults/main.yml) | [schema](../roles/opnsense_vm/meta/argument_specs.yml) |
 | [opnsense_wireguard](../roles/opnsense_wireguard/tasks/main.yml) | `prepare`, `configure`, `verify` | [defaults](../roles/opnsense_wireguard/defaults/main.yml) | [schema](../roles/opnsense_wireguard/meta/argument_specs.yml) |
 | [proxmox_api](../roles/proxmox_api/tasks/main.yml) | `enroll` | [defaults](../roles/proxmox_api/defaults/main.yml) | [schema](../roles/proxmox_api/meta/argument_specs.yml) |
-| [proxmox_host](../roles/proxmox_host/tasks/main.yml) | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` | [defaults](../roles/proxmox_host/defaults/main.yml) | [schema](../roles/proxmox_host/meta/argument_specs.yml) |
+| [proxmox_host](../roles/proxmox_host/tasks/main.yml) | `repositories`, `upgrade`, `startup`, `reboot`, `bridges`, `time`, `wan_eee` | [defaults](../roles/proxmox_host/defaults/main.yml) | [schema](../roles/proxmox_host/meta/argument_specs.yml) |
 | [proxmox_installer](../roles/proxmox_installer/tasks/main.yml) | `prepare` | [defaults](../roles/proxmox_installer/defaults/main.yml) | [schema](../roles/proxmox_installer/meta/argument_specs.yml) |
 | [ssh_trust](../roles/ssh_trust/tasks/main.yml) | `prepare` | [defaults](../roles/ssh_trust/defaults/main.yml) | [schema](../roles/ssh_trust/meta/argument_specs.yml) |
 | [unifi_firewall](../roles/unifi_firewall/tasks/main.yml) | `configure`, `verify` | [defaults](../roles/unifi_firewall/defaults/main.yml) | [schema](../roles/unifi_firewall/meta/argument_specs.yml) |

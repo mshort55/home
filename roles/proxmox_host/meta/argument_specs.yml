@@ -18,6 +18,8 @@ argument_specs:
             - startup
             - reboot
             - bridges
+            - time
+            - wan_eee
       opnsense_vm:
         type: dict
         description: Owned firewall VM hardware and network allocation.
@@ -111,6 +113,10 @@ argument_specs:
         type: int
         description: APT index cache lifetime in seconds.
         default: 3600
+      proxmox_host_wan_eee_enabled:
+        type: bool
+        description: Desired WAN physical port EEE state for the wan_eee action; false disables EEE.
+        default: false
       opnsense_release:
         type: dict
         description: Optional proxmox_host setting; preserves the existing workflow value.
@@ -258,3 +264,49 @@ argument_specs:
         type: dict
         description: Installed management bridge and desired isolated guest bridges.
         required: true
+  time:
+    short_description: Synchronize the host clock through the enrolled management gateway.
+    options:
+      proxmox_host_options:
+        type: dict
+        required: true
+        description: Explicit host action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices: [time]
+            description: Configure and verify Chrony.
+      proxmox_network:
+        type: dict
+        required: true
+        description: Management gateway used as the sole NTP source.
+      opnsense_guest:
+        type: str
+        required: true
+        description: Enrolled firewall whose management address must match the gateway.
+  wan_eee:
+    short_description: Persist and verify EEE on the dedicated physical WAN port.
+    options:
+      proxmox_host_options:
+        type: dict
+        required: true
+        description: Explicit host action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices: [wan_eee]
+            description: Configure only WAN Energy Efficient Ethernet.
+      proxmox_network:
+        type: dict
+        required: true
+        description: Physical port identity and installed bridge mapping.
+      opnsense_vm:
+        type: dict
+        required: true
+        description: Firewall VM network roles used to identify its WAN bridge.
+      proxmox_host_wan_eee_enabled:
+        type: bool
+        default: false
+        description: Set false to disable EEE, or true to restore it persistently.

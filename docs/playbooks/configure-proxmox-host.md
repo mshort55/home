@@ -1,8 +1,8 @@
-# Configure Proxmox host repositories and updates
+# Configure Proxmox host repositories, updates, time and WAN EEE
 
 `playbooks/configure-proxmox-host.yml` manages the installed standalone Proxmox VE 9 host's signed package repositories and optionally applies package upgrades. `community.proxmox` verifies the node and firewall VM through trusted HTTPS. `ansible.builtin.deb822_repository` owns repository files and `ansible.builtin.apt` handles indexes and upgrades over existing trusted root SSH; the Proxmox collection does not provide these package-management operations.
 
-The entry points invoke the `proxmox_host` role. Its required `proxmox_host_options.task_action` selects `repositories` or `upgrade`; the generic host entry point requires this dictionary explicitly. [Role contracts](../roles.md) validate inputs before API or host access.
+The entry points invoke the `proxmox_host` role. Its required `proxmox_host_options.task_action` selects an explicit action; repository and package work use `repositories` or `upgrade`, while `time` and `wan_eee` configure the settings described below. The generic host entry point requires this dictionary explicitly. [Role contracts](../roles.md) validate inputs before API or host access.
 
 ## Prerequisites and inventory
 
@@ -63,3 +63,86 @@ The report includes the running kernel, newest installed Proxmox kernel and whet
 A repeat run converges repository files and packages. Cache refresh can report a change when its age expires. An immediate repeated upgrade preview should report no package changes after successful application, unless repository content or installed state changed meanwhile.
 
 If a run fails, preserve its output and reported source backup. Repository recovery consists of restoring the saved files and removing a newly created `proxmox.sources` only if it was absent in that backup, then refreshing APT indexes. Repository recovery does not undo installed packages. Reconcile the cause through the playbook or a reviewed maintenance workflow before repeating upgrades.
+
+
+## Synchronize time through OPNsense
+
+The existing generic host playbook also supports `proxmox_host_options.task_action: time`.
+It derives the sole NTP source from `proxmox_network.management.gateway` and requires
+that address to match the enrolled `opnsense_guest` management address. Public NTP
+is blocked by the MGMT policy, while UDP 123 to the firewall is allowed.
+
+```bash
+./just playbook playbooks/configure-proxmox-host.yml --limit pve01 --check --diff \
+  -e '{"proxmox_host_options":{"task_action":"time"}}'
+./just playbook playbooks/configure-proxmox-host.yml --limit pve01 \
+  -e '{"proxmox_host_options":{"task_action":"time"}}'
+```
+
+This action requires installed Chrony and takes ownership of `/etc/chrony/chrony.conf`.
+Review the diff: the managed file replaces public pools and dynamic include/source
+directories with the single gateway source. The template validates with `chronyd -p`
+before installation, piping the candidate to stdin because AppArmor blocks direct
+reads from Ansible temporary directories. Pipeline failures also reject the candidate.
+It saves a backup when replacing an existing file. Chrony is
+enabled and restarted only when the configuration changes (or started if stopped).
+It performs no package installation, VM operation, host reboot or network reload.
+
+The retained `makestep 1 3` policy can step the host clock after the restart; for the
+observed unsynchronized host this corrects approximately 24 seconds of lag.
+Apply waits up to approximately 50 seconds for synchronization within 0.5 seconds
+and requires the gateway to be the selected source. If synchronization fails, the
+new configuration remains installed; inspect `chronyc -n sources` and `chronyc tracking`
+and gateway NTP availability before rerunning. The source depends on the firewall
+VM starting and obtaining upstream time; no host-startup wait dependency is added.
+
+Check mode reports the proposed file/service changes and the current (possibly
+unsynchronized) clock state without restarting Chrony or requiring synchronization.
+Repeat the preview after applying to confirm no changes.
+
+The syntax-only `-p` behavior is documented in the
+[Chrony manual](https://chrony-project.org/doc/4.8/chronyd.html).
+
+## Disable EEE on the physical WAN port
+
+Use the existing host playbook's `wan_eee` action to disable Energy Efficient Ethernet
+on the dedicated modem-facing NIC. The action derives the port from the firewall's
+WAN bridge and `proxmox_network.guest_bridges` (currently `vmbr2` / `eno3`), then
+checks its MAC and live bridge membership against inventory. It requires installed
+`ethtool`, EEE support, and enabled ifupdown2 interface hooks.
+
+```bash
+./just playbook playbooks/configure-proxmox-host.yml --limit pve01 --check --diff \
+  -e '{"proxmox_host_options":{"task_action":"wan_eee"}}'
+./just playbook playbooks/configure-proxmox-host.yml --limit pve01 \
+  -e '{"proxmox_host_options":{"task_action":"wan_eee"}}'
+```
+
+Apply installs `/etc/network/if-up.d/proxmox-wan-eee` and changes the current EEE
+setting only if needed. The hook reapplies the setting when that physical interface
+comes up, including after reboot, and skips interfaces other than the declared WAN.
+Both paths avoid redundant EEE writes. The action verifies `EEE status: disabled`.
+It performs no network reload or reboot and leaves bridge definitions unchanged.
+Changing EEE may briefly renegotiate the WAN link and interrupt internet access.
+Check mode only reads device state and previews changes; repeat it after applying
+to check convergence.
+
+This is a diagnostic experiment for WAN link instability, not a confirmed fix for
+the gateway's apparent unsolicited restart. Observe subsequent link events and
+gateway uptime. Direct readback:
+
+```bash
+ssh root@10.55.10.10 'ethtool --show-eee eno3'
+```
+
+To restore EEE at runtime and in the persistent hook:
+
+```bash
+./just playbook playbooks/configure-proxmox-host.yml --limit pve01 \
+  -e '{"proxmox_host_options":{"task_action":"wan_eee"},"proxmox_host_wan_eee_enabled":true}'
+```
+
+The default is disabled; retain `proxmox_host_wan_eee_enabled: true` in host inventory
+if future invocations should keep EEE enabled. If runtime application fails, the
+hook remains installed with the requested setting; resolve the reported error and
+rerun, or use the restore command above.

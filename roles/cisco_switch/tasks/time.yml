@@ -1,0 +1,136 @@
+---
+- name: Require the installed management address and gateway
+  ansible.builtin.assert:
+    that:
+    - ansible_host == switch_management.address.split('/')[0]
+    - switch_management.vlan | int >= 2
+    - switch_management.vlan | int <= 1001
+    - switch_management.default_gateway is match('^[0-9]{1,3}(\.[0-9]{1,3}){3}$')
+    - switch_management.default_gateway.split('.') | map('int') | max <= 255
+    - switch_management.default_gateway.split('.')[:3] == switch_management.address.split('/')[0].split('.')[:3]
+    - switch_management.default_gateway.split('.')[-1] | int > 0
+    - switch_management.default_gateway.split('.')[-1] | int < 255
+    - switch_management.default_gateway != switch_management.address.split('/')[0]
+
+- name: Read saved configuration and management SVI without exposing credentials
+  cisco.ios.ios_command:
+    commands:
+    - show running-config
+    - show startup-config
+    - "show interfaces Vlan{{ switch_management.vlan }}"
+    - show clock detail
+  register: switch_time_before
+  changed_when: false
+  no_log: true
+
+- name: Refuse conflicting time settings or unrelated unsaved changes
+  ansible.builtin.assert:
+    that:
+    - switch_time_before.stdout | length == 4
+    - switch_time_before.stdout[0] is search('(?m)^version \S+')
+    - switch_time_before.stdout[1] is search('(?m)^version \S+')
+    - switch_time_before.stdout[0] is search('(?m)^end\s*$')
+    - switch_time_before.stdout[1] is search('(?m)^end\s*$')
+    - running_body == startup_body
+    - unexpected_time_lines | length == 0
+    - switch_time_before.stdout[3] is search(' UTC ')
+    - switch_time_before.stdout[2] is search('line protocol is up')
+    - switch_time_before.stdout[2] is search('Internet address is ' ~ (switch_management.address | regex_escape))
+    fail_msg: Time settings conflict, the management SVI differs, or unrelated configuration is unsaved.
+  vars:
+    # IOS updates its oscillator calibration automatically; this is not user drift.
+    running_body: "{{ switch_time_before.stdout[0] | regex_search('(?ms)^version .*') | regex_replace('(?ms)^crypto pki certificate chain .*?(?=^!)', '') | regex_replace('(?m)^ntp clock-period .*\n', '') | split('\n') | reject('in', switch_time_lines) | list }}"
+    startup_body: "{{ switch_time_before.stdout[1] | regex_search('(?ms)^version .*') | regex_replace('(?ms)^crypto pki certificate chain .*?(?=^!)', '') | regex_replace('(?m)^ntp clock-period .*\n', '') | split('\n') | reject('in', switch_time_lines) | list }}"
+    unexpected_time_lines: "{{ (switch_time_before.stdout[0] ~ '\n' ~ switch_time_before.stdout[1]).splitlines() | select('match', '^(ntp |clock timezone |clock summer-time )') | reject('match', '^ntp clock-period [0-9]+$') | difference(switch_time_lines) }}"
+    switch_time_lines:
+    - "ntp server {{ switch_management.default_gateway }}"
+    - "ntp source Vlan{{ switch_management.vlan }}"
+    - clock timezone UTC 0 0
+    - clock timezone UTC 0
+  no_log: true
+
+- name: Verify the gateway responds through the management SVI
+  cisco.ios.ios_command:
+    commands:
+    - "ping {{ switch_management.default_gateway }} source Vlan{{ switch_management.vlan }} repeat 3 timeout 2"
+  register: switch_time_probe
+  check_mode: false
+  changed_when: false
+  retries: 3
+  delay: 2
+  until: switch_time_probe.stdout[0] is search('Success rate is 100 percent')
+
+- name: Preserve the switch before applying time configuration
+  ansible.builtin.include_tasks: _backup.yml
+  when: not ansible_check_mode
+
+- name: Configure only the management NTP source
+  cisco.ios.ios_ntp_global:
+    config:
+      source: "Vlan{{ switch_management.vlan }}"
+      servers:
+      - server: "{{ switch_management.default_gateway }}"
+    state: merged
+  register: switch_time_change
+
+- name: Verify the installed time configuration
+  cisco.ios.ios_command:
+    commands:
+    - show running-config | include ^ntp|^clock
+    - show clock detail
+  register: switch_time_configured
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Require the intended NTP source and UTC timezone
+  ansible.builtin.assert:
+    that:
+    - switch_time_configured.stdout[0] is search('(?m)^ntp server ' ~ (switch_management.default_gateway | regex_escape) ~ '\s*$')
+    - switch_time_configured.stdout[0] is search('(?m)^ntp source Vlan' ~ switch_management.vlan ~ '\s*$')
+    - switch_time_configured.stdout[1] is search(' UTC ')
+  when: not ansible_check_mode
+
+- name: Identify time configuration left unsaved by an interrupted run
+  ansible.builtin.set_fact:
+    switch_time_pending_save: "{{ running_body != startup_body }}"
+  vars:
+    running_body: "{{ switch_time_before.stdout[0] | regex_search('(?ms)^version .*') | regex_replace('(?ms)^crypto pki certificate chain .*?(?=^!)', '') | regex_replace('(?m)^ntp clock-period .*\n', '') }}"
+    startup_body: "{{ switch_time_before.stdout[1] | regex_search('(?ms)^version .*') | regex_replace('(?ms)^crypto pki certificate chain .*?(?=^!)', '') | regex_replace('(?m)^ntp clock-period .*\n', '') }}"
+  no_log: true
+
+- name: Save verified time configuration
+  cisco.ios.ios_config:
+    save_when: always
+  when: not ansible_check_mode and (switch_time_change.changed or switch_time_pending_save)
+  no_log: true
+
+- name: Explain initial clock calibration before waiting
+  ansible.builtin.debug:
+    msg: NTP settings are saved. Initial IOS drift measurement can take about 15 minutes; allow up to 20 minutes for synchronization. Retry messages during this wait do not reapply configuration.
+  when: not ansible_check_mode
+
+- name: Wait for the switch to synchronize with the management gateway
+  cisco.ios.ios_command:
+    commands: [show ntp status]
+  register: switch_time_status
+  changed_when: false
+  retries: 120
+  delay: 10
+  until:
+  - switch_time_status.stdout[0] is search('Clock is synchronized')
+  - switch_time_status.stdout[0] is search('reference is ' ~ (switch_management.default_gateway | regex_escape))
+  when: not ansible_check_mode
+
+- name: Read clock and NTP evidence
+  cisco.ios.ios_command:
+    commands: [show clock detail, show ntp status, show ntp associations]
+  register: switch_time_evidence
+  changed_when: false
+
+- name: Report time state and proposed commands
+  ansible.builtin.debug:
+    msg:
+      commands: "{{ switch_time_change.commands | default([]) }}"
+      state: "{{ switch_time_evidence.stdout }}"
+      preview: "{{ ansible_check_mode }}"
+      save_required: "{{ switch_time_change.changed or switch_time_pending_save }}"

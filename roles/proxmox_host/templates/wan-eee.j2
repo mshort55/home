@@ -1,0 +1,13 @@
+#!/bin/sh
+# Managed by proxmox_host wan_eee. Reapply only to the declared physical WAN.
+set -eu
+export LC_ALL=C
+
+[ "${IFACE:-}" = "{{ proxmox_wan_eee_port }}" ] || exit 0
+
+# Avoid renegotiation when a repeated interface-up event finds the desired state.
+eee_status=$(/usr/sbin/ethtool --show-eee "{{ proxmox_wan_eee_port }}")
+case "$eee_status" in
+    *"EEE status: {{ proxmox_wan_eee_state }}"*) exit 0 ;;
+esac
+exec /usr/sbin/ethtool --set-eee "{{ proxmox_wan_eee_port }}" eee {{ 'on' if proxmox_host_wan_eee_enabled else 'off' }}

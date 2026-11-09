@@ -1,0 +1,15 @@
+---
+- name: Configure switch UTC time through the management gateway
+  hosts: cisco_switches
+  gather_facts: false
+  become: true
+  become_method: ansible.netcommon.enable
+  serial: 1
+  vars_files:
+    - "{{ vault_file | default(((playbook_dir ~ '/..') | realpath) ~ '/secrets/vault.yml') }}"
+  vars:
+    ansible_host: "{{ switch_management.address.split('/')[0] }}"
+  roles:
+    - role: cisco_switch
+      cisco_switch_options:
+        task_action: time

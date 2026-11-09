@@ -1,0 +1,68 @@
+---
+- name: Require the enrolled firewall management address as the time source
+  ansible.builtin.assert:
+    that:
+    - proxmox_network.management.gateway == hostvars[opnsense_guest].ansible_host
+    - proxmox_network.management.gateway is match('^[0-9.]+$')
+    fail_msg: The time source must be the enrolled OPNsense management gateway.
+
+- name: Confirm the installed Proxmox host
+  ansible.builtin.command: /usr/bin/pveversion
+  changed_when: false
+  check_mode: false
+
+- name: Confirm Chrony is already installed
+  ansible.builtin.command: /usr/sbin/chronyd -v
+  changed_when: false
+  check_mode: false
+
+- name: Configure Chrony to use only the management gateway
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+    # AppArmor denies chronyd access to Ansible's /root temporary directory.
+    # Pipe the candidate so reopening stdin does not resolve to the denied file.
+    validate: /bin/bash -o pipefail -c 'cat -- "$1" | /usr/sbin/chronyd -p -f /dev/stdin' -- %s
+  register: proxmox_time_config
+
+- name: Enable Chrony and restart only when configuration changed
+  ansible.builtin.systemd_service:
+    name: chrony
+    enabled: true
+    state: "{{ 'restarted' if proxmox_time_config.changed else 'started' }}"
+
+- name: Wait for synchronization within half a second
+  ansible.builtin.command: /usr/bin/chronyc waitsync 25 0.5 0 2
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Inspect selected numeric time sources
+  ansible.builtin.command: /usr/bin/chronyc -n sources
+  changed_when: false
+  check_mode: false
+  register: proxmox_time_sources
+
+- name: Require the management gateway to be the selected source
+  ansible.builtin.assert:
+    that:
+    - "('^* ' ~ proxmox_network.management.gateway ~ ' ') in proxmox_time_sources.stdout"
+  when: not ansible_check_mode
+
+- name: Read clock synchronization status
+  ansible.builtin.command: /usr/bin/chronyc tracking
+  changed_when: false
+  check_mode: false
+  register: proxmox_time_tracking
+
+- name: Report time configuration and current clock state
+  ansible.builtin.debug:
+    msg:
+      server: "{{ proxmox_network.management.gateway }}"
+      backup: "{{ proxmox_time_config.backup_file | default('No configuration backup created') }}"
+      sources: "{{ proxmox_time_sources.stdout_lines }}"
+      tracking: "{{ proxmox_time_tracking.stdout_lines }}"
+      preview: "{{ ansible_check_mode }}"

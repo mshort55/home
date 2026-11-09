@@ -1,0 +1,10 @@
+# Managed by proxmox_host, task_action: time.
+# Use the reachable MGMT firewall; public NTP is blocked by MGMT policy.
+server {{ proxmox_network.management.gateway }} iburst
+driftfile /var/lib/chrony/chrony.drift
+rtcsync
+makestep 1 3
+maxupdateskew 100.0
+leapseclist /usr/share/zoneinfo/leap-seconds.list
+# This host is an NTP client, not a network time server.
+port 0

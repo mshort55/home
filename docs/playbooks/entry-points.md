@@ -37,6 +37,7 @@ Role argument schemas validate the action and typed options before dispatch. The
 | [configure-switch-ports.yml](../../playbooks/configure-switch-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | Required explicit `task_action` |
 | [configure-switch-recovery-ports.yml](../../playbooks/configure-switch-recovery-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
 | [configure-switch-server-ports.yml](../../playbooks/configure-switch-server-ports.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `ports` |
+| [configure-switch-time.yml](../../playbooks/configure-switch-time.yml) | `cisco_switches` | [cisco_switch](../../roles/cisco_switch/tasks/main.yml) | `time` |
 | [configure-unifi-firewall.yml](../../playbooks/configure-unifi-firewall.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `firewall` |
 | [configure-unifi-host.yml](../../playbooks/configure-unifi-host.yml) | `unifi_hosts` | [unifi_host](../../roles/unifi_host/tasks/main.yml) | `configure` |
 | [configure-unifi-site.yml](../../playbooks/configure-unifi-site.yml) | `unifi_hosts` | [unifi_site](../../roles/unifi_site/tasks/main.yml) | `configure` |
@@ -119,7 +120,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 
 | Parameter dictionary | Allowed `task_action` values |
 |---|---|
-| `cisco_switch_options` | `backup`, `management`, `ports`, `gateway` |
+| `cisco_switch_options` | `backup`, `management`, `ports`, `gateway`, `time` |
 | `community_api_options` | `load`, `prepare` |
 | `controller_hostname_options` | `prepare`, `verify` |
 | `fedora_dev_options` | `prepare`, `create`, `verify`, `start`, `stop` |
@@ -140,7 +141,7 @@ The previous top-level action flags (`proxmox_host_upgrade`, `proxmox_boot_reboo
 | `opnsense_vm_options` | `describe`, `create`, `verify` |
 | `opnsense_wireguard_options` | `prepare`, `configure`, `verify` |
 | `proxmox_api_options` | `enroll` |
-| `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges` |
+| `proxmox_host_options` | `repositories`, `upgrade`, `startup`, `reboot`, `bridges`, `time`, `wan_eee` |
 | `proxmox_installer_options` | `prepare` |
 | `ssh_trust_options` | `prepare` |
 | `unifi_firewall_options` | `configure`, `verify` |

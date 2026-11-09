@@ -18,6 +18,7 @@ argument_specs:
             - management
             - ports
             - gateway
+            - time
       switch_ports:
         type: list
         description: Inventory-owned access and trunk definitions.
@@ -207,3 +208,21 @@ argument_specs:
           legacy_address:
             type: str
             description: Retained legacy IPv4 CIDR; accepted from shared inventory without changing it.
+
+  time:
+    short_description: Configure UTC and NTP through the management gateway.
+    options:
+      cisco_switch_options:
+        type: dict
+        required: true
+        description: Explicit role action.
+        options:
+          task_action:
+            type: str
+            required: true
+            choices: [time]
+            description: Configure and verify switch time.
+      switch_management:
+        type: dict
+        required: true
+        description: Installed management SVI, address and NTP gateway.
